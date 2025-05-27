@@ -252,6 +252,15 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     setInputValue('')
     setIsTyping(true)
 
+    // Emit event for Dashboard to track this message
+    const userMessageEvent = new CustomEvent('userMessageSent', {
+      detail: {
+        messageId: userMessage.id,
+        content: currentInput
+      }
+    })
+    window.dispatchEvent(userMessageEvent)
+
     // Save user message to persistence - or add to pending if no subject yet
     if (selectedSubject) {
       await saveMessageToPersistence(userMessage)
@@ -716,7 +725,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               onKeyPress={handleKeyPress}
               placeholder="What would you like to learn? (e.g., &apos;Explain photosynthesis&apos;, &apos;Quiz me on Shakespeare&apos;, &apos;Teach me Spanish&apos;)"
               disabled={isTyping}
-              className="flex-1"
+              className="flex-1 text-sm"
             />
             <Button
               onClick={handleSendMessage}
@@ -727,7 +736,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               <Send className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-gray-500 mt-2">
+          <p className="text-xs text-gray-500 mt-2 hidden sm:block">
             Try: &quot;Explain concepts&quot;, &quot;Give me a quiz&quot;, &quot;Help me understand&quot;, &quot;Teach me step-by-step&quot;
           </p>
         </div>
@@ -741,36 +750,38 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-gray-900">AI Tutor</h2>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap">
             {currentLessonPlan && (
-              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 hidden sm:inline-flex">
                 Lesson {currentLessonPlan.currentLessonIndex + 1}/{currentLessonPlan.lessons.length}
               </Badge>
             )}
             {currentProgress && (
-              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+              <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 hidden md:inline-flex">
                 {currentProgress.correctAnswers}/{currentProgress.totalAttempts} correct
               </Badge>
             )}
             {pendingMessages.length > 0 && (
               <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
-                💾 Saving {pendingMessages.length}...
+                💾 {pendingMessages.length}
               </Badge>
             )}
             <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
-              <Bot className="h-3 w-3 mr-1" />
-              Active
+              <Bot className="h-3 w-3 mr-1 hidden sm:inline" />
+              <span className="hidden sm:inline">Active</span>
+              <span className="sm:hidden">✓</span>
             </Badge>
           </div>
         </div>
         {currentLessonPlan && (
           <div className="mt-2">
-            <p className="text-sm text-gray-600">
-              📚 Current: {currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]?.title}
+            <p className="text-sm text-gray-600 truncate">
+              📚 <span className="hidden sm:inline">Current:</span> {currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]?.title}
             </p>
             {currentProgress?.readyForNext && (
               <p className="text-xs text-green-600 font-medium">
-                🎉 Ready to advance! Click &quot;Next&quot; on any activity to continue.
+                🎉 <span className="hidden sm:inline">Ready to advance! Click &quot;Next&quot; on any activity to continue.</span>
+                <span className="sm:hidden">Ready to advance!</span>
               </p>
             )}
           </div>
@@ -856,7 +867,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             onKeyPress={handleKeyPress}
             placeholder={`Continue learning ${selectedSubject.name}...`}
             disabled={isTyping}
-            className="flex-1"
+            className="flex-1 text-sm"
           />
           <Button
             onClick={handleSendMessage}
@@ -867,7 +878,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             <Send className="h-4 w-4" />
           </Button>
         </div>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-gray-500 mt-2 hidden sm:block">
           Try: &quot;More examples&quot;, &quot;Quiz me&quot;, &quot;Deeper explanation&quot;, &quot;Practice problems&quot;
         </p>
       </div>

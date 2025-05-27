@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { Subject } from './useSubjects'
 import { persistenceService } from '@/lib/persistenceService'
 import { aiTutor, LessonPlan, LearningProgress } from '@/lib/aiService'
@@ -25,14 +25,12 @@ export function useSubjectSession({
   onLessonPlanLoaded
 }: UseSubjectSessionProps) {
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
-  const welcomeMessageShown = useRef<Set<string>>(new Set())
 
   const loadSubjectSession = useCallback(async () => {
     if (!selectedSubject || !user) {
       // Clear session when no subject
       if (onMessagesLoaded) onMessagesLoaded([])
       if (onLessonPlanLoaded) onLessonPlanLoaded(null, null)
-      welcomeMessageShown.current.clear()
       return
     }
 
@@ -103,8 +101,15 @@ export function useSubjectSession({
           onLessonPlanLoaded(restoredPlan, restoredProgress)
         }
         
-        // Show welcome back message only if we haven't shown one for this subject yet
-        if (!welcomeMessageShown.current.has(selectedSubject.id)) {
+        // Check if we already have a welcome message for this session
+        const hasWelcomeMessage = loadedMessages.some(msg => 
+          msg.role === 'assistant' && 
+          msg.content.includes('Welcome back to') &&
+          msg.content.includes(selectedSubject.name)
+        )
+        
+        // Show welcome back message only if we don't already have one
+        if (!hasWelcomeMessage) {
           const welcomeBackMessage: Message = {
             id: `welcome-back-${Date.now()}`,
             role: 'assistant',
@@ -117,9 +122,6 @@ export function useSubjectSession({
           if (onMessagesLoaded) {
             onMessagesLoaded(messagesWithWelcome)
           }
-          
-          // Mark this subject as having shown welcome message
-          welcomeMessageShown.current.add(selectedSubject.id)
           
           // Save welcome message asynchronously
           setTimeout(async () => {

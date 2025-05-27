@@ -69,7 +69,7 @@ export function ContentPane({
     } finally {
       setIsLoading(false)
     }
-  }, [selectedSubject?.id, user?.id])
+  }, [selectedSubject, user])
 
   // Load content feed when subject changes - direct effect without intermediate function
   useEffect(() => {
@@ -87,7 +87,7 @@ export function ContentPane({
         setContentFeed([])
       }
     }
-  }, [selectedSubject?.id, user?.id, loadContentFeed])
+  }, [selectedSubject, user, loadContentFeed])
 
   const handleInteraction = (action: string, data: unknown) => {
     console.log('🟢 ==========================================')
@@ -207,7 +207,7 @@ export function ContentPane({
     return () => {
       window.removeEventListener('contentGenerated', handleContentGenerated as EventListener)
     }
-  }, [user?.id, selectedSubject?.id])
+  }, [user, selectedSubject])
 
   const renderInteractiveComponent = (content: InteractiveContent) => {
     const props: InteractiveComponentProps = {

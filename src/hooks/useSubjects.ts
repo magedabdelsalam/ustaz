@@ -376,7 +376,7 @@ export function useSubjects() {
       console.log('🔄 Auto-loading subjects for user:', user.id)
       loadSubjects()
     }
-  }, [user?.id, subjects.length, isLoading])
+  }, [user, subjects.length, isLoading, loadSubjects])
 
   // Separate effect to handle initial load - only when user first becomes available  
   const hasTriedLoadingRef = useRef(false)
@@ -386,7 +386,7 @@ export function useSubjects() {
       console.log('🚀 Initial subject load for user:', user.id)
       loadSubjects()
     }
-  }, [user?.id])
+  }, [user, loadSubjects])
 
   return {
     subjects,

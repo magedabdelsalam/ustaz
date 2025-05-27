@@ -130,6 +130,27 @@ export class PersistenceService {
     }
   }
 
+  async updateMessageSubject(messageId: string, userId: string, newSubjectId: string): Promise<void> {
+    try {
+      console.log('🔄 Moving message to new subject:', { messageId, userId, newSubjectId })
+      
+      const { error } = await supabase
+        .from('chat_messages')
+        .update({ subject_id: newSubjectId })
+        .eq('id', messageId)
+        .eq('user_id', userId)
+      
+      if (error) {
+        console.error('❌ Supabase error updating message subject:', error)
+        throw error
+      }
+      
+      console.log('✅ Message moved to new subject successfully')
+    } catch (error) {
+      console.error('❌ Failed to move message to new subject:', error)
+    }
+  }
+
   // ===== CONTENT FEED PERSISTENCE =====
   
   async saveContentItem(item: PersistedContentItem): Promise<void> {
