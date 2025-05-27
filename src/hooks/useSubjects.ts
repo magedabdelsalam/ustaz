@@ -3,13 +3,8 @@
 import { useState, useCallback, useMemo, useTransition, useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { persistenceService, PersistedSubject } from '@/lib/persistenceService'
-import OpenAI from 'openai'
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || 'demo-key-for-development',
-  dangerouslyAllowBrowser: true // Only for demo - in production, use server-side API routes
-})
+import { chatCompletion } from '@/lib/openaiClient'
+import { logger } from '@/lib/logger'
 
 // Global cache for AI analysis - persists across hook calls
 const messageAnalysisCache = new Map<string, {
@@ -236,14 +231,13 @@ export function useSubjects() {
     
     // Check cache first
     if (messageAnalysisCache.has(cacheKey)) {
-      console.log('🎯 Cache hit for message analysis')
+      logger.debug('🎯 Cache hit for message analysis')
       return messageAnalysisCache.get(cacheKey)
     }
 
     try {
-      console.log('🤖 Making AI analysis call (cache miss)')
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", // Cheaper model for analysis
+      logger.debug('🤖 Making AI analysis call (cache miss)')
+      const response = await chatCompletion({
         messages: [
           {
             role: "system",
@@ -254,8 +248,8 @@ export function useSubjects() {
             content: message
           }
         ],
-        temperature: 0.1, // Lower temperature for consistent results
-        max_tokens: 100 // Limit tokens
+        temperature: 0.1,
+        max_tokens: 100
       })
 
       const content = response.choices[0].message.content
@@ -347,7 +341,7 @@ export function useSubjects() {
     }
 
     try {
-      console.log('🗑️ Deleting subject:', subjectId)
+      logger.debug('🗑️ Deleting subject:', subjectId)
       
       // Delete from backend (this also deletes messages and content)
       await persistenceService.deleteSubject(user.id, subjectId)
@@ -362,7 +356,7 @@ export function useSubjects() {
         }
       })
       
-      console.log('✅ Subject deleted successfully')
+      logger.debug('✅ Subject deleted successfully')
       return true
     } catch (error) {
       console.error('❌ Failed to delete subject:', error)
@@ -373,7 +367,7 @@ export function useSubjects() {
   // Auto-load subjects when user becomes available - moved to useEffect to prevent infinite loops
   useEffect(() => {
     if (user && subjects.length === 0 && !isLoading) {
-      console.log('🔄 Auto-loading subjects for user:', user.id)
+      logger.debug('🔄 Auto-loading subjects for user:', user.id)
       loadSubjects()
     }
   }, [user, subjects.length, isLoading, loadSubjects])
@@ -383,7 +377,7 @@ export function useSubjects() {
   useEffect(() => {
     if (user && !hasTriedLoadingRef.current) {
       hasTriedLoadingRef.current = true
-      console.log('🚀 Initial subject load for user:', user.id)
+      logger.debug('🚀 Initial subject load for user:', user.id)
       loadSubjects()
     }
   }, [user, loadSubjects])
