@@ -18,7 +18,7 @@ export interface PersistedContentItem {
   user_id: string
   subject_id: string
   type: ComponentType
-  data: any
+  data: unknown
   title: string
   order_index: number
   timestamp: string
@@ -30,8 +30,24 @@ export interface PersistedSubject {
   user_id: string
   name: string
   keywords: string[]
-  lesson_plan?: any
-  learning_progress?: any
+  lesson_plan?: {
+    subject: string
+    lessons: Array<{
+      id: string
+      title: string
+      description: string
+      completed: boolean
+    }>
+    currentLessonIndex: number
+  }
+  learning_progress?: {
+    correctAnswers: number
+    totalAttempts: number
+    needsReview: boolean
+    readyForNext: boolean
+    currentLessonIndex?: number
+    totalLessons?: number
+  }
   last_active: string
   created_at?: string
 }

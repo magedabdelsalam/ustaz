@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useTransition } from 'react'
+import { useState, useCallback, useMemo, useTransition, useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { persistenceService, PersistedSubject } from '@/lib/persistenceService'
 import OpenAI from 'openai'
@@ -12,7 +12,11 @@ const openai = new OpenAI({
 })
 
 // Global cache for AI analysis - persists across hook calls
-const messageAnalysisCache = new Map<string, any>()
+const messageAnalysisCache = new Map<string, {
+  subjectName: string
+  isNewSubject: boolean
+  confidence: number
+}>()
 
 export interface Subject {
   id: string
@@ -24,8 +28,18 @@ export interface Subject {
   completedAt?: Date
   topicKeywords: string[]
   messageCount: number
-  lessonPlan?: any
-  learningProgress?: any
+  lessonPlan?: {
+    lessons: Array<{ id: string; title: string; description: string }>
+    currentLessonIndex: number
+  }
+  learningProgress?: {
+    correctAnswers: number
+    totalAttempts: number
+    currentLessonIndex?: number
+    totalLessons?: number
+    needsReview?: boolean
+    readyForNext?: boolean
+  }
   lastActive: Date
 }
 
@@ -60,11 +74,6 @@ export function useSubjects() {
         
         return Math.min(baseProgress + lessonProgress, 100)
       }
-      
-      // Fallback to old structure if it exists
-      if (progress.completedLessons !== undefined && progress.totalLessons !== undefined) {
-        return Math.round((progress.completedLessons / (progress.totalLessons || 1)) * 100)
-      }
     }
     
     // Default fallback based on time
@@ -76,7 +85,14 @@ export function useSubjects() {
   }, [])
 
   // Function to update subject progress in real-time
-  const updateSubjectProgress = useCallback((subjectId: string, learningProgress: any) => {
+  const updateSubjectProgress = useCallback((subjectId: string, learningProgress: {
+    correctAnswers: number
+    totalAttempts: number
+    currentLessonIndex?: number
+    totalLessons?: number
+    needsReview?: boolean
+    readyForNext?: boolean
+  }) => {
     setSubjects(prev => prev.map(subject => {
       if (subject.id === subjectId) {
         const updatedSubject = {
@@ -138,7 +154,7 @@ export function useSubjects() {
     } finally {
       setIsLoading(false)
     }
-  }, [user?.id, subjectColors, isLoading, calculateProgressFromData])
+  }, [user, subjectColors, isLoading, calculateProgressFromData])
 
   // Optimized subject creation with minimal AI calls
   const createSubject = useCallback(async (subjectName: string): Promise<Subject> => {
@@ -164,15 +180,42 @@ export function useSubjects() {
 
     // Background persistence
     try {
-      await persistenceService.saveSubject({
-        id: newSubject.id,
-        user_id: user.id,
-        name: newSubject.name,
-        keywords: newSubject.topicKeywords,
-        lesson_plan: newSubject.lessonPlan,
-        learning_progress: newSubject.learningProgress,
-        last_active: newSubject.lastActive.toISOString()
-      })
+      // Only save if we have complete data to avoid type errors
+      if (newSubject.lessonPlan) {
+        const lessonPlanData = {
+          subject: newSubject.name,
+          lessons: newSubject.lessonPlan.lessons.map(lesson => ({
+            ...lesson,
+            completed: false
+          })),
+          currentLessonIndex: newSubject.lessonPlan.currentLessonIndex
+        }
+        
+        await persistenceService.saveSubject({
+          id: newSubject.id,
+          user_id: user.id,
+          name: newSubject.name,
+          keywords: newSubject.topicKeywords,
+          lesson_plan: lessonPlanData,
+          learning_progress: {
+            correctAnswers: newSubject.learningProgress?.correctAnswers || 0,
+            totalAttempts: newSubject.learningProgress?.totalAttempts || 0,
+            needsReview: newSubject.learningProgress?.needsReview || false,
+            readyForNext: newSubject.learningProgress?.readyForNext || false,
+            currentLessonIndex: newSubject.learningProgress?.currentLessonIndex,
+            totalLessons: newSubject.learningProgress?.totalLessons
+          },
+          last_active: newSubject.lastActive.toISOString()
+        })
+      } else {
+        await persistenceService.saveSubject({
+          id: newSubject.id,
+          user_id: user.id,
+          name: newSubject.name,
+          keywords: newSubject.topicKeywords,
+          last_active: newSubject.lastActive.toISOString()
+        })
+      }
     } catch (error) {
       console.error('Failed to save subject:', error)
       // Revert on failure
@@ -259,15 +302,41 @@ export function useSubjects() {
     })
 
     // Background persistence
-    persistenceService.saveSubject({
-      id: subject.id,
-      user_id: user?.id || '',
-      name: subject.name,
-      keywords: subject.topicKeywords,
-      lesson_plan: subject.lessonPlan,
-      learning_progress: subject.learningProgress,
-      last_active: new Date().toISOString()
-    }).catch(console.error)
+    if (subject.lessonPlan) {
+      const lessonPlanData = {
+        subject: subject.name,
+        lessons: subject.lessonPlan.lessons.map(lesson => ({
+          ...lesson,
+          completed: false
+        })),
+        currentLessonIndex: subject.lessonPlan.currentLessonIndex
+      }
+      
+      persistenceService.saveSubject({
+        id: subject.id,
+        user_id: user?.id || '',
+        name: subject.name,
+        keywords: subject.topicKeywords,
+        lesson_plan: lessonPlanData,
+        learning_progress: {
+          correctAnswers: subject.learningProgress?.correctAnswers || 0,
+          totalAttempts: subject.learningProgress?.totalAttempts || 0,
+          needsReview: subject.learningProgress?.needsReview || false,
+          readyForNext: subject.learningProgress?.readyForNext || false,
+          currentLessonIndex: subject.learningProgress?.currentLessonIndex,
+          totalLessons: subject.learningProgress?.totalLessons
+        },
+        last_active: new Date().toISOString()
+      }).catch(console.error)
+    } else {
+      persistenceService.saveSubject({
+        id: subject.id,
+        user_id: user?.id || '',
+        name: subject.name,
+        keywords: subject.topicKeywords,
+        last_active: new Date().toISOString()
+      }).catch(console.error)
+    }
   }, [user?.id])
 
   // Delete subject functionality
@@ -301,10 +370,23 @@ export function useSubjects() {
     }
   }, [user, currentSubject?.id])
 
-  // Auto-load subjects when user becomes available
-  if (user && subjects.length === 0 && !isLoading) {
-    loadSubjects()
-  }
+  // Auto-load subjects when user becomes available - moved to useEffect to prevent infinite loops
+  useEffect(() => {
+    if (user && subjects.length === 0 && !isLoading) {
+      console.log('🔄 Auto-loading subjects for user:', user.id)
+      loadSubjects()
+    }
+  }, [user?.id, subjects.length, isLoading])
+
+  // Separate effect to handle initial load - only when user first becomes available  
+  const hasTriedLoadingRef = useRef(false)
+  useEffect(() => {
+    if (user && !hasTriedLoadingRef.current) {
+      hasTriedLoadingRef.current = true
+      console.log('🚀 Initial subject load for user:', user.id)
+      loadSubjects()
+    }
+  }, [user?.id])
 
   return {
     subjects,

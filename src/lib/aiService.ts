@@ -8,7 +8,7 @@ const openai = new OpenAI({
 
 // AI Response Cache - prevents duplicate API calls and saves tokens
 interface CacheEntry {
-  data: any
+  data: unknown
   timestamp: number
   type: string
 }
@@ -18,12 +18,12 @@ class AICache {
   private readonly TTL = 30 * 60 * 1000 // 30 minutes
   private readonly MAX_SIZE = 200 // Prevent memory bloat
 
-  private createKey(type: string, params: any): string {
+  private createKey(type: string, params: unknown): string {
     const paramStr = JSON.stringify(params).toLowerCase()
     return `${type}:${paramStr.slice(0, 100)}` // Limit key length
   }
 
-  get(type: string, params: any): any | null {
+  get(type: string, params: unknown): unknown | null {
     const key = this.createKey(type, params)
     const entry = this.cache.get(key)
     
@@ -39,7 +39,7 @@ class AICache {
     return null
   }
 
-  set(type: string, params: any, data: any): void {
+  set(type: string, params: unknown, data: unknown): void {
     const key = this.createKey(type, params)
     
     // Prevent cache from growing too large
@@ -98,7 +98,7 @@ export interface Lesson {
 
 export interface LessonContent {
   type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank'
-  data: any
+  data: unknown
 }
 
 export interface LearningProgress {
@@ -138,9 +138,9 @@ class AITutorService {
   // Cached API call wrapper
   private async cachedApiCall(
     type: string, 
-    params: any, 
-    apiCallFunction: () => Promise<any>
-  ): Promise<any> {
+    params: unknown, 
+    apiCallFunction: () => Promise<unknown>
+  ): Promise<unknown> {
     // Check cache first
     const cached = this.aiCache.get(type, params)
     if (cached) {
@@ -183,7 +183,7 @@ class AITutorService {
       // First try to parse as-is
       JSON.parse(jsonString)
       return jsonString
-    } catch (error) {
+    } catch {
       console.log('🔧 Attempting to fix incomplete JSON')
       
       // Try to fix common truncation issues
@@ -239,7 +239,7 @@ class AITutorService {
         JSON.parse(fixed)
         console.log('✅ Successfully fixed incomplete JSON')
         return fixed
-      } catch (fixError) {
+      } catch {
         console.log('❌ Could not fix JSON, will use fallback')
         throw new Error('Unable to fix incomplete JSON response')
       }
@@ -341,9 +341,29 @@ class AITutorService {
       )
       
       // Create the lesson plan object
+      // Type guard for planData
+      interface PlanDataStructure {
+        subject: string
+        lessons: Array<{
+          id?: string
+          title?: string
+          description?: string
+        }>
+      }
+      
+      const isPlanDataValid = (data: unknown): data is PlanDataStructure => {
+        return typeof data === 'object' && data !== null &&
+               'subject' in data && 'lessons' in data &&
+               Array.isArray((data as PlanDataStructure).lessons)
+      }
+      
+      if (!isPlanDataValid(planData)) {
+        throw new Error('Invalid plan data structure from AI')
+      }
+      
       const lessonPlan: LessonPlan = {
         subject: planData.subject,
-        lessons: planData.lessons.map((lesson: any, index: number) => ({
+        lessons: planData.lessons.map((lesson, index: number) => ({
           id: lesson.id || `lesson-${index + 1}`,
           title: lesson.title || `Lesson ${index + 1}`,
           description: lesson.description || 'Learn the fundamentals of this topic.',
@@ -556,7 +576,7 @@ Make it practical and educational.${avoidanceText}`
   async generateTutorResponse(
     subject: string, 
     userAction: string, 
-    actionData: any,
+    actionData: unknown,
     context: { lesson: Lesson; progress: LearningProgress }
   ): Promise<string> {
     try {
@@ -695,7 +715,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     return Array.from(this.lessonPlans.keys())
   }
 
-  private trackGeneratedContent(subject: string, lessonId: string, contentType: string, content: any) {
+  private trackGeneratedContent(subject: string, lessonId: string, contentType: string, content: { data?: { question?: string; problem?: string; title?: string; category?: string; problemType?: string; difficulty?: string } }) {
     const key = `${subject}-${lessonId}`
     const existing = this.generatedContent.get(key) || []
     
@@ -713,7 +733,13 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     console.log('📝 Tracked generated content:', contentItem)
   }
 
-  private getGeneratedContentHistory(subject: string, lessonId: string): Array<any> {
+  private getGeneratedContentHistory(subject: string, lessonId: string): Array<{
+    type: string
+    question?: string
+    topic?: string
+    difficulty?: string
+    timestamp: number
+  }> {
     const key = `${subject}-${lessonId}`
     return this.generatedContent.get(key) || []
   }
@@ -875,8 +901,13 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     }
   }
 
-  private generateFallbackResponse(action: string, data: any): string {
-    if (action === 'answer_submitted') {
+  private generateFallbackResponse(action: string, data: unknown): string {
+    // Type guard for answer submission data
+    const isAnswerData = (d: unknown): d is { correct: boolean } => {
+      return typeof d === 'object' && d !== null && 'correct' in d
+    }
+    
+    if (action === 'answer_submitted' && isAnswerData(data)) {
       return data.correct ? "That's right! Good job." : "Not quite, but keep trying!"
     }
     return "Keep exploring! You're doing great."

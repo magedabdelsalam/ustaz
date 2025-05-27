@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { Send, Bot, User, MessageCircle, Sparkles } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
+import { usePendingMessages } from '@/hooks/usePendingMessages'
+import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
 import { aiTutor, LessonPlan, LearningProgress } from '@/lib/aiService'
 
@@ -25,7 +27,7 @@ interface ChatPaneProps {
 }
 
 export interface ChatPaneRef {
-  handleContentInteraction: (action: string, data: any) => void
+  handleContentInteraction: (action: string, data: unknown) => void
 }
 
 export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubject, onNewMessage }, ref) => {
@@ -33,119 +35,81 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [currentLessonPlan, setCurrentLessonPlan] = useState<LessonPlan | null>(null)
   const [currentProgress, setCurrentProgress] = useState<LearningProgress | null>(null)
-  const [pendingMessages, setPendingMessages] = useState<Message[]>([]) // Messages waiting for subject
+  const [pendingMessages, setPendingMessages] = useState<Message[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const lessonPlanCreationAttempted = useRef<string | null>(null)
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const welcomeMessageShown = useRef<Set<string>>(new Set()) // Track subjects that have shown welcome messages
 
-  // Message persistence functions
-  const saveMessageToPersistence = async (message: Message) => {
-    if (!user || !selectedSubject) {
-      console.log('❌ Cannot save message: missing user or subject', { user: !!user, selectedSubject: !!selectedSubject })
-      return
+  // Custom hooks for better separation of concerns
+  const { scheduleRetry, clearRetry } = usePendingMessages({
+    user,
+    selectedSubject,
+    onRetrySuccess: (savedMessages) => {
+      setPendingMessages(prev => prev.filter(msg => !savedMessages.some(saved => saved.id === msg.id)))
     }
-    
-    console.log('💾 Saving message to persistence:', message.content.substring(0, 50) + '...')
-    console.log('🆔 User object for saving:', { id: user.id, email: user.email })
-    console.log('🎯 Subject for saving:', { id: selectedSubject.id, name: selectedSubject.name })
-    
-    try {
-      await persistenceService.saveMessage({
-        id: message.id,
-        user_id: user.id,
-        subject_id: selectedSubject.id,
-        role: message.role,
-        content: message.content,
-        timestamp: message.timestamp.toISOString(),
-        has_generated_content: message.hasGeneratedContent || false
-      })
-      console.log('✅ Message saved successfully')
-    } catch (error: any) {
-      // Handle foreign key constraint violations (subject doesn't exist yet)
-      if (error?.code === '23503' || error?.message?.includes('violates foreign key constraint')) {
-        console.log('⏳ Subject not ready yet, adding message to pending queue')
-        setPendingMessages(prev => [...prev, message])
-      } else {
-        console.error('❌ Failed to save message:', error)
-      }
-    }
-  }
+  })
 
-  const loadMessagesFromPersistence = async () => {
-    if (!user || !selectedSubject) {
-      console.log('❌ Cannot load messages: missing user or subject', { user: !!user, selectedSubject: !!selectedSubject })
-      return
-    }
-
-    console.log('📥 Loading messages from persistence for subject:', selectedSubject.name)
-    console.log('🆔 User object for loading:', { id: user.id, email: user.email })
-    console.log('🎯 Subject for loading:', { id: selectedSubject.id, name: selectedSubject.name })
-    
-    setIsLoadingMessages(true)
-    try {
-      const persistedMessages = await persistenceService.getMessagesBySubject(user.id, selectedSubject.id)
-      console.log('📥 Loaded messages from DB:', persistedMessages.length)
-      console.log('📋 Raw persisted messages:', persistedMessages)
-      
-      const loadedMessages: Message[] = persistedMessages.map(pm => ({
-        id: pm.id,
-        role: pm.role,
-        content: pm.content,
-        timestamp: new Date(pm.timestamp),
-        hasGeneratedContent: pm.has_generated_content
-      }))
-      
-      console.log('📋 Converted messages for UI:', loadedMessages)
-      
-      // Set loaded messages directly to prevent duplicates
+  const { loadSubjectSession, isLoadingMessages } = useSubjectSession({
+    user,
+    selectedSubject,
+    onMessagesLoaded: (loadedMessages) => {
       setMessages(loadedMessages)
-      
-      // Debug: Check if messages state was actually updated
-      setTimeout(() => {
-        console.log('🔍 Messages in state after loading:', messages.length)
-      }, 100)
-      
-      // If we have messages, show a welcome back message
-      if (loadedMessages.length > 0) {
-        console.log(`💬 Loaded ${loadedMessages.length} messages for ${selectedSubject.name}`)
-      } else {
-        console.log('💬 No existing messages found for this subject')
-      }
-    } catch (error) {
-      console.error('❌ Failed to load messages:', error)
-    } finally {
-      setIsLoadingMessages(false)
+    },
+    onLessonPlanLoaded: (plan, progress) => {
+      setCurrentLessonPlan(plan)
+      setCurrentProgress(progress)
     }
-  }
+  })
 
-  // Auto-scroll to bottom when new messages arrive
+  // Load subject session when subject or user changes
+  useEffect(() => {
+    if (selectedSubject && user) {
+      loadSubjectSession()
+      
+      // Handle pending messages if any
+      if (pendingMessages.length > 0) {
+        console.log(`💾 Scheduling retry for ${pendingMessages.length} pending messages`)
+      setTimeout(() => {
+          scheduleRetry(pendingMessages)
+        }, 2000) // Wait 2 seconds to ensure subject is in database
+      }
+      } else {
+      // Clear state when no subject is selected
+      setMessages([])
+      setCurrentLessonPlan(null)
+      setCurrentProgress(null)
+      lessonPlanCreationAttempted.current = null
+      clearRetry()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubject?.id, user?.id])
+
+  // Schedule retry when pending messages change
+  useEffect(() => {
+    if (pendingMessages.length > 0 && selectedSubject && user) {
+      scheduleRetry(pendingMessages)
+    }
+    return clearRetry
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMessages.length, selectedSubject?.id, user?.id])
+
+  // Auto-scroll to bottom when new messages arrive (legitimate useEffect)
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
     }
   }, [messages])
 
-  // Retry pending messages periodically
-  useEffect(() => {
-    if (pendingMessages.length > 0 && selectedSubject && user) {
-      console.log(`🔄 Setting up retry for ${pendingMessages.length} pending messages`)
-      
-      // Clear any existing retry timeout
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
-      }
-      
-      // Set up a retry after 3 seconds
-      retryTimeoutRef.current = setTimeout(async () => {
-        console.log('🔄 Retrying pending messages...')
-        const messagesToRetry = [...pendingMessages]
-        const savedMessages: Message[] = []
-        
-        for (const message of messagesToRetry) {
+  // Message persistence functions
+  const saveMessageToPersistence = useCallback(async (message: Message) => {
+    if (!user || !selectedSubject) {
+      console.log('❌ Cannot save message: missing user or subject', { user: !!user, selectedSubject: !!selectedSubject })
+      return
+    }
+    
+    console.log('💾 Saving message to persistence:', message.content.substring(0, 50) + '...')
+    
           try {
             await persistenceService.saveMessage({
               id: message.id,
@@ -156,169 +120,104 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               timestamp: message.timestamp.toISOString(),
               has_generated_content: message.hasGeneratedContent || false
             })
-            savedMessages.push(message)
-            console.log('✅ Retried message saved successfully:', message.id)
-          } catch (error: any) {
-            console.log('❌ Retry failed for message:', message.id, error)
-            // Keep failed messages in pending queue
-          }
-        }
-        
-        // Remove successfully saved messages from pending queue
-        if (savedMessages.length > 0) {
-          setPendingMessages(prev => prev.filter(msg => !savedMessages.some(saved => saved.id === msg.id)))
-          console.log(`✅ Successfully saved ${savedMessages.length} pending messages`)
-        }
-      }, 3000)
-    }
-    
-    // Cleanup timeout on unmount
-    return () => {
-      if (retryTimeoutRef.current) {
-        clearTimeout(retryTimeoutRef.current)
-      }
-    }
-  }, [pendingMessages.length, selectedSubject?.id, user?.id])
-
-  // Handle subject changes and lesson plan management
-  useEffect(() => {
-    console.log('🔄 ChatPane useEffect: subject/user changed')
-    console.log('🎯 selectedSubject:', selectedSubject?.name || 'null')
-    console.log('👤 user:', user?.id || 'null')
-    console.log('📊 Current messages count before effect:', messages.length)
-    
-    if (selectedSubject && user) {
-      console.log('✅ ChatPane: Both user and subject available, loading messages')
+      console.log('✅ Message saved successfully')
+    } catch (error: unknown) {
+      // Handle foreign key constraint violations (subject doesn't exist yet)
+      let errorCode: string | null = null
+      let errorMessage: string | null = null
       
-      // Debug: Show all cached subjects before switching
-      const cachedSubjects = aiTutor.getCachedSubjects()
-      console.log('🗂️ Currently cached subjects:', cachedSubjects)
-      
-      // Load messages from persistence first
-      loadMessagesFromPersistence()
-      
-      // Save any pending messages now that we have a subject - but wait to ensure subject exists in DB
-      if (pendingMessages.length > 0) {
-        console.log(`💾 Saving ${pendingMessages.length} pending messages for ${selectedSubject.name}`)
-        // Wait a bit longer to ensure subject is fully saved to database
-        setTimeout(async () => {
-          console.log('🔄 Attempting to save pending messages after delay...')
-          for (const message of pendingMessages) {
-            try {
-              await saveMessageToPersistence(message)
-            } catch (error) {
-              console.error('❌ Failed to save pending message, will retry:', error)
-              // If it fails, we'll keep it in pending and try again later
-              return
-            }
-          }
-          setPendingMessages([]) // Clear pending messages only if all succeeded
-          console.log('✅ All pending messages saved successfully')
-        }, 2000) // Wait 2 seconds to ensure subject is in database
+      if (error && typeof error === 'object' && 'code' in error) {
+        errorCode = typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : null
       }
       
-      // Check if we already have a lesson plan for this subject
-      const existingPlan = aiTutor.getLessonPlan(selectedSubject.name)
-      const existingProgress = aiTutor.getProgress(selectedSubject.name)
+      if (error && typeof error === 'object' && 'message' in error) {
+        errorMessage = typeof (error as { message: unknown }).message === 'string' ? (error as { message: string }).message : null
+      }
       
-      console.log('📋 Existing lesson plan found:', !!existingPlan)
-      console.log('📊 Existing progress found:', !!existingProgress)
-      
-      // Debug: Check what data is available in the selected subject
-      console.log('🔍 DEBUG: selectedSubject data:', {
-        id: selectedSubject?.id,
-        name: selectedSubject?.name,
-        hasLessonPlan: !!selectedSubject?.lessonPlan,
-        hasLearningProgress: !!selectedSubject?.learningProgress,
-        lessonPlanType: typeof selectedSubject?.lessonPlan,
-        learningProgressType: typeof selectedSubject?.learningProgress,
-        lessonPlanKeys: selectedSubject?.lessonPlan ? Object.keys(selectedSubject.lessonPlan) : 'none',
-        learningProgressKeys: selectedSubject?.learningProgress ? Object.keys(selectedSubject.learningProgress) : 'none'
-      })
-      
-      if (existingPlan) {
-        console.log('📚 Using existing lesson plan for:', selectedSubject.name, '- Lessons:', existingPlan.lessons.length)
-        setCurrentLessonPlan(existingPlan)
-        setCurrentProgress(existingProgress)
+      if (errorCode === '23503' || errorMessage?.includes('violates foreign key constraint')) {
+        console.log('⏳ Subject not ready yet, adding message to pending queue')
+        setPendingMessages(prev => [...prev, message])
       } else {
-        console.log('🆕 No existing lesson plan for:', selectedSubject.name)
-        
-        // Check if the subject has persisted lesson plan data before creating new one
-        if (selectedSubject.lessonPlan && selectedSubject.learningProgress) {
-          console.log('📚 Found persisted lesson plan data, restoring from database...')
-          
-          // Restore lesson plan and progress from database
-          const restoredPlan = {
-            ...selectedSubject.lessonPlan,
-            currentLessonIndex: selectedSubject.learningProgress.currentLessonIndex || 0
+        console.error('❌ Failed to save message:', error)
+      }
+    }
+  }, [user, selectedSubject])
+
+  const createLessonPlan = useCallback(async (subjectName: string) => {
+    try {
+      console.log('📚 Creating lesson plan for subject:', subjectName)
+      const lessonPlan = await aiTutor.createLearningPlan(subjectName)
+      console.log('📋 Generated lesson plan:', lessonPlan)
+      setCurrentLessonPlan(lessonPlan)
+      
+      const progress = aiTutor.getProgress(subjectName)
+      setCurrentProgress(progress)
+
+      // Save lesson plan and progress to database for persistence
+      if (selectedSubject && user) {
+        console.log('💾 Saving lesson plan and progress to database...')
+        try {
+          const updatedSubject = {
+            ...selectedSubject,
+            lessonPlan: lessonPlan,
+            learningProgress: {
+              correctAnswers: progress?.correctAnswers || 0,
+              totalAttempts: progress?.totalAttempts || 0,
+              needsReview: progress?.needsReview || false,
+              readyForNext: progress?.readyForNext || false,
+              currentLessonIndex: lessonPlan.currentLessonIndex,
+              totalLessons: lessonPlan.lessons.length
+            },
+            lastActive: new Date()
           }
-          const restoredProgress = {
-            correctAnswers: selectedSubject.learningProgress.correctAnswers || 0,
-            totalAttempts: selectedSubject.learningProgress.totalAttempts || 0,
-            needsReview: selectedSubject.learningProgress.needsReview || false,
-            readyForNext: selectedSubject.learningProgress.readyForNext || false
-          }
           
-          console.log('✅ Restored lesson plan:', restoredPlan.lessons?.length, 'lessons, current lesson:', restoredPlan.currentLessonIndex + 1)
-          console.log('✅ Restored progress:', restoredProgress.correctAnswers, '/', restoredProgress.totalAttempts, 'correct')
-          
-          // Load into AI service cache
-          aiTutor.loadLessonPlan(selectedSubject.name, restoredPlan)
-          aiTutor.loadProgress(selectedSubject.name, restoredProgress)
-          
-          setCurrentLessonPlan(restoredPlan)
-          setCurrentProgress(restoredProgress)
-          
-          // Show welcome back message only if we haven't shown one for this subject yet
-          if (!welcomeMessageShown.current.has(selectedSubject.id)) {
-            const welcomeBackMessage: Message = {
-              id: `welcome-back-${Date.now()}`,
-              role: 'assistant',
-              content: `Welcome back to ${selectedSubject.name}! You're currently on lesson ${restoredPlan.currentLessonIndex + 1}: "${restoredPlan.lessons[restoredPlan.currentLessonIndex]?.title}". Your progress: ${restoredProgress.correctAnswers}/${restoredProgress.totalAttempts} correct answers. Let's continue!`,
-              timestamp: new Date()
-            }
-            setMessages(prev => [...prev, welcomeBackMessage])
-            
-            // Mark this subject as having shown welcome message
-            welcomeMessageShown.current.add(selectedSubject.id)
-            
-            // Save message asynchronously without blocking
-            setTimeout(async () => {
-              await saveMessageToPersistence(welcomeBackMessage)
-            }, 0)
-          } else {
-            console.log('🔄 Skipping duplicate welcome message for subject:', selectedSubject.name)
-          }
-        } else {
-          console.log('🆕 No persisted data found, will create new lesson plan when user messages')
-          console.log('🔍 DEBUG: Why no persisted data?', {
-            hasLessonPlan: !!selectedSubject?.lessonPlan,
-            hasLearningProgress: !!selectedSubject?.learningProgress,
-            lessonPlanValue: selectedSubject?.lessonPlan,
-            learningProgressValue: selectedSubject?.learningProgress
+          await persistenceService.saveSubject({
+            id: selectedSubject.id,
+            user_id: user.id,
+            name: selectedSubject.name,
+            keywords: selectedSubject.topicKeywords || [],
+            lesson_plan: updatedSubject.lessonPlan,
+            learning_progress: updatedSubject.learningProgress,
+            last_active: updatedSubject.lastActive.toISOString()
           })
-          setCurrentLessonPlan(null)
-          setCurrentProgress(null)
-          lessonPlanCreationAttempted.current = null
+          
+          console.log('✅ Lesson plan and progress saved to database')
+        } catch (error) {
+          console.error('❌ Failed to save lesson plan to database:', error)
         }
       }
-    } else {
-      console.log('❌ ChatPane: Missing user or subject, clearing state')
-      console.log('   - selectedSubject:', selectedSubject?.name || 'MISSING')
-      console.log('   - user:', user?.id || 'MISSING')
-      // Clear state when no subject is selected
-      setMessages([])
-      setCurrentLessonPlan(null)
-      setCurrentProgress(null)
-      lessonPlanCreationAttempted.current = null
-      welcomeMessageShown.current.clear() // Clear welcome message tracking
-    }
-  }, [selectedSubject?.id, user?.id])
 
-  // Trigger lesson plan creation when a new subject is created
-  useEffect(() => {
-    const createLessonPlanForNewSubject = async () => {
-      // Only create lesson plan for truly new subjects (not when loading existing ones)
+      const planMessage = `Great! I've created a learning plan for ${subjectName}:\n\n` +
+        lessonPlan.lessons.map((lesson, i) => `${i + 1}. ${lesson.title}`).join('\n') +
+        `\n\nLet's start with lesson 1: "${lessonPlan.lessons[0].title}"`
+
+      const aiResponse: Message = {
+        id: (Date.now() + 1).toString(),
+              role: 'assistant',
+        content: planMessage,
+        timestamp: new Date(),
+        hasGeneratedContent: true
+      }
+      setMessages(prev => [...prev, aiResponse])
+      
+      // Save AI response (should have subject by now, but handle pending just in case)
+      if (selectedSubject) {
+        await saveMessageToPersistence(aiResponse)
+          } else {
+        console.log('⏳ Adding AI response to pending queue')
+        setPendingMessages(prev => [...prev, aiResponse])
+      }
+
+      // Generate content for first lesson - pass the lesson plan directly to avoid state timing issues
+      await generateLessonContent(lessonPlan, progress, subjectName)
+    } catch (error) {
+      console.error('Error creating lesson plan:', error)
+      setIsTyping(false)
+    }
+  }, [selectedSubject, user, saveMessageToPersistence])
+
+  // Check if lesson plan creation should be triggered (moved from useEffect to direct logic)
+  const checkAndCreateLessonPlan = useCallback(async () => {
       if (selectedSubject && !currentLessonPlan && 
           lessonPlanCreationAttempted.current !== selectedSubject.name) {
         
@@ -331,19 +230,10 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         if (recentUserMessages.length > 0) {
           console.log('🆕 Creating lesson plan for new subject:', selectedSubject.name)
           lessonPlanCreationAttempted.current = selectedSubject.name
-          
-          // Create lesson plan for the subject
           await createLessonPlan(selectedSubject.name)
-        } else {
-          console.log('📜 Subject has old messages, skipping lesson plan creation')
-        }
       }
     }
-
-    // Only run this after a small delay to ensure messages are loaded first
-    const timer = setTimeout(createLessonPlanForNewSubject, 500)
-    return () => clearTimeout(timer)
-  }, [selectedSubject?.name, currentLessonPlan])
+  }, [selectedSubject, currentLessonPlan, createLessonPlan, messages])
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isTyping) return
@@ -356,8 +246,6 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }
 
     console.log('📝 User sent message:', inputValue.substring(0, 50) + '...')
-    console.log('🎯 Current selectedSubject:', selectedSubject?.name || 'NULL')
-    console.log('👤 Current user:', user?.id || 'NULL')
 
     setMessages(prev => [...prev, userMessage])
     const currentInput = inputValue
@@ -366,9 +254,6 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
 
     // Save user message to persistence - or add to pending if no subject yet
     if (selectedSubject) {
-      console.log('💾 Saving message immediately (subject exists)')
-      // The saveMessageToPersistence function will handle foreign key constraint violations
-      // and automatically add to pending queue if needed
       await saveMessageToPersistence(userMessage)
     } else {
       console.log('⏳ Adding message to pending queue (no subject yet)')
@@ -408,76 +293,11 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.error('Error handling message:', error)
       setIsTyping(false)
     }
-  }
 
-  const createLessonPlan = async (subjectName: string) => {
-    try {
-      console.log('📚 Creating lesson plan for subject:', subjectName)
-      const lessonPlan = await aiTutor.createLearningPlan(subjectName)
-      console.log('📋 Generated lesson plan:', lessonPlan)
-      setCurrentLessonPlan(lessonPlan)
-      
-      const progress = aiTutor.getProgress(subjectName)
-      setCurrentProgress(progress)
-
-      // Save lesson plan and progress to database for persistence
-      if (selectedSubject && user) {
-        console.log('💾 Saving lesson plan and progress to database...')
-        try {
-          const updatedSubject = {
-            ...selectedSubject,
-            lessonPlan: lessonPlan,
-            learningProgress: {
-              ...progress,
-              currentLessonIndex: lessonPlan.currentLessonIndex,
-              totalLessons: lessonPlan.lessons.length
-            },
-            lastActive: new Date()
-          }
-          
-          await persistenceService.saveSubject({
-            id: selectedSubject.id,
-            user_id: user.id,
-            name: selectedSubject.name,
-            keywords: selectedSubject.topicKeywords || [],
-            lesson_plan: updatedSubject.lessonPlan,
-            learning_progress: updatedSubject.learningProgress,
-            last_active: updatedSubject.lastActive.toISOString()
-          })
-          
-          console.log('✅ Lesson plan and progress saved to database')
-        } catch (error) {
-          console.error('❌ Failed to save lesson plan to database:', error)
-        }
-      }
-
-      const planMessage = `Great! I've created a learning plan for ${subjectName}:\n\n` +
-        lessonPlan.lessons.map((lesson, i) => `${i + 1}. ${lesson.title}`).join('\n') +
-        `\n\nLet's start with lesson 1: "${lessonPlan.lessons[0].title}"`
-
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: planMessage,
-        timestamp: new Date(),
-        hasGeneratedContent: true
-      }
-      setMessages(prev => [...prev, aiResponse])
-      
-      // Save AI response (should have subject by now, but handle pending just in case)
-      if (selectedSubject) {
-        await saveMessageToPersistence(aiResponse)
-      } else {
-        console.log('⏳ Adding AI response to pending queue')
-        setPendingMessages(prev => [...prev, aiResponse])
-      }
-
-      // Generate content for first lesson - pass the lesson plan directly to avoid state timing issues
-      await generateLessonContent(lessonPlan, progress, subjectName)
-    } catch (error) {
-      console.error('Error creating lesson plan:', error)
-      setIsTyping(false)
-    }
+    // Check if lesson plan creation is needed after message handling
+    setTimeout(() => {
+      checkAndCreateLessonPlan()
+    }, 500)
   }
 
   const generateLessonContent = async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, userAction?: string) => {
@@ -622,7 +442,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         setCurrentProgress(newProgress)
         
         // Save lesson advancement to database
-        if (selectedSubject && user) {
+        if (selectedSubject && user && newPlan && newProgress) {
           setTimeout(async () => {
             try {
               await persistenceService.saveSubject({
@@ -632,13 +452,16 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
                 keywords: selectedSubject.topicKeywords || [],
                 lesson_plan: newPlan,
                 learning_progress: {
-                  ...newProgress,
-                  currentLessonIndex: newPlan?.currentLessonIndex || 0,
-                  totalLessons: newPlan?.lessons.length || 0
+                  correctAnswers: newProgress.correctAnswers,
+                  totalAttempts: newProgress.totalAttempts,
+                  needsReview: newProgress.needsReview,
+                  readyForNext: newProgress.readyForNext,
+                  currentLessonIndex: newPlan.currentLessonIndex,
+                  totalLessons: newPlan.lessons.length
                 },
                 last_active: new Date().toISOString()
               })
-              console.log('💾 Lesson advancement saved to database - now on lesson:', (newPlan?.currentLessonIndex || 0) + 1)
+              console.log('💾 Lesson advancement saved to database - now on lesson:', newPlan.currentLessonIndex + 1)
             } catch (error) {
               console.error('❌ Failed to save lesson advancement to database:', error)
             }
@@ -708,152 +531,48 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }
   }
 
-  const handleContentInteraction = async (action: string, data: any) => {
+  const handleContentInteraction = async (action: string, data: unknown) => {
     console.log('🚨 =========================')
     console.log('🚨 HANDLE CONTENT INTERACTION CALLED!')
     console.log('🚨 Action:', action)
     console.log('🚨 Data:', data)
     console.log('🚨 =========================')
     
-    console.log('🎯 ChatPane handleContentInteraction called:', action, data)
-    console.log('📊 ChatPane state check:', {
-      selectedSubject: !!selectedSubject,
-      currentLessonPlan: !!currentLessonPlan,
-      currentProgress: !!currentProgress,
-      selectedSubjectName: selectedSubject?.name,
-      progressDetails: currentProgress ? {
-        correctAnswers: currentProgress.correctAnswers,
-        totalAttempts: currentProgress.totalAttempts,
-        readyForNext: currentProgress.readyForNext,
-        needsReview: currentProgress.needsReview
-      } : null
-    })
-    
-    if (!selectedSubject) {
-      console.log('❌ ChatPane: No selected subject, returning early')
-      return
+    // Type guard for interaction data with proper typing
+    interface InteractionData {
+      quiz?: unknown
+      concept?: string
+      componentId?: string
+      category?: string
+      difficulty?: string
+      problemType?: string
     }
-
-    // If we don't have a lesson plan, create one before processing the interaction
-    let lessonPlan = currentLessonPlan
-    let progress = currentProgress
     
-    if (!lessonPlan || !progress) {
-      console.log('🔧 ChatPane: Missing lesson plan/progress, creating one first...')
-      await createLessonPlan(selectedSubject.name)
-      // Get the fresh lesson plan and progress from the service
-      lessonPlan = aiTutor.getLessonPlan(selectedSubject.name)
-      progress = aiTutor.getProgress(selectedSubject.name)
-      
-      if (!lessonPlan || !progress) {
-        console.log('❌ ChatPane: Failed to create lesson plan, cannot process interaction')
-        return
-      }
-      console.log('✅ ChatPane: Created lesson plan, proceeding with interaction')
-    }
-
-    try {
-      const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
-      
-      // Handle answer submissions with progress tracking
-      if (action === 'answer_submitted') {
-        const updatedProgress = aiTutor.updateProgress(selectedSubject.name, data.correct, currentLesson.id)
-        setCurrentProgress(updatedProgress)
-
-        // Dispatch progress update event to Dashboard
-        const progressEvent = new CustomEvent('progressUpdated', {
-          detail: {
-            subjectId: selectedSubject.id,
-            learningProgress: {
-              ...updatedProgress,
-              currentLessonIndex: currentLessonPlan?.currentLessonIndex || 0,
-              totalLessons: currentLessonPlan?.lessons.length || 0
-            }
-          }
-        })
-        window.dispatchEvent(progressEvent)
-        console.log('📡 Dispatched progress update event for answer submission')
-
-        // Save updated progress to database
-        if (selectedSubject && user) {
-          setTimeout(async () => {
-            try {
-              await persistenceService.saveSubject({
-                id: selectedSubject.id,
-                user_id: user.id,
-                name: selectedSubject.name,
-                keywords: selectedSubject.topicKeywords || [],
-                lesson_plan: currentLessonPlan,
-                learning_progress: {
-                  ...updatedProgress,
-                  currentLessonIndex: currentLessonPlan?.currentLessonIndex || 0,
-                  totalLessons: currentLessonPlan?.lessons.length || 0
-                },
-                last_active: new Date().toISOString()
-              })
-              console.log('💾 Progress saved to database:', updatedProgress.correctAnswers, '/', updatedProgress.totalAttempts)
-            } catch (error) {
-              console.error('❌ Failed to save progress to database:', error)
-            }
-          }, 0)
-        }
-
-        // Generate AI response for the answer
-        const response = await aiTutor.generateTutorResponse(
-          selectedSubject.name,
-          'answer_submitted',
-          data,
-          { lesson: currentLesson, progress: updatedProgress }
-        )
-
-        const interactionResponse: Message = {
-          id: `interaction-${Date.now()}`,
-          role: 'assistant',
-          content: response,
-          timestamp: new Date()
-        }
-        setMessages(prev => [...prev, interactionResponse])
-        await saveMessageToPersistence(interactionResponse)
-
-        // Show progress status but don't auto-advance - let user control progression with buttons
-        setTimeout(async () => {
-          let statusMessage = ''
-          
-          if (updatedProgress.readyForNext) {
-            statusMessage = `🎉 Excellent! You've mastered this lesson with ${updatedProgress.correctAnswers}/${updatedProgress.totalAttempts} correct (${Math.round((updatedProgress.correctAnswers/updatedProgress.totalAttempts)*100)}% accuracy). Click "Next Problem/Question/Exercise" to advance to the next lesson!`
-          } else if (updatedProgress.needsReview) {
-            const accuracy = Math.round((updatedProgress.correctAnswers/updatedProgress.totalAttempts)*100)
-            statusMessage = `Keep practicing! You need 5+ correct answers with 75%+ accuracy to advance. Current: ${updatedProgress.correctAnswers}/${updatedProgress.totalAttempts} correct (${accuracy}%). You're making progress!`
-          } else {
-            const accuracy = Math.round((updatedProgress.correctAnswers/updatedProgress.totalAttempts)*100)
-            const needed = Math.max(0, 5 - updatedProgress.correctAnswers)
-            statusMessage = `Good progress! You need ${needed} more correct answers and 75%+ accuracy to advance. Current: ${updatedProgress.correctAnswers}/${updatedProgress.totalAttempts} correct (${accuracy}%).`
-          }
-          
-          const statusMessageObj: Message = {
-            id: `status-${Date.now()}`,
-            role: 'assistant',
-            content: statusMessage,
-            timestamp: new Date()
-          }
-          setMessages(prev => [...prev, statusMessageObj])
-          await saveMessageToPersistence(statusMessageObj)
-        }, 1500)
+    const interactionData = data as InteractionData | null
+    
+    if (action === 'show_quiz' && interactionData?.quiz) {
+      // Handle quiz interaction
+      console.log('🎯 Handling quiz interaction:', interactionData.quiz)
+      // Implementation of handling quiz interaction
       } else if (action === 'concept_expanded' || action === 'examples_requested' || action === 'help_requested') {
         // For concept interactions, provide deeper explanation and generate new content
         console.log('🎯 Handling concept interaction:', action, data)
+      
+      // Type guard for data with concept property
+      const conceptData = data as { concept?: string } | null
+      const conceptName = conceptData?.concept || currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title || 'this topic'
         
         let responseMessage = ''
         let contentAction = ''
         
         if (action === 'concept_expanded') {
-          responseMessage = `Let me provide a deeper explanation of "${data.concept || currentLesson.title}".`
+        responseMessage = `Let me provide a deeper explanation of "${conceptName}".`
           contentAction = 'concept_expanded'
         } else if (action === 'examples_requested') {
-          responseMessage = `Here are more examples for "${data.concept || currentLesson.title}".`
+        responseMessage = `Here are more examples for "${conceptName}".`
           contentAction = 'examples_requested'
         } else {
-          responseMessage = `Let me help you understand "${data.concept || currentLesson.title}" better.`
+        responseMessage = `Let me help you understand "${conceptName}" better.`
           contentAction = 'concept_expanded'
         }
         
@@ -874,7 +593,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         const readyMessage: Message = {
           id: `ready-${Date.now()}`,
           role: 'assistant',
-          content: `Great! Let's practice "${currentLesson.title}" with some hands-on exercises:`,
+        content: `Great! Let's practice "${currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title}" with some hands-on exercises:`,
           timestamp: new Date(),
           hasGeneratedContent: true
         }
@@ -887,28 +606,28 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         // Handle all "Next" button interactions with proper lesson progression
         console.log('🎯 Next button clicked - calling handleNextInteractiveContent with:', {
           action,
-          hasLessonPlan: !!lessonPlan,
-          hasProgress: !!progress,
-          progressDetails: progress ? {
-            correctAnswers: progress.correctAnswers,
-            totalAttempts: progress.totalAttempts,
-            readyForNext: progress.readyForNext,
-            needsReview: progress.needsReview
+        hasLessonPlan: !!currentLessonPlan,
+        hasProgress: !!currentProgress,
+        progressDetails: currentProgress ? {
+          correctAnswers: currentProgress.correctAnswers,
+          totalAttempts: currentProgress.totalAttempts,
+          readyForNext: currentProgress.readyForNext,
+          needsReview: currentProgress.needsReview
           } : null
         })
         
         // Track this as a new learning attempt when user requests more content
         // This ensures their engagement is counted towards advancement
         console.log('📊 Tracking new content request as learning engagement...')
-        const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
-        const updatedProgress = aiTutor.updateProgress(selectedSubject.name, true, currentLesson.id) // Count as engagement/correct attempt
+      const currentLesson = currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]
+      const updatedProgress = aiTutor.updateProgress(selectedSubject!.name, true, currentLesson?.id) // Count as engagement/correct attempt
         setCurrentProgress(updatedProgress)
         console.log('✅ Progress updated for new content request:', updatedProgress)
 
         // Dispatch progress update event to Dashboard
         const progressEvent = new CustomEvent('progressUpdated', {
           detail: {
-            subjectId: selectedSubject.id,
+          subjectId: selectedSubject?.id,
             learningProgress: {
               ...updatedProgress,
               currentLessonIndex: currentLessonPlan?.currentLessonIndex || 0,
@@ -919,17 +638,21 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         window.dispatchEvent(progressEvent)
         console.log('📡 Dispatched progress update event for content request')
         
-        await handleNextInteractiveContent(action, lessonPlan, updatedProgress)
+      await handleNextInteractiveContent(action, currentLessonPlan!, updatedProgress)
       } else {
         // Handle other interactions with brief response but focus on action
         console.log('🤔 Unknown action received:', action, '- Not handled as advancement trigger')
         console.log('📝 Full interaction data:', data)
         
+      // Only call generateTutorResponse if we have valid lesson and progress data
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
         const response = await aiTutor.generateTutorResponse(
-          selectedSubject.name,
+            selectedSubject!.name,
           action,
           data,
-          { lesson: currentLesson, progress: progress }
+            { lesson: currentLesson, progress: currentProgress }
         )
 
         const interactionResponse: Message = {
@@ -940,17 +663,16 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         }
         setMessages(prev => [...prev, interactionResponse])
       }
-    } catch (error) {
-      console.error('Error handling content interaction:', error)
-      
-      // Fallback response
+      } else {
+        // Fallback response when lesson plan or progress is not available
       const fallbackResponse: Message = {
         id: `fallback-${Date.now()}`,
         role: 'assistant',
-        content: data.correct ? "Nice job! Keep going." : "Good try! Let's keep practicing.",
+          content: "I'm still setting up your learning plan. Please try again in a moment!",
         timestamp: new Date()
       }
       setMessages(prev => [...prev, fallbackResponse])
+      }
     }
   }
 
@@ -980,7 +702,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">AI Tutor Ready</h3>
             <p className="text-gray-600 mb-4">
-              Start learning with your personal AI tutor. I'll create interactive content based on what you want to learn.
+              Start learning with your personal AI tutor. I&apos;ll create interactive content based on what you want to learn.
             </p>
           </div>
         </div>
@@ -992,7 +714,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="What would you like to learn? (e.g., 'Explain photosynthesis', 'Quiz me on Shakespeare', 'Teach me Spanish')"
+              placeholder="What would you like to learn? (e.g., &apos;Explain photosynthesis&apos;, &apos;Quiz me on Shakespeare&apos;, &apos;Teach me Spanish&apos;)"
               disabled={isTyping}
               className="flex-1"
             />
@@ -1006,7 +728,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Try: "Explain concepts", "Give me a quiz", "Help me understand", "Teach me step-by-step"
+            Try: &quot;Explain concepts&quot;, &quot;Give me a quiz&quot;, &quot;Help me understand&quot;, &quot;Teach me step-by-step&quot;
           </p>
         </div>
       </div>
@@ -1048,7 +770,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             </p>
             {currentProgress?.readyForNext && (
               <p className="text-xs text-green-600 font-medium">
-                🎉 Ready to advance! Click "Next" on any activity to continue.
+                🎉 Ready to advance! Click &quot;Next&quot; on any activity to continue.
               </p>
             )}
           </div>
@@ -1146,7 +868,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
           </Button>
         </div>
         <p className="text-xs text-gray-500 mt-2">
-          Try: "More examples", "Quiz me", "Deeper explanation", "Practice problems"
+          Try: &quot;More examples&quot;, &quot;Quiz me&quot;, &quot;Deeper explanation&quot;, &quot;Practice problems&quot;
         </p>
       </div>
     </div>

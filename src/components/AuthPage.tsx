@@ -33,8 +33,9 @@ export function AuthPage() {
         })
         if (error) throw error
       }
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred'
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }

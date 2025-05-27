@@ -1,34 +1,39 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BookOpen, Sparkles, Trash2, RefreshCw } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
-import { persistenceService, PersistedContentItem } from '@/lib/persistenceService'
+import { persistenceService } from '@/lib/persistenceService'
 import { 
   MultipleChoice, 
   ConceptCard, 
   StepByStepSolver,
   FillInTheBlank,
   DragAndDrop,
-  ComponentType,
-  InteractiveComponentProps 
+  ComponentType
 } from '@/components/interactive'
+
+interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+}
 
 interface InteractiveContent {
   id: string
   type: ComponentType
-  data: any
+  data: unknown
   title: string
   timestamp: Date
 }
 
 interface ContentPaneProps {
   selectedSubject: Subject | null
-  onContentInteraction?: (action: string, data: any) => void
+  onContentInteraction?: (action: string, data: unknown) => void
 }
 
 export function ContentPane({ 
@@ -39,19 +44,13 @@ export function ContentPane({
   const [contentFeed, setContentFeed] = useState<InteractiveContent[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const savingContentIdsRef = useRef<Set<string>>(new Set())
+  const currentSubjectRef = useRef<string | null>(null)
   
-  // Load content feed when subject changes
-  useEffect(() => {
-    if (selectedSubject && user) {
-      loadContentFeed()
-    } else {
-      // Clear content feed when no subject is selected
+  const loadContentFeed = useCallback(async () => {
+    if (!selectedSubject || !user) {
       setContentFeed([])
+      return
     }
-  }, [selectedSubject?.id, user?.id])
-
-  const loadContentFeed = async () => {
-    if (!selectedSubject || !user) return
     
     setIsLoading(true)
     try {
@@ -70,9 +69,27 @@ export function ContentPane({
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [selectedSubject?.id, user?.id])
 
-  const handleInteraction = (action: string, data: any) => {
+  // Load content feed when subject changes - direct effect without intermediate function
+  useEffect(() => {
+    const newSubjectId = selectedSubject?.id || null
+    const previousSubjectId = currentSubjectRef.current
+    
+    if (newSubjectId !== previousSubjectId) {
+      currentSubjectRef.current = newSubjectId
+      
+      if (selectedSubject && user) {
+        console.log('📥 Loading content feed for new subject:', selectedSubject.name)
+        loadContentFeed()
+      } else {
+        console.log('📥 Clearing content feed - no subject selected')
+        setContentFeed([])
+      }
+    }
+  }, [selectedSubject?.id, user?.id, loadContentFeed])
+
+  const handleInteraction = (action: string, data: unknown) => {
     console.log('🟢 ==========================================')
     console.log('🟢 CONTENTPANE HANDLE INTERACTION CALLED!')
     console.log('🟢 Action:', action)
@@ -113,9 +130,7 @@ export function ContentPane({
     loadContentFeed()
   }
 
-
-
-  // Listen for content generation events from ChatPane
+  // Listen for content generation events from ChatPane (legitimate useEffect for event listener)
   useEffect(() => {
     const handleContentGenerated = (event: CustomEvent) => {
       const contentData = event.detail
@@ -165,8 +180,14 @@ export function ContentPane({
                 timestamp: newContent.timestamp.toISOString()
               })
               console.log('✅ Content persisted:', newContent.id)
-            } catch (error: any) {
-              if (error?.code === '23505') {
+            } catch (error: unknown) {
+              let errorCode: string | null = null
+              
+              if (error && typeof error === 'object' && 'code' in error) {
+                errorCode = typeof (error as { code: unknown }).code === 'string' ? (error as { code: string }).code : null
+              }
+              
+              if (errorCode === '23505') {
                 console.log('⚠️ Content already exists in database (duplicate key), skipping:', newContent.id)
               } else {
                 console.error('❌ Failed to persist content item:', error)
@@ -186,7 +207,7 @@ export function ContentPane({
     return () => {
       window.removeEventListener('contentGenerated', handleContentGenerated as EventListener)
     }
-  }, [user?.id, selectedSubject?.id]) // Only depend on user and subject, not contentFeed
+  }, [user?.id, selectedSubject?.id])
 
   const renderInteractiveComponent = (content: InteractiveContent) => {
     const props: InteractiveComponentProps = {
@@ -210,7 +231,7 @@ export function ContentPane({
         return (
           <Card>
             <CardContent className="p-6">
-              <p className="text-gray-600">Component type "{content.type}" not yet implemented</p>
+              <p className="text-gray-600">Component type &quot;{content.type}&quot; not yet implemented</p>
             </CardContent>
           </Card>
         )
@@ -368,9 +389,9 @@ export function ContentPane({
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-700 font-medium mb-2">Try saying:</p>
                 <div className="space-y-1 text-sm text-blue-600">
-                  <p>• "Explain quadratic equations"</p>
-                  <p>• "Give me practice problems"</p>
-                  <p>• "I need help with calculus derivatives"</p>
+                  <p>• &quot;Explain quadratic equations&quot;</p>
+                  <p>• &quot;Give me practice problems&quot;</p>
+                  <p>• &quot;I need help with calculus derivatives&quot;</p>
                 </div>
               </div>
             </div>

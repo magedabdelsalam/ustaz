@@ -4,7 +4,12 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle, XCircle, RotateCcw, Move } from 'lucide-react'
-import { InteractiveComponentProps } from './index'
+
+interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+}
 
 interface DragAndDropContent {
   question: string
@@ -326,18 +331,4 @@ export function DragAndDrop({ onInteraction, content, id }: InteractiveComponent
 }
 
 // Placeholder components for future implementation
-export function FormulaExplorer({ onInteraction, content, id }: InteractiveComponentProps) {
-  return <div className="p-4 text-center text-gray-500">FormulaExplorer Component - Coming Soon</div>
-}
-
-export function InteractiveExample({ onInteraction, content, id }: InteractiveComponentProps) {
-  return <div className="p-4 text-center text-gray-500">InteractiveExample Component - Coming Soon</div>
-}
-
-export function ProgressQuiz({ onInteraction, content, id }: InteractiveComponentProps) {
-  return <div className="p-4 text-center text-gray-500">ProgressQuiz Component - Coming Soon</div>
-}
-
-export function GraphVisualizer({ onInteraction, content, id }: InteractiveComponentProps) {
-  return <div className="p-4 text-center text-gray-500">GraphVisualizer Component - Coming Soon</div>
-} 
+// These will be implemented in separate files when needed 

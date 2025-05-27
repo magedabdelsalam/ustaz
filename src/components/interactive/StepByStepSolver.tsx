@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, CheckCircle, Play, RotateCcw, Calculator, Brain, Target, Pause } from 'lucide-react'
-import { InteractiveComponentProps } from './index'
+
+interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+}
 
 interface StepData {
   id: string
@@ -29,7 +34,7 @@ export function StepByStepSolver({ onInteraction, content, id }: InteractiveComp
   const [currentStep, setCurrentStep] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
-  const [playSpeed, setPlaySpeed] = useState(2000) // milliseconds
+  const [playSpeed] = useState(2000) // milliseconds
   
   const solverContent = content as StepByStepContent
 

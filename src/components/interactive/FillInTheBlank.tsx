@@ -6,7 +6,12 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, FileText, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff } from 'lucide-react'
-import { InteractiveComponentProps } from './index'
+
+interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+}
 
 interface FillInTheBlankContent {
   question: string

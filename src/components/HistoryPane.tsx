@@ -142,7 +142,7 @@ export function HistoryPane({ subjects, selectedSubject, onSubjectSelect, onSubj
 
       {/* Delete Confirmation Dialog */}
       {confirmDeleteSubject && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md mx-4 shadow-xl">
             <div className="flex items-center space-x-3 mb-4">
               <div className="flex-shrink-0">
@@ -151,7 +151,7 @@ export function HistoryPane({ subjects, selectedSubject, onSubjectSelect, onSubj
               <div>
                 <h3 className="text-lg font-medium text-gray-900">Delete Subject</h3>
                 <p className="text-sm text-gray-500">
-                  Are you sure you want to delete "{confirmDeleteSubject.name}"?
+                  Are you sure you want to delete &quot;{confirmDeleteSubject.name}&quot;?
                 </p>
               </div>
             </div>

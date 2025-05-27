@@ -5,7 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, HelpCircle, Brain, RotateCcw, Target } from 'lucide-react'
-import { InteractiveComponentProps } from './index'
+
+interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+}
 
 interface MultipleChoiceContent {
   question: string
