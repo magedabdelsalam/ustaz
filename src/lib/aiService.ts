@@ -1,10 +1,5 @@
-import OpenAI from 'openai'
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || 'demo-key-for-development',
-  dangerouslyAllowBrowser: true // Only for demo - in production, use server-side API routes
-})
+import { chatCompletion } from '@/lib/openaiClient'
+import { logger } from '@/lib/logger'
 
 // AI Response Cache - prevents duplicate API calls and saves tokens
 interface CacheEntry {
@@ -28,7 +23,7 @@ class AICache {
     const entry = this.cache.get(key)
     
     if (entry && Date.now() - entry.timestamp < this.TTL) {
-      console.log(`🎯 Cache hit for ${type}`)
+      logger.debug(`🎯 Cache hit for ${type}`)
       return entry.data
     }
     
@@ -56,7 +51,7 @@ class AICache {
       type
     })
     
-    console.log(`💾 Cached ${type} response (cache size: ${this.cache.size})`)
+    logger.debug(`💾 Cached ${type} response (cache size: ${this.cache.size})`)
   }
 
   clear(type?: string): void {
@@ -128,7 +123,7 @@ class AITutorService {
     
     if (timeSinceLastCall < minDelay) {
       const waitTime = minDelay - timeSinceLastCall
-      console.log(`⏳ Throttling API call, waiting ${waitTime}ms...`)
+      logger.debug(`⏳ Throttling API call, waiting ${waitTime}ms...`)
       await new Promise(resolve => setTimeout(resolve, waitTime))
     }
     
@@ -184,7 +179,7 @@ class AITutorService {
       JSON.parse(jsonString)
       return jsonString
     } catch {
-      console.log('🔧 Attempting to fix incomplete JSON')
+      logger.debug('🔧 Attempting to fix incomplete JSON')
       
       // Try to fix common truncation issues
       let fixed = jsonString.trim()
@@ -237,10 +232,10 @@ class AITutorService {
       // Try to parse the fixed version
       try {
         JSON.parse(fixed)
-        console.log('✅ Successfully fixed incomplete JSON')
+        logger.debug('✅ Successfully fixed incomplete JSON')
         return fixed
       } catch {
-        console.log('❌ Could not fix JSON, will use fallback')
+        logger.debug('❌ Could not fix JSON, will use fallback')
         throw new Error('Unable to fix incomplete JSON response')
       }
     }
@@ -248,7 +243,7 @@ class AITutorService {
 
   async createLearningPlan(subject: string): Promise<LessonPlan> {
     try {
-      console.log('🤖 AI Service creating lesson plan for:', subject)
+      logger.debug('🤖 AI Service creating lesson plan for:', subject)
       
       // Determine appropriate lesson count based on subject complexity
       const getExpectedLessonCount = (subject: string): number => {
@@ -266,11 +261,11 @@ class AITutorService {
       }
       
       const expectedLessons = getExpectedLessonCount(subject)
-      console.log(`📚 Planning ${expectedLessons} lessons for "${subject}" (complexity-based)`)
+      logger.debug(`📚 Planning ${expectedLessons} lessons for "${subject}" (complexity-based)`)
       
       // Use higher token limit for complex subjects
       const maxTokens = expectedLessons >= 12 ? 2500 : 1500 // Reduced from 3000/2000
-      console.log(`🎯 Using ${maxTokens} tokens for ${expectedLessons} lessons`)
+      logger.debug(`🎯 Using ${maxTokens} tokens for ${expectedLessons} lessons`)
       
       // Create cache parameters for this lesson plan request
       const cacheParams = { subject, expectedLessons, maxTokens }
@@ -286,17 +281,16 @@ class AITutorService {
           
           for (let attempt = 1; attempt <= maxRetries; attempt++) {
             try {
-              console.log(`🔄 Attempt ${attempt}/${maxRetries} for lesson plan generation`)
+              logger.debug(`🔄 Attempt ${attempt}/${maxRetries} for lesson plan generation`)
               
-              const response = await openai.chat.completions.create({
-                model: "gpt-4o-mini", // Using cheaper model
+              const response = await chatCompletion({
                 messages: [
                   {
                     role: "system",
                     content: `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons. Return JSON: {"subject": "${subject}", "lessons": [{"id": "lesson-1", "title": "...", "description": "...", "completed": false}]}`
                   }
                 ],
-                temperature: 0.3, // Lower temperature for more consistent results
+                temperature: 0.3,
                 max_tokens: maxTokens
               })
 
@@ -317,7 +311,7 @@ class AITutorService {
                 throw new Error(`Too few lessons generated: ${parsedData.lessons.length}`)
               }
               
-              console.log(`✅ Successfully generated lesson plan with ${parsedData.lessons.length} lessons on attempt ${attempt}`)
+              logger.debug(`✅ Successfully generated lesson plan with ${parsedData.lessons.length} lessons on attempt ${attempt}`)
               return parsedData
               
             } catch (error) {
@@ -331,7 +325,7 @@ class AITutorService {
               
               // Wait before retrying (exponential backoff)
               const delay = Math.pow(2, attempt) * 1000 // 2s, 4s...
-              console.log(`⏳ Waiting ${delay}ms before retry...`)
+              logger.debug(`⏳ Waiting ${delay}ms before retry...`)
               await new Promise(resolve => setTimeout(resolve, delay))
             }
           }
@@ -381,8 +375,8 @@ class AITutorService {
         readyForNext: false
       })
 
-      console.log(`✅ Lesson plan created and cached for "${subject}"`)
-      console.log(`📚 Cache stats:`, this.aiCache.getStats())
+      logger.debug(`✅ Lesson plan created and cached for "${subject}"`)
+      logger.debug(`📚 Cache stats:`, this.aiCache.getStats())
       return lessonPlan
       
     } catch (error) {
@@ -394,20 +388,20 @@ class AITutorService {
       })
       
       // Fallback plan if AI fails
-      console.log('⚠️ Using fallback plan for subject:', subject)
+      logger.debug('⚠️ Using fallback plan for subject:', subject)
       return this.createFallbackPlan(subject)
     }
   }
 
   async generateLessonContent(subject: string, lesson: Lesson, contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' = 'explanation'): Promise<LessonContent> {
-    console.log('🤖 AI Service: Generating content for:', lesson.title, 'Type:', contentType)
+    logger.debug('🤖 AI Service: Generating content for:', lesson.title, 'Type:', contentType)
     
     // Get history of previously generated content for this lesson
     const contentHistory = this.getGeneratedContentHistory(subject, lesson.id)
     const previousQuestions = contentHistory.filter(item => item.type === contentType).map(item => item.question)
     const previousTopics = contentHistory.filter(item => item.type === contentType).map(item => item.topic)
     
-    console.log('📚 Previous content for this lesson:', {
+    logger.debug('📚 Previous content for this lesson:', {
       totalGenerated: contentHistory.length,
       previousQuestions: previousQuestions.slice(-3), // Show last 3
       previousTopics: [...new Set(previousTopics)] // Unique topics
@@ -528,27 +522,26 @@ Return JSON:
 Make it practical and educational.${avoidanceText}`
       }
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert tutor creating educational content. Always return valid JSON."
-          },
-          {
-            role: "user", 
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
+        const response = await chatCompletion({
+          messages: [
+            {
+              role: "system",
+              content: "You are an expert tutor creating educational content. Always return valid JSON."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        })
 
       const content = response.choices[0].message.content
       if (!content) throw new Error('No content received')
 
       const cleanedContent = this.cleanJsonResponse(content)
-      console.log('🧹 Cleaned lesson content response:', cleanedContent)
+      logger.debug('🧹 Cleaned lesson content response:', cleanedContent)
       
       // Try to fix incomplete JSON before parsing
       const fixedContent = this.fixIncompleteJson(cleanedContent)
@@ -559,7 +552,7 @@ Make it practical and educational.${avoidanceText}`
         throw new Error('Invalid lesson content structure from AI')
       }
       
-      console.log('🎯 AI Service: Successfully generated content:', parsedContent)
+      logger.debug('🎯 AI Service: Successfully generated content:', parsedContent)
       
       // Track this generated content to avoid repetition
       this.trackGeneratedContent(subject, lesson.id, contentType, parsedContent)
@@ -568,7 +561,7 @@ Make it practical and educational.${avoidanceText}`
     } catch (error) {
       console.error('❌ AI Service: Error generating lesson content:', error)
       const fallbackContent = this.createFallbackContent(lesson, contentType)
-      console.log('⚠️ AI Service: Using fallback content:', fallbackContent)
+      logger.debug('⚠️ AI Service: Using fallback content:', fallbackContent)
       return fallbackContent
     }
   }
@@ -580,8 +573,7 @@ Make it practical and educational.${avoidanceText}`
     context: { lesson: Lesson; progress: LearningProgress }
   ): Promise<string> {
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini", 
+      const response = await chatCompletion({
         messages: [
           {
             role: "system",
@@ -638,7 +630,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
       // More lenient: just need 2+ total items OR good performance
       hasContentVariety = varietyStats.totalItems >= 2 || hasGoodAccuracy
       
-      console.log(`📊 Content variety check for ${lessonId}:`, {
+      logger.debug(`📊 Content variety check for ${lessonId}:`, {
         totalItems: varietyStats.totalItems,
         byType: varietyStats.byType,
         uniqueTopics: varietyStats.uniqueTopics.length,
@@ -650,7 +642,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     progress.readyForNext = hasEnoughPractice && hasGoodAccuracy && hasContentVariety
     progress.needsReview = progress.totalAttempts >= 3 && !progress.readyForNext // Reduced from 4
 
-    console.log(`📊 Progress update for ${subject}:`, {
+    logger.debug(`📊 Progress update for ${subject}:`, {
       correctAnswers: progress.correctAnswers,
       totalAttempts: progress.totalAttempts,
       accuracy: Math.round((progress.correctAnswers / progress.totalAttempts) * 100) + '%',
@@ -673,21 +665,21 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
 
   // Load lesson plan from database (for resuming progress)
   loadLessonPlan(subject: string, lessonPlan: LessonPlan): void {
-    console.log('📥 Loading lesson plan from database for:', subject)
+    logger.debug('📥 Loading lesson plan from database for:', subject)
     this.lessonPlans.set(subject, lessonPlan)
-    console.log('✅ Lesson plan loaded into cache:', lessonPlan.lessons.length, 'lessons')
+    logger.debug('✅ Lesson plan loaded into cache:', lessonPlan.lessons.length, 'lessons')
   }
 
   // Load progress from database (for resuming progress)
   loadProgress(subject: string, progress: LearningProgress): void {
-    console.log('📥 Loading progress from database for:', subject)
+    logger.debug('📥 Loading progress from database for:', subject)
     this.progress.set(subject, progress)
-    console.log('✅ Progress loaded into cache:', progress.correctAnswers, '/', progress.totalAttempts, 'correct')
+    logger.debug('✅ Progress loaded into cache:', progress.correctAnswers, '/', progress.totalAttempts, 'correct')
   }
 
   // Clear cached data for a specific subject
   clearSubjectData(subject: string): void {
-    console.log('🗑️ Clearing cached data for subject:', subject)
+    logger.debug('🗑️ Clearing cached data for subject:', subject)
     this.lessonPlans.delete(subject)
     this.progress.delete(subject)
     
@@ -697,17 +689,17 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     )
     keysToDelete.forEach(key => this.generatedContent.delete(key))
     
-    console.log('✅ Cleared lesson plan, progress, and generated content for:', subject)
+    logger.debug('✅ Cleared lesson plan, progress, and generated content for:', subject)
   }
 
   // Clear all cached data (useful when logging out or resetting)
   clearAllData(): void {
-    console.log('🗑️ Clearing all cached AI tutor data')
+    logger.debug('🗑️ Clearing all cached AI tutor data')
     this.lessonPlans.clear()
     this.progress.clear()
     this.generatedContent.clear()
     this.lastApiCallTime = 0
-    console.log('✅ All AI tutor data cleared')
+    logger.debug('✅ All AI tutor data cleared')
   }
 
   // Get all cached subjects (for debugging)
@@ -730,7 +722,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     existing.push(contentItem)
     this.generatedContent.set(key, existing)
     
-    console.log('📝 Tracked generated content:', contentItem)
+    logger.debug('📝 Tracked generated content:', contentItem)
   }
 
   private getGeneratedContentHistory(subject: string, lessonId: string): Array<{
@@ -747,7 +739,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
   private clearContentHistory(subject: string, lessonId: string) {
     const key = `${subject}-${lessonId}`
     this.generatedContent.delete(key)
-    console.log('🗑️ Cleared content history for:', key)
+    logger.debug('🗑️ Cleared content history for:', key)
   }
 
   getContentVarietyStats(subject: string, lessonId: string): {
@@ -784,16 +776,16 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
   }
 
   advanceToNextLesson(subject: string): boolean {
-    console.log('🚀 advanceToNextLesson called for subject:', subject)
+    logger.debug('🚀 advanceToNextLesson called for subject:', subject)
     
     const plan = this.lessonPlans.get(subject)
     if (!plan) {
-      console.log('❌ No lesson plan found for subject:', subject)
-      console.log('📚 Available subjects:', Array.from(this.lessonPlans.keys()))
+      logger.debug('❌ No lesson plan found for subject:', subject)
+      logger.debug('📚 Available subjects:', Array.from(this.lessonPlans.keys()))
       return false
     }
 
-    console.log('📋 Current lesson plan state before advancement:', {
+    logger.debug('📋 Current lesson plan state before advancement:', {
       currentLessonIndex: plan.currentLessonIndex,
       totalLessons: plan.lessons.length,
       canAdvance: plan.currentLessonIndex < plan.lessons.length - 1
@@ -801,7 +793,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
 
     if (plan.currentLessonIndex < plan.lessons.length - 1) {
       const completedLesson = plan.lessons[plan.currentLessonIndex]
-      console.log('✅ Marking lesson as completed:', completedLesson.title)
+      logger.debug('✅ Marking lesson as completed:', completedLesson.title)
       plan.lessons[plan.currentLessonIndex].completed = true
       
       // Clear content history for completed lesson
@@ -810,7 +802,7 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
       // Advance to next lesson
       const oldIndex = plan.currentLessonIndex
       plan.currentLessonIndex++
-      console.log(`📈 Advanced from lesson ${oldIndex + 1} to lesson ${plan.currentLessonIndex + 1}`)
+      logger.debug(`📈 Advanced from lesson ${oldIndex + 1} to lesson ${plan.currentLessonIndex + 1}`)
       
       // Reset progress for new lesson
       this.progress.set(subject, {
@@ -820,12 +812,12 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
         readyForNext: false
       })
       
-      console.log('🔄 Reset progress for new lesson')
-      console.log('🎯 New current lesson:', plan.lessons[plan.currentLessonIndex].title)
+      logger.debug('🔄 Reset progress for new lesson')
+      logger.debug('🎯 New current lesson:', plan.lessons[plan.currentLessonIndex].title)
       
       return true
     } else {
-      console.log('🏁 Already at the last lesson, course completed')
+      logger.debug('🏁 Already at the last lesson, course completed')
       return false
     }
   }

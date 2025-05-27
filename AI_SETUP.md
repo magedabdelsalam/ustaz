@@ -16,8 +16,8 @@ The tutoring system now uses OpenAI to create dynamic learning plans, generate c
 Create a `.env.local` file in the project root:
 
 ```bash
-# OpenAI Configuration - MUST use NEXT_PUBLIC_ prefix for client-side access
-NEXT_PUBLIC_OPENAI_API_KEY=your_actual_openai_api_key_here
+# OpenAI Configuration
+OPENAI_API_KEY=your_actual_openai_api_key_here
 
 # Supabase Configuration (if using database)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
