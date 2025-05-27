@@ -40,6 +40,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const lessonPlanCreationAttempted = useRef<string | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const welcomeMessageShown = useRef<Set<string>>(new Set()) // Track subjects that have shown welcome messages
 
   // Message persistence functions
   const saveMessageToPersistence = async (message: Message) => {
@@ -268,19 +269,26 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
           setCurrentLessonPlan(restoredPlan)
           setCurrentProgress(restoredProgress)
           
-          // Show welcome back message
-          const welcomeBackMessage: Message = {
-            id: `welcome-back-${Date.now()}`,
-            role: 'assistant',
-            content: `Welcome back to ${selectedSubject.name}! You're currently on lesson ${restoredPlan.currentLessonIndex + 1}: "${restoredPlan.lessons[restoredPlan.currentLessonIndex]?.title}". Your progress: ${restoredProgress.correctAnswers}/${restoredProgress.totalAttempts} correct answers. Let's continue!`,
-            timestamp: new Date()
+          // Show welcome back message only if we haven't shown one for this subject yet
+          if (!welcomeMessageShown.current.has(selectedSubject.id)) {
+            const welcomeBackMessage: Message = {
+              id: `welcome-back-${Date.now()}`,
+              role: 'assistant',
+              content: `Welcome back to ${selectedSubject.name}! You're currently on lesson ${restoredPlan.currentLessonIndex + 1}: "${restoredPlan.lessons[restoredPlan.currentLessonIndex]?.title}". Your progress: ${restoredProgress.correctAnswers}/${restoredProgress.totalAttempts} correct answers. Let's continue!`,
+              timestamp: new Date()
+            }
+            setMessages(prev => [...prev, welcomeBackMessage])
+            
+            // Mark this subject as having shown welcome message
+            welcomeMessageShown.current.add(selectedSubject.id)
+            
+            // Save message asynchronously without blocking
+            setTimeout(async () => {
+              await saveMessageToPersistence(welcomeBackMessage)
+            }, 0)
+          } else {
+            console.log('🔄 Skipping duplicate welcome message for subject:', selectedSubject.name)
           }
-          setMessages(prev => [...prev, welcomeBackMessage])
-          
-          // Save message asynchronously without blocking
-          setTimeout(async () => {
-            await saveMessageToPersistence(welcomeBackMessage)
-          }, 0)
         } else {
           console.log('🆕 No persisted data found, will create new lesson plan when user messages')
           console.log('🔍 DEBUG: Why no persisted data?', {
@@ -303,6 +311,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       setCurrentLessonPlan(null)
       setCurrentProgress(null)
       lessonPlanCreationAttempted.current = null
+      welcomeMessageShown.current.clear() // Clear welcome message tracking
     }
   }, [selectedSubject?.id, user?.id])
 
