@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -30,7 +30,7 @@ interface StepByStepContent {
   category?: string
 }
 
-export function StepByStepSolver({ onInteraction, content, id }: InteractiveComponentProps) {
+export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, content, id }: InteractiveComponentProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
@@ -426,4 +426,4 @@ export function StepByStepSolver({ onInteraction, content, id }: InteractiveComp
       </CardContent>
     </Card>
   )
-} 
+})

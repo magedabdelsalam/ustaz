@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +24,7 @@ interface FillInTheBlankContent {
   acceptAlternatives?: boolean // Whether to accept close matches
 }
 
-export function FillInTheBlank({ onInteraction, content, id }: InteractiveComponentProps) {
+export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id }: InteractiveComponentProps) {
   const [userAnswers, setUserAnswers] = useState<string[]>([])
   const [showResult, setShowResult] = useState(false)
   const [results, setResults] = useState<boolean[]>([])
@@ -426,4 +426,4 @@ export function FillInTheBlank({ onInteraction, content, id }: InteractiveCompon
       </CardContent>
     </Card>
   )
-} 
+})

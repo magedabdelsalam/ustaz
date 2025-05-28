@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { memo } from 'react'
 import { Lightbulb, BookOpen, Brain, Target } from 'lucide-react'
 
 interface InteractiveComponentProps {
@@ -20,7 +21,7 @@ interface ConceptCardContent {
   difficulty: 'beginner' | 'intermediate' | 'advanced'
 }
 
-export function ConceptCard({ onInteraction, content, id }: InteractiveComponentProps) {
+export const ConceptCard = memo(function ConceptCard({ onInteraction, content, id }: InteractiveComponentProps) {
   const conceptContent = content as ConceptCardContent
 
   // Generate a meaningful title based on content
@@ -246,4 +247,4 @@ export function ConceptCard({ onInteraction, content, id }: InteractiveComponent
       </CardContent>
     </Card>
   )
-} 
+})
