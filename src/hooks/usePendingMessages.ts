@@ -22,7 +22,7 @@ export function usePendingMessages({
 }: UsePendingMessagesProps) {
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  const scheduleRetry = useCallback(async (pendingMessages: Message[]) => {
+  const scheduleRetry = useCallback((pendingMessages: Message[]) => {
     if (pendingMessages.length === 0 || !selectedSubject || !user) return
 
     console.log(`🔄 Scheduling retry for ${pendingMessages.length} pending messages`)
@@ -36,11 +36,10 @@ export function usePendingMessages({
     retryTimeoutRef.current = setTimeout(async () => {
       console.log('🔄 Retrying pending messages...')
       const messagesToRetry = [...pendingMessages]
-      const savedMessages: Message[] = []
-      
-      for (const message of messagesToRetry) {
-        try {
-          await persistenceService.saveMessage({
+
+      const results = await Promise.allSettled(
+        messagesToRetry.map(message =>
+          persistenceService.saveMessage({
             id: message.id,
             user_id: user.id,
             subject_id: selectedSubject.id,
@@ -49,15 +48,20 @@ export function usePendingMessages({
             timestamp: message.timestamp.toISOString(),
             has_generated_content: message.hasGeneratedContent || false
           })
+        )
+      )
+
+      const savedMessages: Message[] = []
+      results.forEach((result, index) => {
+        const message = messagesToRetry[index]
+        if (result.status === 'fulfilled') {
           savedMessages.push(message)
           console.log('✅ Retried message saved successfully:', message.id)
-        } catch (error: unknown) {
-          console.log('❌ Retry failed for message:', message.id, error)
-          // Keep failed messages in pending queue
+        } else {
+          console.log('❌ Retry failed for message:', message.id, result.reason)
         }
-      }
-      
-      // Notify about successfully saved messages
+      })
+
       if (savedMessages.length > 0 && onRetrySuccess) {
         onRetrySuccess(savedMessages)
         console.log(`✅ Successfully saved ${savedMessages.length} pending messages`)
