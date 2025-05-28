@@ -6,6 +6,10 @@ export function getEnv(name: string): string {
   return value;
 }
 
-export const OPENAI_API_KEY = getEnv('OPENAI_API_KEY');
-export const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+export function getOptionalEnv(name: string): string | undefined {
+  return process.env[name];
+}
+
+export const OPENAI_API_KEY = getOptionalEnv('OPENAI_API_KEY');
+export const OPENAI_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-4o-mini';
 

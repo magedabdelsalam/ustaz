@@ -21,7 +21,7 @@ OPENAI_API_KEY=your_actual_openai_api_key_here
 
 # Supabase Configuration (if using database)
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_key
+SUPABASE_ANON_KEY=your_supabase_key
 ```
 
 ### 3. How It Works Now
