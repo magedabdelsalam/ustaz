@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,7 @@ interface MultipleChoiceContent {
   category?: string
 }
 
-export function MultipleChoice({ onInteraction, content, id }: InteractiveComponentProps) {
+export const MultipleChoice = memo(function MultipleChoice({ onInteraction, content, id }: InteractiveComponentProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [showResult, setShowResult] = useState(false)
   const [showHints, setShowHints] = useState(false)
@@ -354,4 +354,4 @@ export function MultipleChoice({ onInteraction, content, id }: InteractiveCompon
       </CardContent>
     </Card>
   )
-} 
+})

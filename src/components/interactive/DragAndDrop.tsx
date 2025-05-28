@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle, XCircle, RotateCcw, Move } from 'lucide-react'
@@ -32,7 +32,7 @@ interface DropTarget {
   placeholder: string
 }
 
-export function DragAndDrop({ onInteraction, content, id }: InteractiveComponentProps) {
+export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, id }: InteractiveComponentProps) {
   const [draggedItem, setDraggedItem] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [showResult, setShowResult] = useState(false)
@@ -328,7 +328,7 @@ export function DragAndDrop({ onInteraction, content, id }: InteractiveComponent
       </CardContent>
     </Card>
   )
-}
+})
 
 // Placeholder components for future implementation
 // These will be implemented in separate files when needed 
