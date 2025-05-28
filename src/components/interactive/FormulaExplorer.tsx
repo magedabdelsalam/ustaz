@@ -85,6 +85,8 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   // Safe mathematical expression evaluator to replace dangerous eval()
   const safeEvaluate = useCallback((expression: string): number | string => {
     try {
+      console.log('Evaluating expression:', expression)
+      
       // Clean the expression first
       const safeExpression = expression
         .replace(/\^/g, '**')
@@ -98,19 +100,21 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         .replace(/pi/g, 'Math.PI')
         .replace(/e(?![0-9])/g, 'Math.E')
 
+      console.log('Cleaned expression:', safeExpression)
+
       // Validate that expression only contains safe mathematical operations
-      // Allow digits, operators, parentheses, Math functions, and whitespace
-      const safePattern = /^[0-9+\-*/.()Math\s]+$/
-      const cleanedForValidation = safeExpression.replace(/Math\.(sin|cos|tan|log|sqrt|abs|PI|E)/g, 'M')
-      
-      if (!safePattern.test(cleanedForValidation)) {
-        console.warn('Invalid expression pattern:', safeExpression)
+      // Allow digits, decimal points, operators, parentheses, and Math functions
+      const unsafePattern = /[^0-9+\-*/.()Math\s]/
+      if (unsafePattern.test(safeExpression.replace(/Math\.(sin|cos|tan|log|sqrt|abs|PI|E)/g, ''))) {
+        console.warn('Expression contains unsafe characters:', safeExpression)
         return 'Error: Invalid expression'
       }
 
       // Use Function constructor for safer evaluation than eval
       const func = new Function('Math', `"use strict"; return (${safeExpression})`)
       const result = func(Math)
+      
+      console.log('Evaluation result:', result)
       
       if (typeof result === 'number') {
         return isFinite(result) ? Number(result.toFixed(4)) : 'Undefined'
@@ -130,12 +134,18 @@ export const FormulaExplorer = memo(function FormulaExplorer({
 
     try {
       let expression = formulaContent.formula
+      console.log('Original formula:', expression)
+      console.log('Current variable values:', variableValues)
       
       // Replace variable symbols with their current values
       formulaContent.variables.forEach(variable => {
         const regex = new RegExp(`\\b${variable.symbol}\\b`, 'g')
-        expression = expression.replace(regex, String(variableValues[variable.id] || variable.defaultValue))
+        const value = variableValues[variable.id] || variable.defaultValue
+        console.log(`Replacing ${variable.symbol} with ${value}`)
+        expression = expression.replace(regex, String(value))
       })
+
+      console.log('Expression after variable replacement:', expression)
 
       // Handle mathematical functions and constants
       expression = expression
@@ -150,8 +160,10 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         .replace(/pi/g, 'Math.PI')
         .replace(/e(?![0-9])/g, 'Math.E')
 
+      console.log('Final expression before evaluation:', expression)
       return safeEvaluate(expression)
-    } catch {
+    } catch (error) {
+      console.warn('Calculate formula error:', error)
       return 'Error'
     }
   }, [formulaContent?.formula, formulaContent?.variables, variableValues, safeEvaluate])
@@ -169,10 +181,15 @@ export const FormulaExplorer = memo(function FormulaExplorer({
       return
     }
 
-    setVariableValues(prev => ({
-      ...prev,
-      [variableId]: value
-    }))
+    console.log(`Setting ${variableId} to ${value}`)
+    setVariableValues(prev => {
+      const newValues = {
+        ...prev,
+        [variableId]: value
+      }
+      console.log('New variable values:', newValues)
+      return newValues
+    })
   }
 
   const calculateStep = (stepExpression: string): number | string => {
