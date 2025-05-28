@@ -4,13 +4,8 @@ import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, XCircle, HelpCircle, Brain, RotateCcw, Target } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
+import { CheckCircle, XCircle, HelpCircle, Brain, RotateCcw, Target, Loader2 } from 'lucide-react'
+import { InteractiveComponentProps } from './index'
 
 interface MultipleChoiceContent {
   question: string
@@ -22,10 +17,16 @@ interface MultipleChoiceContent {
   category?: string
 }
 
-export const MultipleChoice = memo(function MultipleChoice({ onInteraction, content, id }: InteractiveComponentProps) {
+export const MultipleChoice = memo(function MultipleChoice({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [showResult, setShowResult] = useState(false)
   const [showHints, setShowHints] = useState(false)
+  const [buttonLoadingStates, setButtonLoadingStates] = useState({
+    submit: false,
+    reset: false,
+    explainMore: false,
+    nextQuestion: false
+  })
   
   const mcContent = content as MultipleChoiceContent
 
@@ -125,50 +126,61 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     return 'Knowledge Quiz'
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (selectedOption === null) return
     
-    setShowResult(true)
-    const isCorrect = selectedOption === mcContent.correctAnswer
-    
-    onInteraction('answer_submitted', {
-      componentId: id,
-      selected: selectedOption,
-      correct: isCorrect,
-      question: mcContent.question,
-      score: isCorrect ? 1 : 0
-    })
+    setButtonLoadingStates(prev => ({ ...prev, submit: true }))
+    try {
+      setShowResult(true)
+      const isCorrect = selectedOption === mcContent.correctAnswer
+      
+      onInteraction('answer_submitted', {
+        componentId: id,
+        selected: selectedOption,
+        correct: isCorrect,
+        question: mcContent.question,
+        score: isCorrect ? 1 : 0
+      })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, submit: false }))
+      }, 1000)
+    }
   }
 
-  const handleReset = () => {
-    setSelectedOption(null)
-    setShowResult(false)
-    setShowHints(false)
-    onInteraction('reset_question', { componentId: id })
+  const handleReset = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, reset: true }))
+    try {
+      setSelectedOption(null)
+      setShowResult(false)
+      setShowHints(false)
+      onInteraction('reset_question', { componentId: id })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, reset: false }))
+      }, 1000)
+    }
   }
 
-  const handleExplainMore = () => {
-    onInteraction('explain_more', {
-      componentId: id,
-      topic: mcContent.category || 'this concept',
-      question: mcContent.question
-    })
+  const handleExplainMore = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, explainMore: true }))
+    try {
+      onInteraction('explain_more', {
+        componentId: id,
+        topic: mcContent.category || 'this concept',
+        question: mcContent.question
+      })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, explainMore: false }))
+      }, 1000)
+    }
   }
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, nextQuestion: true }))
     console.log('🔵 ==========================================')
     console.log('🔵 MULTIPLE CHOICE: NEXT QUESTION CLICKED!')
-    console.log('🔵 About to call onInteraction with:')
-    console.log('🔵 Action: next_question')
-    console.log('🔵 Data:', {
-      componentId: id,
-      category: mcContent.category,
-      difficulty: mcContent.difficulty
-    })
-    console.log('🔵 onInteraction function exists:', !!onInteraction)
-    console.log('🔵 onInteraction function type:', typeof onInteraction)
-    console.log('🔵 onInteraction function stringified:', onInteraction.toString().substring(0, 100))
-    console.log('🔵 ==========================================')
     
     try {
       console.log('🔵 CALLING onInteraction NOW...')
@@ -180,6 +192,10 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
       console.log('🔵 onInteraction call completed successfully!')
     } catch (error) {
       console.error('🔵 ERROR calling onInteraction:', error)
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, nextQuestion: false }))
+      }, 1000)
     }
     
     console.log('🔵 handleNextQuestion function completed!')
@@ -200,49 +216,51 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            <HelpCircle className="h-5 w-5 text-purple-600 mr-2" />
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <HelpCircle className="h-6 w-6 text-purple-600 mr-2" />
             {generateMeaningfulTitle()}
           </CardTitle>
           <div className="flex items-center space-x-2">
             {mcContent.category && (
-              <Badge variant="outline" className="text-xs">
+              <Badge variant="outline" className="text-xs font-medium">
                 {mcContent.category}
               </Badge>
             )}
             {mcContent.difficulty && (
               <Badge className={getDifficultyColor(mcContent.difficulty)}>
-                {mcContent.difficulty}
+                <span className="text-xs font-semibold uppercase tracking-wide">{mcContent.difficulty}</span>
               </Badge>
             )}
           </div>
         </div>
-        <div className="bg-purple-50 p-4 rounded-lg">
-          <p className="text-purple-900 font-medium">{mcContent.question}</p>
+        <div className="bg-purple-50 p-5 rounded-lg border border-purple-200 mt-3">
+          <h3 className="text-purple-900 font-semibold text-lg leading-relaxed">{mcContent.question}</h3>
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {/* Hints section */}
         {mcContent.hints && mcContent.hints.length > 0 && !showResult && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               onClick={() => setShowHints(!showHints)}
-              className="flex items-center"
+              className="flex items-center text-sm font-medium"
             >
-              <Brain className="h-4 w-4 mr-1" />
+              <Brain className="h-4 w-4 mr-2" />
               {showHints ? 'Hide Hints' : 'Show Hints'}
             </Button>
             
             {showHints && (
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-sm font-medium text-blue-900 mb-2">💡 Hints:</p>
-                <ul className="text-sm text-blue-800 space-y-1">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center">
+                  💡 Hints:
+                </h4>
+                <ul className="text-blue-800 space-y-2">
                   {mcContent.hints.map((hint, index) => (
-                    <li key={index} className="flex items-start">
-                      <span className="flex-shrink-0 w-4 h-4 bg-blue-200 rounded-full text-xs flex items-center justify-center mr-2 mt-0.5">
+                    <li key={index} className="flex items-start text-base leading-relaxed">
+                      <span className="flex-shrink-0 w-5 h-5 bg-blue-200 rounded-full text-xs flex items-center justify-center mr-3 mt-0.5 font-semibold">
                         {index + 1}
                       </span>
                       {hint}
@@ -256,12 +274,13 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
 
         {/* Options */}
         <div className="space-y-3">
+          <h4 className="text-base font-semibold text-gray-800 mb-3">Choose your answer:</h4>
           {mcContent.options.map((option, index) => (
             <button
               key={index}
               onClick={() => !showResult && setSelectedOption(index)}
               disabled={showResult}
-              className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${
+              className={`w-full p-5 text-left rounded-lg border-2 transition-all duration-200 ${
                 selectedOption === index
                   ? showResult
                     ? index === mcContent.correctAnswer
@@ -273,8 +292,8 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                   : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
               }`}
             >
-              <div className="flex items-center space-x-3">
-                <span className={`flex-shrink-0 w-8 h-8 rounded-full text-sm flex items-center justify-center font-bold transition-colors ${
+              <div className="flex items-center space-x-4">
+                <span className={`flex-shrink-0 w-10 h-10 rounded-full text-base flex items-center justify-center font-bold transition-colors ${
                   selectedOption === index
                     ? showResult
                       ? index === mcContent.correctAnswer
@@ -287,7 +306,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 }`}>
                   {String.fromCharCode(65 + index)}
                 </span>
-                <span className="flex-1 font-medium">{option}</span>
+                <span className="flex-1 font-medium text-base leading-relaxed">{option}</span>
                 {showResult && (
                   <span className="flex-shrink-0">
                     {index === mcContent.correctAnswer ? (
@@ -304,60 +323,82 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
 
         {/* Result and Explanation */}
         {showResult && (
-          <div className={`p-4 rounded-lg border-2 ${
+          <div className={`p-5 rounded-lg border-2 ${
             isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
           }`}>
-            <div className="flex items-center mb-3">
+            <div className="flex items-center mb-4">
               {isCorrect ? (
-                <CheckCircle className="h-6 w-6 text-green-600 mr-2" />
+                <CheckCircle className="h-7 w-7 text-green-600 mr-3" />
               ) : (
-                <XCircle className="h-6 w-6 text-red-600 mr-2" />
+                <XCircle className="h-7 w-7 text-red-600 mr-3" />
               )}
-              <p className={`font-bold ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+              <h4 className={`font-bold text-lg ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
                 {isCorrect ? '🎉 Correct!' : '❌ Not quite right'}
-              </p>
+              </h4>
             </div>
-            <div className="bg-white p-3 rounded border">
-              <p className="text-sm font-medium text-gray-800 mb-2">Explanation:</p>
-              <p className="text-sm text-gray-700">{mcContent.explanation}</p>
+            <div className="bg-white p-4 rounded-md border shadow-sm">
+              <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
+              <p className="text-gray-700 text-base leading-relaxed">{mcContent.explanation}</p>
             </div>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex space-x-2 pt-2">
+        <div className="flex space-x-3 pt-4">
           {!showResult ? (
             <Button 
               onClick={handleSubmit} 
-              disabled={selectedOption === null}
-              className="flex-1 bg-purple-600 hover:bg-purple-700"
+              disabled={selectedOption === null || buttonLoadingStates.submit || isLoading}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-base font-medium h-12"
             >
-              Submit Answer
+              {buttonLoadingStates.submit ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Submitting...
+                </>
+              ) : (
+                'Submit Answer'
+              )}
             </Button>
           ) : (
             <>
               <Button 
                 onClick={handleReset} 
                 variant="outline" 
-                className="flex items-center"
+                className="flex items-center text-sm font-medium h-11"
+                disabled={buttonLoadingStates.reset || isLoading}
               >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Try Again
+                {buttonLoadingStates.reset ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.reset ? 'Resetting...' : 'Try Again'}
               </Button>
               <Button 
                 onClick={handleExplainMore} 
                 variant="outline"
-                className="flex items-center"
+                className="flex items-center text-sm font-medium h-11"
+                disabled={buttonLoadingStates.explainMore || isLoading}
               >
-                <Brain className="h-4 w-4 mr-1" />
-                Explain More
+                {buttonLoadingStates.explainMore ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Brain className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.explainMore ? 'Loading...' : 'Explain More'}
               </Button>
               <Button 
                 onClick={handleNextQuestion}
-                className="flex items-center bg-green-600 hover:bg-green-700"
+                className="flex items-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
+                disabled={buttonLoadingStates.nextQuestion || isLoading}
               >
-                <Target className="h-4 w-4 mr-1" />
-                Next Question
+                {buttonLoadingStates.nextQuestion ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Target className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.nextQuestion ? 'Processing...' : 'Next Question'}
               </Button>
             </>
           )}

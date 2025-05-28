@@ -174,30 +174,30 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <BookOpen className="h-5 w-5 text-blue-600" />
-            <CardTitle className="text-lg">{generateMeaningfulTitle()}</CardTitle>
+            <BookOpen className="h-6 w-6 text-blue-600" />
+            <CardTitle className="text-xl font-bold text-gray-900">{generateMeaningfulTitle()}</CardTitle>
           </div>
           <Badge className={getDifficultyColor(conceptContent.difficulty)}>
-            {conceptContent.difficulty}
+            <span className="text-xs font-semibold uppercase tracking-wide">{conceptContent.difficulty}</span>
           </Badge>
         </div>
-        <p className="text-gray-600 text-sm">{conceptContent.summary}</p>
+        <p className="text-gray-700 text-base leading-relaxed mt-2">{conceptContent.summary}</p>
       </CardHeader>
       
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {/* Always visible details */}
-        <div className="bg-blue-50 p-4 rounded-lg space-y-3">
-          <p className="text-sm text-blue-800">{conceptContent.details}</p>
+        <div className="bg-blue-50 p-5 rounded-lg border border-blue-200 space-y-4">
+          <p className="text-blue-900 text-base leading-relaxed">{conceptContent.details}</p>
           
           {conceptContent.keyPoints.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-blue-900 mb-2 flex items-center">
-                <Lightbulb className="h-4 w-4 mr-1" />
+              <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center">
+                <Lightbulb className="h-5 w-5 mr-2" />
                 Key Points:
-              </p>
-              <ul className="text-sm text-blue-800 space-y-1">
+              </h4>
+              <ul className="text-blue-800 space-y-2">
                 {conceptContent.keyPoints.map((point, index) => (
-                  <li key={index} className="flex items-start">
+                  <li key={index} className="flex items-start text-base leading-relaxed">
                     <span className="flex-shrink-0 w-4 h-4 bg-blue-200 rounded-full text-xs flex items-center justify-center mr-2 mt-0.5">
                       {index + 1}
                     </span>
@@ -211,12 +211,15 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
 
         {/* Always visible examples */}
         {conceptContent.examples.length > 0 && (
-          <div className="bg-green-50 p-4 rounded-lg">
-            <p className="text-sm font-medium text-green-900 mb-2">Examples:</p>
-            <div className="space-y-2">
+          <div className="bg-green-50 p-5 rounded-lg border border-green-200">
+            <h4 className="text-base font-bold text-green-900 mb-3 flex items-center">
+              <Target className="h-5 w-5 mr-2" />
+              Examples:
+            </h4>
+            <div className="space-y-3">
               {conceptContent.examples.map((example, index) => (
-                <div key={index} className="bg-white p-3 rounded border border-green-200">
-                  <p className="text-sm text-green-800">{example}</p>
+                <div key={index} className="bg-white p-4 rounded-md border border-green-200 shadow-sm">
+                  <p className="text-green-800 text-base leading-relaxed">{example}</p>
                 </div>
               ))}
             </div>
@@ -224,31 +227,31 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
         )}
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-3 gap-2 pt-2">
+        <div className="grid grid-cols-3 gap-3 pt-4">
           <Button 
             onClick={handleExplainFurther} 
             variant="outline" 
-            size="sm" 
-            className="flex items-center justify-center"
+            size="default" 
+            className="flex items-center justify-center text-sm font-medium h-11"
           >
-            <Brain className="h-4 w-4 mr-1" />
+            <Brain className="h-4 w-4 mr-2" />
             Explain Further
           </Button>
           <Button 
             onClick={handleShowExamples} 
             variant="outline" 
-            size="sm"
-            className="flex items-center justify-center"
+            size="default"
+            className="flex items-center justify-center text-sm font-medium h-11"
           >
-            <Lightbulb className="h-4 w-4 mr-1" />
+            <Lightbulb className="h-4 w-4 mr-2" />
             More Examples
           </Button>
           <Button 
             onClick={handlePracticeThis} 
-            size="sm" 
-            className="flex items-center justify-center bg-green-600 hover:bg-green-700"
+            size="default" 
+            className="flex items-center justify-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
           >
-            <Target className="h-4 w-4 mr-1" />
+            <Target className="h-4 w-4 mr-2" />
             Practice This
           </Button>
         </div>

@@ -522,46 +522,76 @@ Return JSON:
 Make it practical and educational.${avoidanceText}`
       }
 
-        const response = await chatCompletion({
-          messages: [
-            {
-              role: "system",
-              content: "You are an expert tutor creating educational content. Always return valid JSON."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 2000
-        })
+      logger.debug('🎯 AI prompt being sent:', prompt)
+
+      const response = await chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert tutor creating educational content. Always return valid JSON."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 2000
+      })
+
+      logger.debug('🤖 Raw AI response received:', response)
 
       const content = response.choices[0].message.content
-      if (!content) throw new Error('No content received')
+      if (!content) {
+        logger.error('❌ AI Service: No content received from OpenAI')
+        throw new Error('No content received')
+      }
+
+      logger.debug('📝 Raw content from AI:', content)
 
       const cleanedContent = this.cleanJsonResponse(content)
       logger.debug('🧹 Cleaned lesson content response:', cleanedContent)
       
       // Try to fix incomplete JSON before parsing
       const fixedContent = this.fixIncompleteJson(cleanedContent)
-      const parsedContent = JSON.parse(fixedContent)
+      logger.debug('🔧 Fixed JSON content:', fixedContent)
       
-      // Validate the content structure
-      if (!parsedContent.type || !parsedContent.data) {
-        throw new Error('Invalid lesson content structure from AI')
+      try {
+        const parsedContent = JSON.parse(fixedContent)
+        logger.debug('✅ Successfully parsed AI content:', parsedContent)
+        
+        // Validate the content structure
+        if (!parsedContent.type || !parsedContent.data) {
+          logger.error('❌ Invalid lesson content structure from AI:', parsedContent)
+          throw new Error('Invalid lesson content structure from AI')
+        }
+        
+        logger.debug('🎯 AI Service: Successfully generated content:', parsedContent)
+        
+        // Track this generated content to avoid repetition
+        this.trackGeneratedContent(subject, lesson.id, contentType, parsedContent)
+        
+        return parsedContent
+      } catch (parseError) {
+        logger.error('❌ JSON parsing failed:', parseError)
+        logger.error('❌ Failed content:', fixedContent)
+        throw new Error(`JSON parsing failed: ${parseError}`)
       }
       
-      logger.debug('🎯 AI Service: Successfully generated content:', parsedContent)
-      
-      // Track this generated content to avoid repetition
-      this.trackGeneratedContent(subject, lesson.id, contentType, parsedContent)
-      
-      return parsedContent
     } catch (error) {
       console.error('❌ AI Service: Error generating lesson content:', error)
+      logger.error('❌ Full error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+        subject,
+        lessonTitle: lesson.title,
+        contentType
+      })
+      
       const fallbackContent = this.createFallbackContent(lesson, contentType)
       logger.debug('⚠️ AI Service: Using fallback content:', fallbackContent)
+      console.log('⚠️ Using fallback content due to AI error. If this happens frequently, check your OpenAI API key and network connection.')
+      
       return fallbackContent
     }
   }
@@ -880,14 +910,195 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
       }
     }
     
+    // Create detailed, subject-specific fallback content for explanations
+    const lessonTitleLower = lesson.title.toLowerCase()
+    
+    // Photosynthesis specific content
+    if (lessonTitleLower.includes('photosynthesis')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
+          details: 'Photosynthesis occurs in two main stages: the light-dependent reactions (which capture sunlight energy) and the Calvin cycle (which fixes carbon dioxide into glucose). This process takes place primarily in the chloroplasts of plant cells and is essential for life on Earth as it produces oxygen and forms the base of most food chains.',
+          examples: [
+            'Trees using sunlight to produce energy during the day',
+            'Grass converting CO₂ from the air into organic compounds',
+            'Algae in oceans producing oxygen through photosynthesis'
+          ],
+          keyPoints: [
+            'Occurs in chloroplasts of plant cells',
+            'Converts light energy into chemical energy (glucose)',
+            'Produces oxygen as a byproduct',
+            'Essential for most life on Earth'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Biology concepts
+    if (lessonTitleLower.includes('cell') || lessonTitleLower.includes('biology') || lessonTitleLower.includes('organism')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Understanding the fundamental building blocks and processes of living organisms.',
+          details: 'Biological concepts help us understand how living things function, from the smallest cellular processes to complex organism behaviors. These principles apply across all forms of life and help explain the diversity and unity we see in nature.',
+          examples: [
+            'Cell division creating new cells for growth',
+            'DNA storing genetic information',
+            'Enzymes speeding up chemical reactions in the body'
+          ],
+          keyPoints: [
+            'All living things are made of cells',
+            'Organisms maintain homeostasis',
+            'Evolution drives species change over time',
+            'Energy flows through living systems'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Chemistry concepts
+    if (lessonTitleLower.includes('chemistry') || lessonTitleLower.includes('atom') || lessonTitleLower.includes('molecule') || lessonTitleLower.includes('chemical')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Exploring the composition, structure, and reactions of matter at the atomic and molecular level.',
+          details: 'Chemistry explains how atoms bond to form molecules, how chemical reactions occur, and how energy changes during these processes. Understanding chemical principles helps us comprehend everything from basic reactions to complex biological processes.',
+          examples: [
+            'Water molecules (H₂O) forming hydrogen bonds',
+            'Sodium and chlorine combining to make salt (NaCl)',
+            'Combustion reactions releasing energy and producing CO₂'
+          ],
+          keyPoints: [
+            'Atoms are the basic building blocks of matter',
+            'Chemical bonds hold atoms together in molecules',
+            'Reactions involve breaking and forming bonds',
+            'Energy changes accompany chemical reactions'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Math concepts
+    if (lessonTitleLower.includes('math') || lessonTitleLower.includes('algebra') || lessonTitleLower.includes('equation') || lessonTitleLower.includes('calculate')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Building mathematical understanding through logical reasoning and problem-solving techniques.',
+          details: 'Mathematical concepts provide tools for analyzing patterns, solving problems, and understanding relationships between quantities. These skills are fundamental for many fields and help develop logical thinking abilities.',
+          examples: [
+            'Using variables to represent unknown quantities',
+            'Solving equations to find specific values',
+            'Graphing functions to visualize relationships'
+          ],
+          keyPoints: [
+            'Mathematical symbols represent specific operations',
+            'Equations show relationships between quantities',
+            'Systematic approaches help solve complex problems',
+            'Abstract thinking builds problem-solving skills'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Physics concepts
+    if (lessonTitleLower.includes('physics') || lessonTitleLower.includes('force') || lessonTitleLower.includes('energy') || lessonTitleLower.includes('motion')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Understanding the fundamental laws that govern motion, energy, and the behavior of matter.',
+          details: 'Physics explains how objects move, how forces interact, and how energy transforms from one form to another. These principles apply to everything from subatomic particles to galaxies and help us understand the natural world.',
+          examples: [
+            'Gravity pulling objects toward Earth',
+            'Electric current flowing through circuits',
+            'Sound waves traveling through air'
+          ],
+          keyPoints: [
+            'Forces cause changes in motion',
+            'Energy cannot be created or destroyed',
+            'Mathematical laws describe physical phenomena',
+            'Physics principles apply universally'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // History concepts
+    if (lessonTitleLower.includes('history') || lessonTitleLower.includes('war') || lessonTitleLower.includes('revolution') || lessonTitleLower.includes('historical')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Examining past events to understand their causes, effects, and significance for today.',
+          details: 'Historical study helps us understand how societies developed, what factors influenced major changes, and how past events continue to shape our world. Learning history develops critical thinking and analytical skills.',
+          examples: [
+            'Economic factors contributing to major conflicts',
+            'Technological innovations changing society',
+            'Political movements influencing government systems'
+          ],
+          keyPoints: [
+            'Historical events have multiple causes',
+            'Past events influence present conditions',
+            'Different perspectives shape historical interpretation',
+            'Patterns in history help predict future trends'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Literature concepts
+    if (lessonTitleLower.includes('literature') || lessonTitleLower.includes('writing') || lessonTitleLower.includes('language') || lessonTitleLower.includes('text')) {
+      return {
+        type: 'concept-card',
+        data: {
+          title: lesson.title,
+          summary: 'Analyzing written works to understand their meaning, structure, and cultural significance.',
+          details: 'Literature study develops reading comprehension, critical analysis, and appreciation for language. Through examining various texts, we learn about different cultures, time periods, and human experiences.',
+          examples: [
+            'Identifying themes in novels and short stories',
+            'Analyzing character development and motivation',
+            'Understanding how setting influences plot'
+          ],
+          keyPoints: [
+            'Literary works reflect their historical context',
+            'Authors use various techniques to convey meaning',
+            'Reading develops empathy and understanding',
+            'Critical analysis improves thinking skills'
+          ],
+          difficulty: 'intermediate'
+        }
+      }
+    }
+    
+    // Generic fallback for other subjects
     return {
       type: 'concept-card',
       data: {
         title: lesson.title,
-        summary: `Learn about ${lesson.title}`,
-        details: `This lesson covers the important aspects of ${lesson.title} that will help you understand the subject better.`,
-        examples: ['Example 1', 'Example 2', 'Example 3'],
-        keyPoints: ['Key concept 1', 'Key concept 2', 'Key concept 3'],
+        summary: `An important topic that builds foundational understanding in this subject area.`,
+        details: `This lesson introduces key concepts that will help you develop a deeper understanding of the subject. The material covers essential principles that connect to broader topics and practical applications.`,
+        examples: [
+          'Real-world applications of these concepts',
+          'How this topic connects to other areas of study',
+          'Practical situations where this knowledge is useful'
+        ],
+        keyPoints: [
+          'Understanding the fundamental principles',
+          'Connecting concepts to practical applications',
+          'Building skills for advanced topics',
+          'Developing critical thinking abilities'
+        ],
         difficulty: 'intermediate'
       }
     }

@@ -205,27 +205,27 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            <Move className="h-5 w-5 text-orange-600 mr-2" />
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <Move className="h-6 w-6 text-orange-600 mr-2" />
             {generateMeaningfulTitle()}
           </CardTitle>
         </div>
-        <div className="bg-orange-50 p-4 rounded-lg">
-          <p className="text-orange-900 font-medium mb-2">{dragContent.question}</p>
-          <p className="text-sm text-orange-700">{dragContent.instructions}</p>
+        <div className="bg-orange-50 p-5 rounded-lg border border-orange-200 mt-3">
+          <h3 className="text-orange-900 font-semibold text-lg leading-relaxed mb-3">{dragContent.question}</h3>
+          <p className="text-base text-orange-700 leading-relaxed">{dragContent.instructions}</p>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-8">
         {/* Items to drag */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900">Items to match:</h4>
-          <div className="flex flex-wrap gap-2">
+        <div className="space-y-4">
+          <h4 className="font-semibold text-lg text-gray-900">Items to match:</h4>
+          <div className="flex flex-wrap gap-3">
             {getUnassignedItems().map(item => (
               <div
                 key={item.id}
                 draggable={!showResult}
                 onDragStart={(e) => handleDragStart(e, item.id)}
-                className={`px-3 py-2 bg-blue-100 border border-blue-200 rounded-lg cursor-move select-none transition-colors ${
+                className={`px-4 py-3 bg-blue-100 border border-blue-200 rounded-lg cursor-move select-none transition-colors ${
                   draggedItem === item.id ? 'opacity-50' : ''
                 } ${
                   showResult
@@ -235,13 +235,13 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                     : 'hover:bg-blue-200'
                 }`}
               >
-                <span className="text-sm font-medium">{item.content}</span>
+                <span className="text-base font-semibold">{item.content}</span>
                 {showResult && (
-                  <span className="ml-2">
+                  <span className="ml-3">
                     {results[item.id] ? (
-                      <CheckCircle className="inline h-4 w-4 text-green-600" />
+                      <CheckCircle className="inline h-5 w-5 text-green-600" />
                     ) : (
-                      <XCircle className="inline h-4 w-4 text-red-600" />
+                      <XCircle className="inline h-5 w-5 text-red-600" />
                     )}
                   </span>
                 )}
@@ -251,9 +251,9 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
         </div>
 
         {/* Drop targets */}
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-900">Drop targets:</h4>
-          <div className="grid gap-3">
+        <div className="space-y-4">
+          <h4 className="font-semibold text-lg text-gray-900">Drop targets:</h4>
+          <div className="grid gap-4">
             {dragContent.targets.map(target => {
               const assignedItem = getAssignedItem(target.id)
               
@@ -262,7 +262,7 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                   key={target.id}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, target.id)}
-                  className={`min-h-[60px] p-3 border-2 border-dashed rounded-lg transition-colors ${
+                  className={`min-h-[80px] p-4 border-2 border-dashed rounded-lg transition-colors ${
                     assignedItem
                       ? showResult
                         ? results[assignedItem.id]
@@ -273,26 +273,26 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-base font-semibold text-gray-800">
                       {target.label}
                     </span>
                     {assignedItem && showResult && (
                       <span>
                         {results[assignedItem.id] ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <CheckCircle className="h-6 w-6 text-green-600" />
                         ) : (
-                          <XCircle className="h-5 w-5 text-red-600" />
+                          <XCircle className="h-6 w-6 text-red-600" />
                         )}
                       </span>
                     )}
                   </div>
                   
                   {assignedItem ? (
-                    <div className="mt-2 px-2 py-1 bg-white rounded border">
-                      <span className="text-sm">{assignedItem.content}</span>
+                    <div className="mt-3 px-3 py-2 bg-white rounded-md border shadow-sm">
+                      <span className="text-base font-medium">{assignedItem.content}</span>
                     </div>
                   ) : (
-                    <div className="mt-2 text-xs text-gray-500 italic">
+                    <div className="mt-3 text-sm text-gray-600 italic">
                       {target.placeholder}
                     </div>
                   )}
@@ -304,24 +304,24 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
 
         {/* Results explanation */}
         {showResult && (
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-blue-800 font-medium mb-2">Explanation:</p>
-            <p className="text-sm text-blue-700">{dragContent.explanation}</p>
+          <div className="bg-blue-50 p-5 rounded-lg border border-blue-200">
+            <h4 className="text-base font-semibold text-blue-900 mb-3">Explanation:</h4>
+            <p className="text-blue-800 text-base leading-relaxed">{dragContent.explanation}</p>
           </div>
         )}
 
         {/* Action buttons */}
-        <div className="flex space-x-2">
+        <div className="flex space-x-3 pt-4">
           {!showResult ? (
             <Button 
               onClick={handleSubmit} 
               disabled={Object.keys(assignments).length !== dragContent.items.length}
-              className="flex-1"
+              className="flex-1 text-base font-medium h-12"
             >
               Check Answers
             </Button>
           ) : (
-            <Button onClick={handleReset} variant="outline" className="flex-1">
+            <Button onClick={handleReset} variant="outline" className="flex-1 text-sm font-medium h-11">
               <RotateCcw className="h-4 w-4 mr-2" />
               Try Again
             </Button>

@@ -231,6 +231,32 @@ export class PersistenceService {
   
   async saveSubject(subject: PersistedSubject): Promise<void> {
     try {
+      // Debug logging to see what we're trying to save
+      console.log('💾 DEBUG: Saving subject to DB:', {
+        id: subject.id,
+        name: subject.name,
+        hasLessonPlan: !!subject.lesson_plan,
+        hasLearningProgress: !!subject.learning_progress
+      })
+      
+      if (subject.lesson_plan) {
+        console.log('💾 DEBUG: Lesson plan details:', {
+          subject: subject.lesson_plan.subject,
+          lessonsCount: subject.lesson_plan.lessons?.length || 0,
+          currentLessonIndex: subject.lesson_plan.currentLessonIndex,
+          firstLessonTitle: subject.lesson_plan.lessons?.[0]?.title
+        })
+      }
+      
+      if (subject.learning_progress) {
+        console.log('💾 DEBUG: Learning progress details:', {
+          correctAnswers: subject.learning_progress.correctAnswers,
+          totalAttempts: subject.learning_progress.totalAttempts,
+          needsReview: subject.learning_progress.needsReview,
+          readyForNext: subject.learning_progress.readyForNext
+        })
+      }
+      
       const { error } = await supabase
         .from('subjects')
         .upsert([{
@@ -246,9 +272,11 @@ export class PersistenceService {
         })
       
       if (error) {
-        console.error('Error saving subject:', error)
+        console.error('❌ Error saving subject:', error)
         throw error
       }
+      
+      console.log('✅ DEBUG: Subject saved successfully to DB')
     } catch (error) {
       console.error('Failed to save subject:', error)
     }

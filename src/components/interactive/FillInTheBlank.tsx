@@ -5,13 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, XCircle, FileText, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
+import { CheckCircle, XCircle, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff, PenTool, Loader2 } from 'lucide-react'
+import { InteractiveComponentProps } from './index'
 
 interface FillInTheBlankContent {
   question: string
@@ -24,12 +19,18 @@ interface FillInTheBlankContent {
   acceptAlternatives?: boolean // Whether to accept close matches
 }
 
-export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id }: InteractiveComponentProps) {
+export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [userAnswers, setUserAnswers] = useState<string[]>([])
   const [showResult, setShowResult] = useState(false)
   const [results, setResults] = useState<boolean[]>([])
   const [showHints, setShowHints] = useState(false)
   const [showAnswers, setShowAnswers] = useState(false)
+  const [buttonLoadingStates, setButtonLoadingStates] = useState({
+    submit: false,
+    reset: false,
+    explainMore: false,
+    nextExercise: false
+  })
   
   const fillContent = content as FillInTheBlankContent
   
@@ -158,51 +159,79 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
     return false
   }
 
-  const handleSubmit = () => {
-    const checkResults = userAnswers.map((answer, index) => 
-      checkAnswer(answer, fillContent.answers[index])
-    )
-    
-    setResults(checkResults)
-    setShowResult(true)
-    
-    const score = checkResults.filter(Boolean).length
-    const totalScore = checkResults.length
-    
-    onInteraction('fill_blank_submitted', {
-      componentId: id,
-      userAnswers,
-      correctAnswers: fillContent.answers,
-      score: score,
-      totalScore: totalScore,
-      allCorrect: score === totalScore,
-      accuracy: Math.round((score / totalScore) * 100)
-    })
+  const handleSubmit = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, submit: true }))
+    try {
+      const checkResults = userAnswers.map((answer, index) => 
+        checkAnswer(answer, fillContent.answers[index])
+      )
+      
+      setResults(checkResults)
+      setShowResult(true)
+      
+      const score = checkResults.filter(Boolean).length
+      const totalScore = checkResults.length
+      
+      onInteraction('fill_blank_submitted', {
+        componentId: id,
+        userAnswers,
+        correctAnswers: fillContent.answers,
+        score: score,
+        totalScore: totalScore,
+        allCorrect: score === totalScore,
+        accuracy: Math.round((score / totalScore) * 100)
+      })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, submit: false }))
+      }, 1000)
+    }
   }
 
-  const handleReset = () => {
-    setUserAnswers(new Array(blanksCount).fill(''))
-    setShowResult(false)
-    setResults([])
-    setShowHints(false)
-    setShowAnswers(false)
-    onInteraction('fill_blank_reset', { componentId: id })
+  const handleReset = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, reset: true }))
+    try {
+      setUserAnswers(new Array(blanksCount).fill(''))
+      setShowResult(false)
+      setResults([])
+      setShowHints(false)
+      setShowAnswers(false)
+      onInteraction('fill_blank_reset', { componentId: id })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, reset: false }))
+      }, 1000)
+    }
   }
 
-  const handleExplainMore = () => {
-    onInteraction('explain_more', {
-      componentId: id,
-      topic: fillContent.category || 'this concept',
-      question: fillContent.question
-    })
+  const handleExplainMore = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, explainMore: true }))
+    try {
+      onInteraction('explain_more', {
+        componentId: id,
+        topic: fillContent.category || 'this concept',
+        question: fillContent.question
+      })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, explainMore: false }))
+      }, 1000)
+    }
   }
 
-  const handleNextExercise = () => {
-    onInteraction('next_exercise', {
-      componentId: id,
-      category: fillContent.category,
-      difficulty: fillContent.difficulty
-    })
+  const handleNextExercise = async () => {
+    setButtonLoadingStates(prev => ({ ...prev, nextExercise: true }))
+    try {
+      onInteraction('next_exercise', {
+        componentId: id,
+        category: fillContent.category,
+        difficulty: fillContent.difficulty
+      })
+    } finally {
+      setTimeout(() => {
+        setButtonLoadingStates(prev => ({ ...prev, nextExercise: false }))
+      }, 1000)
+    }
   }
 
   const getDifficultyColor = (difficulty: string) => {
@@ -222,52 +251,57 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            <FileText className="h-5 w-5 text-indigo-600 mr-2" />
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <PenTool className="h-6 w-6 text-indigo-600 mr-2" />
             {generateMeaningfulTitle()}
           </CardTitle>
           <div className="flex items-center space-x-2">
+            {fillContent.category && (
+              <Badge variant="outline" className="text-xs font-medium">
+                {fillContent.category}
+              </Badge>
+            )}
             {fillContent.difficulty && (
               <Badge className={getDifficultyColor(fillContent.difficulty)}>
-                {fillContent.difficulty}
+                <span className="text-xs font-semibold uppercase tracking-wide">{fillContent.difficulty}</span>
               </Badge>
             )}
             {showResult && (
               <Badge className={accuracy >= 80 ? 'bg-green-100 text-green-800' : accuracy >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>
-                {accuracy}% ({score}/{totalScore})
+                <span className="text-xs font-semibold">{accuracy}% ({score}/{totalScore})</span>
               </Badge>
             )}
           </div>
         </div>
-        <div className="bg-indigo-50 p-4 rounded-lg">
-          <p className="text-indigo-900 font-medium">{fillContent.question}</p>
+        <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200 mt-3">
+          <h3 className="text-indigo-900 font-semibold text-lg leading-relaxed">{fillContent.question}</h3>
         </div>
       </CardHeader>
       
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {/* Hints section */}
         {fillContent.hints && fillContent.hints.length > 0 && !showResult && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               onClick={() => setShowHints(!showHints)}
-              className="flex items-center"
+              className="flex items-center text-sm font-medium"
             >
-              <Lightbulb className="h-4 w-4 mr-1" />
+              <Lightbulb className="h-4 w-4 mr-2" />
               {showHints ? 'Hide Hints' : 'Show Hints'}
             </Button>
             
             {showHints && (
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-sm font-medium text-blue-900 mb-2">💡 Hints:</p>
-                <div className="space-y-2">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center">💡 Hints:</h4>
+                <div className="space-y-3">
                   {fillContent.hints.map((hint, index) => (
                     <div key={index} className="flex items-start">
-                      <span className="flex-shrink-0 w-6 h-6 bg-blue-200 rounded-full text-xs flex items-center justify-center mr-2 mt-0.5 font-medium">
+                      <span className="flex-shrink-0 w-6 h-6 bg-blue-200 rounded-full text-sm flex items-center justify-center mr-3 mt-0.5 font-semibold">
                         {index + 1}
                       </span>
-                      <span className="text-sm text-blue-800">{hint}</span>
+                      <span className="text-blue-800 text-base leading-relaxed">{hint}</span>
                     </div>
                   ))}
                 </div>
@@ -277,11 +311,12 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
         )}
 
         {/* Template with input fields */}
-        <div className="bg-gray-50 p-4 rounded-lg border-2 border-dashed border-gray-300">
-          <div className="flex flex-wrap items-center gap-2 text-base leading-relaxed">
+        <div className="bg-gray-50 p-6 rounded-lg border-2 border-dashed border-gray-300">
+          <h4 className="text-base font-semibold text-gray-800 mb-4">Fill in the blanks:</h4>
+          <div className="flex flex-wrap items-center gap-3 text-lg leading-relaxed">
             {parts.map((part, index) => (
-              <span key={index} className="flex items-center gap-2">
-                <span className="text-gray-800">{part}</span>
+              <span key={index} className="flex items-center gap-3">
+                <span className="text-gray-900 font-medium">{part}</span>
                 {index < blanksCount && (
                   <div className="inline-flex flex-col items-center">
                     <div className="relative">
@@ -289,7 +324,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                         value={userAnswers[index] || ''}
                         onChange={(e) => handleAnswerChange(index, e.target.value)}
                         disabled={showResult}
-                        className={`w-36 h-10 text-center font-medium border-2 transition-all ${
+                        className={`w-40 h-12 text-center font-semibold border-2 transition-all text-base ${
                           showResult
                             ? results[index]
                               ? 'bg-green-50 border-green-400 text-green-800'
@@ -298,16 +333,16 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                         }`}
                         placeholder={`Blank ${index + 1}`}
                       />
-                      <span className="absolute -top-2 -right-2 w-5 h-5 bg-indigo-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                      <span className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                         {index + 1}
                       </span>
                     </div>
                     {showResult && (
-                      <div className="mt-1">
+                      <div className="mt-2">
                         {results[index] ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <CheckCircle className="h-6 w-6 text-green-600" />
                         ) : (
-                          <XCircle className="h-5 w-5 text-red-600" />
+                          <XCircle className="h-6 w-6 text-red-600" />
                         )}
                       </div>
                     )}
@@ -320,30 +355,30 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
 
         {/* Show/Hide answers button for after submission */}
         {showResult && (
-          <div className="space-y-3">
+          <div className="space-y-4">
             <Button
               variant="outline"
-              size="sm"
+              size="default"
               onClick={() => setShowAnswers(!showAnswers)}
-              className="flex items-center"
+              className="flex items-center text-sm font-medium"
             >
-              {showAnswers ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+              {showAnswers ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
               {showAnswers ? 'Hide Answers' : 'Show Correct Answers'}
             </Button>
             
             {showAnswers && (
-              <div className="bg-gray-50 p-4 rounded-lg border">
-                <p className="text-sm font-medium text-gray-900 mb-3">✅ Correct Answers:</p>
-                <div className="grid gap-2">
+              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+                <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">✅ Correct Answers:</h4>
+                <div className="grid gap-3">
                   {fillContent.answers.map((answer, index) => (
-                    <div key={index} className={`flex items-center justify-between p-2 rounded ${results[index] ? 'bg-green-100' : 'bg-red-100'}`}>
-                      <span className="text-sm text-gray-700 font-medium">Blank {index + 1}:</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-bold text-gray-900">{answer}</span>
+                    <div key={index} className={`flex items-center justify-between p-4 rounded-lg ${results[index] ? 'bg-green-100' : 'bg-red-100'}`}>
+                      <span className="text-base text-gray-800 font-semibold">Blank {index + 1}:</span>
+                      <div className="flex items-center space-x-3">
+                        <span className="text-base font-bold text-gray-900">{answer}</span>
                         {results[index] ? (
-                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <CheckCircle className="h-5 w-5 text-green-600" />
                         ) : (
-                          <XCircle className="h-4 w-4 text-red-600" />
+                          <XCircle className="h-5 w-5 text-red-600" />
                         )}
                       </div>
                     </div>
@@ -356,20 +391,20 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
 
         {/* Results and Explanation */}
         {showResult && (
-          <div className={`p-4 rounded-lg border-2 ${
+          <div className={`p-5 rounded-lg border-2 ${
             accuracy >= 80 ? 'bg-green-50 border-green-200' : 
             accuracy >= 60 ? 'bg-yellow-50 border-yellow-200' : 
             'bg-red-50 border-red-200'
           }`}>
-            <div className="flex items-center mb-3">
+            <div className="flex items-center mb-4">
               {accuracy >= 80 ? (
-                <CheckCircle className="h-6 w-6 text-green-600 mr-2" />
+                <CheckCircle className="h-7 w-7 text-green-600 mr-3" />
               ) : accuracy >= 60 ? (
-                <CheckCircle className="h-6 w-6 text-yellow-600 mr-2" />
+                <CheckCircle className="h-7 w-7 text-yellow-600 mr-3" />
               ) : (
-                <XCircle className="h-6 w-6 text-red-600 mr-2" />
+                <XCircle className="h-7 w-7 text-red-600 mr-3" />
               )}
-              <p className={`font-bold ${
+              <h4 className={`font-bold text-lg ${
                 accuracy >= 80 ? 'text-green-800' : 
                 accuracy >= 60 ? 'text-yellow-800' : 
                 'text-red-800'
@@ -377,49 +412,71 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                 {accuracy >= 80 ? '🎉 Excellent!' : 
                  accuracy >= 60 ? '👍 Good effort!' : 
                  '💪 Keep trying!'}
-              </p>
+              </h4>
             </div>
-            <div className="bg-white p-3 rounded border">
-              <p className="text-sm font-medium text-gray-800 mb-2">Explanation:</p>
-              <p className="text-sm text-gray-700">{fillContent.explanation}</p>
+            <div className="bg-white p-4 rounded-md border shadow-sm">
+              <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
+              <p className="text-gray-700 text-base leading-relaxed">{fillContent.explanation}</p>
             </div>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex space-x-2 pt-2">
+        <div className="flex space-x-3 pt-4">
           {!showResult ? (
             <Button 
               onClick={handleSubmit} 
-              disabled={userAnswers.some(answer => !answer.trim())}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700"
+              disabled={userAnswers.some(answer => !answer.trim()) || buttonLoadingStates.submit || isLoading}
+              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-base font-medium h-12"
             >
-              Check Answers
+              {buttonLoadingStates.submit ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                'Check Answers'
+              )}
             </Button>
           ) : (
             <>
               <Button 
                 onClick={handleReset} 
                 variant="outline" 
-                className="flex items-center"
+                className="flex items-center text-sm font-medium h-11"
+                disabled={buttonLoadingStates.reset || isLoading}
               >
-                <RotateCcw className="h-4 w-4 mr-1" />
-                Try Again
+                {buttonLoadingStates.reset ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.reset ? 'Resetting...' : 'Try Again'}
               </Button>
               <Button 
                 onClick={handleExplainMore} 
                 variant="outline"
-                className="flex items-center"
+                className="flex items-center text-sm font-medium h-11"
+                disabled={buttonLoadingStates.explainMore || isLoading}
               >
-                <Brain className="h-4 w-4 mr-1" />
-                Explain More
+                {buttonLoadingStates.explainMore ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Brain className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.explainMore ? 'Loading...' : 'Explain More'}
               </Button>
               <Button 
                 onClick={handleNextExercise}
-                className="flex items-center bg-green-600 hover:bg-green-700"
+                className="flex items-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
+                disabled={buttonLoadingStates.nextExercise || isLoading}
               >
-                <Target className="h-4 w-4 mr-1" />
-                Next Exercise
+                {buttonLoadingStates.nextExercise ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Target className="h-4 w-4 mr-2" />
+                )}
+                {buttonLoadingStates.nextExercise ? 'Processing...' : 'Next Exercise'}
               </Button>
             </>
           )}

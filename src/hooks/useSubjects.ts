@@ -119,6 +119,21 @@ export function useSubjects() {
     try {
       const persistedSubjects = await persistenceService.getSubjectsByUser(user.id)
       
+      // Debug logging to see what's in the database
+      console.log('🔍 DEBUG: Raw persisted subjects from DB:', persistedSubjects.length)
+      persistedSubjects.forEach((ps, index) => {
+        console.log(`🔍 Subject ${index}: ${ps.name}`)
+        console.log(`🔍 Has lesson_plan:`, !!ps.lesson_plan)
+        console.log(`🔍 Has learning_progress:`, !!ps.learning_progress)
+        if (ps.lesson_plan) {
+          console.log(`🔍 Lesson plan lessons:`, ps.lesson_plan.lessons?.length || 'undefined')
+          console.log(`🔍 Current lesson index:`, ps.lesson_plan.currentLessonIndex)
+        }
+        if (ps.learning_progress) {
+          console.log(`🔍 Progress: ${ps.learning_progress.correctAnswers}/${ps.learning_progress.totalAttempts}`)
+        }
+      })
+      
       const loadedSubjects: Subject[] = persistedSubjects.map(ps => ({
         id: ps.id,
         name: ps.name,
@@ -132,6 +147,14 @@ export function useSubjects() {
         learningProgress: ps.learning_progress,
         lastActive: new Date(ps.last_active)
       }))
+      
+      // Debug logging for mapped subjects
+      console.log('🔍 DEBUG: Mapped subjects:', loadedSubjects.length)
+      loadedSubjects.forEach((subject, index) => {
+        console.log(`🔍 Mapped Subject ${index}: ${subject.name}`)
+        console.log(`🔍 Mapped has lessonPlan:`, !!subject.lessonPlan)
+        console.log(`🔍 Mapped has learningProgress:`, !!subject.learningProgress)
+      })
       
       startTransition(() => {
         setSubjects(loadedSubjects)

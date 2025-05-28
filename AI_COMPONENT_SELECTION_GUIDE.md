@@ -34,6 +34,10 @@ When a user requests learning content, analyze these factors:
 - "analyze text", "identify themes", "find examples", "highlight", "annotate"
 - **→ USE: `text-highlighter`**
 
+#### Detailed Explanations & Reading Content
+- "explain in detail", "tell me about", "I want to understand", "explain thoroughly", "give me a breakdown", "walk me through"
+- **→ USE: `explainer`**
+
 #### Matching & Categorization
 - "match", "pair", "connect", "categorize", "group", "sort"
 - **→ USE: `drag-drop`**
@@ -98,6 +102,7 @@ User Request
 ├── Mathematical formula involved? → formula-explorer
 ├── Data visualization needed? → graph-visualizer
 ├── Text analysis required? → text-highlighter
+├── Detailed explanation needed? → explainer
 ├── Matching/sorting task? → drag-drop
 ├── Step-by-step process? → step-solver
 ├── Simple Q&A? → multiple-choice
@@ -109,15 +114,15 @@ User Request
 ## Component Complexity Levels
 
 ### Beginner Level
-- **Primary**: `multiple-choice`, `concept-card`, `fill-blank`
+- **Primary**: `multiple-choice`, `concept-card`, `fill-blank`, `explainer`
 - **Secondary**: `drag-drop`, `interactive-example`
 
 ### Intermediate Level
-- **Primary**: `progress-quiz`, `text-highlighter`, `step-solver`
+- **Primary**: `progress-quiz`, `text-highlighter`, `step-solver`, `explainer`
 - **Secondary**: `formula-explorer`, `graph-visualizer`
 
 ### Advanced Level
-- **Primary**: `formula-explorer`, `graph-visualizer`, `step-solver`
+- **Primary**: `formula-explorer`, `graph-visualizer`, `step-solver`, `explainer`
 - **Secondary**: `progress-quiz`, `text-highlighter`
 
 ## Content Adaptation Guidelines
@@ -221,6 +226,29 @@ User Request
 }
 ```
 
+#### Explainer
+```typescript
+{
+  title: "Clear, descriptive topic title",
+  overview: "Brief summary (1-2 sentences) of what will be explained",
+  sections: [
+    {
+      heading: "Section title that breaks down the topic",
+      paragraphs: [
+        // 2-4 paragraphs per section
+        // Each paragraph 3-5 sentences
+        // Clear, engaging explanations
+        // Avoid wall of text - break into digestible chunks
+      ]
+    }
+    // 3-6 sections optimal for comprehensive coverage
+  ],
+  conclusion: "Optional summary that ties everything together",
+  difficulty: "beginner" | "intermediate" | "advanced",
+  estimatedReadTime: 5 // Optional: auto-calculated based on content
+}
+```
+
 ## Implementation Best Practices
 
 ### Component Selection Priority
@@ -277,5 +305,10 @@ User Request
 **Selected Component**: `drag-drop`
 **Reasoning**: Matching/pairing task
 **Content**: Event descriptions to drag onto timeline positions
+
+### Scenario 6: "Explain photosynthesis in detail"
+**Selected Component**: `explainer`
+**Reasoning**: Request for comprehensive explanation of a complex topic
+**Content**: Multi-section breakdown covering light reactions, Calvin cycle, factors affecting rate, and importance to life
 
 This guide ensures consistent, appropriate component selection that enhances learning outcomes and user engagement. 

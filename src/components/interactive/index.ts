@@ -44,6 +44,10 @@ export const TextHighlighter = dynamic(
   () => import('./TextHighlighter').then((m) => m.TextHighlighter),
   { ssr: false }
 )
+export const Explainer = dynamic(
+  () => import('./Explainer').then((m) => m.Explainer),
+  { ssr: false }
+)
 
 // Component type definitions
 export type ComponentType = 
@@ -57,5 +61,14 @@ export type ComponentType =
   | 'progress-quiz'
   | 'graph-visualizer'
   | 'text-highlighter'
+  | 'explainer'
 
-// Note: InteractiveComponentProps is defined in each component file to avoid circular imports 
+// Shared interface for all interactive components
+export interface InteractiveComponentProps {
+  onInteraction: (action: string, data: unknown) => void
+  content: unknown
+  id: string
+  isLoading?: boolean
+}
+
+// Note: InteractiveComponentProps is now defined here to be shared across all components 

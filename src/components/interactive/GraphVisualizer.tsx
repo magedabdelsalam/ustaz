@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, memo, useEffect, useRef } from 'react'
+import { useState, memo, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
@@ -77,78 +77,7 @@ export const GraphVisualizer = memo(function GraphVisualizer({
   }, [graphContent.controls])
 
   // Redraw graph when controls change
-  useEffect(() => {
-    drawGraph()
-  }, [controlValues, graphContent])
-
-  const handleControlChange = (controlId: string, value: number | boolean) => {
-    setControlValues(prev => ({
-      ...prev,
-      [controlId]: value
-    }))
-
-    onInteraction('graph_control_changed', {
-      componentId: id,
-      controlId,
-      value,
-      allValues: { ...controlValues, [controlId]: value }
-    })
-  }
-
-  const evaluateFunction = (expression: string, x: number): number => {
-    try {
-      // Replace variables with actual values
-      let evaluatedExpression = expression
-      
-      // Replace control variables
-      Object.entries(controlValues).forEach(([key, value]) => {
-        const regex = new RegExp(`\\b${key}\\b`, 'g')
-        evaluatedExpression = evaluatedExpression.replace(regex, String(value))
-      })
-      
-      // Replace x variable
-      evaluatedExpression = evaluatedExpression.replace(/\bx\b/g, String(x))
-      
-      // Handle common mathematical functions
-      evaluatedExpression = evaluatedExpression
-        .replace(/\^/g, '**')
-        .replace(/sin/g, 'Math.sin')
-        .replace(/cos/g, 'Math.cos')
-        .replace(/tan/g, 'Math.tan')
-        .replace(/log/g, 'Math.log')
-        .replace(/sqrt/g, 'Math.sqrt')
-        .replace(/abs/g, 'Math.abs')
-        .replace(/pi/g, 'Math.PI')
-        .replace(/e(?![0-9])/g, 'Math.E')
-      
-      return eval(evaluatedExpression)
-    } catch {
-      return 0
-    }
-  }
-
-  const generateFunctionData = (): DataPoint[] => {
-    if (typeof graphContent.data !== 'object' || Array.isArray(graphContent.data)) {
-      return []
-    }
-
-    const funcConfig = graphContent.data as FunctionConfig
-    const [minX, maxX] = funcConfig.domain
-    const resolution = funcConfig.resolution || 100
-    const step = (maxX - minX) / resolution
-
-    const points: DataPoint[] = []
-    for (let x = minX; x <= maxX; x += step) {
-      const y = evaluateFunction(funcConfig.expression, x)
-      if (!isNaN(y) && isFinite(y)) {
-        points.push({ x, y })
-      }
-    }
-
-    return points
-  }
-
-  const drawGraph = () => {
+  const drawGraph = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -276,6 +205,78 @@ export const GraphVisualizer = memo(function GraphVisualizer({
         drawPieChart(ctx, data, width, height)
         break
     }
+  }, [controlValues, graphContent]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redraw graph when controls change
+  useEffect(() => {
+    drawGraph()
+  }, [drawGraph])
+
+  const handleControlChange = (controlId: string, value: number | boolean) => {
+    setControlValues(prev => ({
+      ...prev,
+      [controlId]: value
+    }))
+
+    onInteraction('graph_control_changed', {
+      componentId: id,
+      controlId,
+      value,
+      allValues: { ...controlValues, [controlId]: value }
+    })
+  }
+
+  const evaluateFunction = (expression: string, x: number): number => {
+    try {
+      // Replace variables with actual values
+      let evaluatedExpression = expression
+      
+      // Replace control variables
+      Object.entries(controlValues).forEach(([key, value]) => {
+        const regex = new RegExp(`\\b${key}\\b`, 'g')
+        evaluatedExpression = evaluatedExpression.replace(regex, String(value))
+      })
+      
+      // Replace x variable
+      evaluatedExpression = evaluatedExpression.replace(/\bx\b/g, String(x))
+      
+      // Handle common mathematical functions
+      evaluatedExpression = evaluatedExpression
+        .replace(/\^/g, '**')
+        .replace(/sin/g, 'Math.sin')
+        .replace(/cos/g, 'Math.cos')
+        .replace(/tan/g, 'Math.tan')
+        .replace(/log/g, 'Math.log')
+        .replace(/sqrt/g, 'Math.sqrt')
+        .replace(/abs/g, 'Math.abs')
+        .replace(/pi/g, 'Math.PI')
+        .replace(/e(?![0-9])/g, 'Math.E')
+      
+      return eval(evaluatedExpression)
+    } catch {
+      return 0
+    }
+  }
+
+  const generateFunctionData = (): DataPoint[] => {
+    if (typeof graphContent.data !== 'object' || Array.isArray(graphContent.data)) {
+      return []
+    }
+
+    const funcConfig = graphContent.data as FunctionConfig
+    const [minX, maxX] = funcConfig.domain
+    const resolution = funcConfig.resolution || 100
+    const step = (maxX - minX) / resolution
+
+    const points: DataPoint[] = []
+    for (let x = minX; x <= maxX; x += step) {
+      const y = evaluateFunction(funcConfig.expression, x)
+      if (!isNaN(y) && isFinite(y)) {
+        points.push({ x, y })
+      }
+    }
+
+    return points
   }
 
   const drawLineGraph = (
