@@ -31,37 +31,35 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // If category is provided and meaningful, use it
-    if (mcContent.category && mcContent.category !== 'Knowledge Check') {
-      return mcContent.category
-    }
-
-    // Extract topic from question text
     const questionLower = mcContent.question.toLowerCase()
     
-    // Look for key educational terms or concepts in the question
-    const educationalKeywords = [
-      'equation', 'formula', 'theorem', 'principle', 'concept', 'definition',
-      'history', 'biology', 'chemistry', 'physics', 'mathematics', 'science',
-      'literature', 'grammar', 'vocabulary', 'sentence', 'paragraph',
-      'function', 'variable', 'coefficient', 'derivative', 'integral',
-      'cell', 'organism', 'ecosystem', 'evolution', 'genetics',
-      'atom', 'molecule', 'reaction', 'element', 'compound',
-      'force', 'energy', 'motion', 'wave', 'light', 'sound'
-    ]
-
-    // Check for educational keywords in question
-    const foundKeywords = educationalKeywords.filter(keyword => 
-      questionLower.includes(keyword.toLowerCase())
-    )
-    
-    if (foundKeywords.length > 0) {
-      const primaryKeyword = foundKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Quiz`
+    // Priority 1: Use category if available
+    if (mcContent.category) {
+      return `${mcContent.category} Quiz`
     }
 
-    // Subject-specific patterns based on question content
-    if (questionLower.includes('math') || questionLower.includes('calculate') || questionLower.includes('solve') || questionLower.includes('number')) {
+    // Priority 2: Check for specific educational keywords and create contextual titles
+    const topicKeywords = [
+      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Quiz' },
+      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Quiz' },
+      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Quiz' },
+      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Quiz' },
+      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Quiz' },
+      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Quiz' },
+      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Quiz' },
+      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Quiz' },
+      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Quiz' },
+      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Quiz' }
+    ]
+
+    for (const topic of topicKeywords) {
+      if (topic.words.some(keyword => questionLower.includes(keyword))) {
+        return topic.title
+      }
+    }
+
+    // Priority 3: Subject-specific patterns based on question content
+    if (questionLower.includes('math') || questionLower.includes('calculate') || questionLower.includes('solve') || questionLower.includes('number') || /\d+/.test(questionLower)) {
       return 'Math Quiz'
     }
     if (questionLower.includes('science') || questionLower.includes('experiment') || questionLower.includes('hypothesis')) {
@@ -77,7 +75,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
       return 'Literature Quiz'
     }
 
-    // Look at the answers for context clues
+    // Priority 4: Look at the answers for context clues
     if (mcContent.options && mcContent.options.length > 0) {
       const allOptionsText = mcContent.options.join(' ').toLowerCase()
       
@@ -93,25 +91,38 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
       }
     }
 
-    // Extract meaningful words from question (excluding common words)
-    const commonWords = ['what', 'which', 'how', 'where', 'when', 'why', 'who', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
-    const questionWords = mcContent.question.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (questionWords.length > 0) {
-      return `${questionWords.join(' ')} Quiz`
+    // Priority 5: Extract key topic from question more intelligently
+    const meaningfulWords = mcContent.question.split(' ')
+      .filter(word => {
+        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+        return cleanWord.length > 3 && 
+               !['what', 'which', 'how', 'where', 'when', 'why', 'who', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+      })
+      .map(word => word.replace(/[^\w]/g, ''))
+      .filter(word => word.length > 0)
+
+    if (meaningfulWords.length > 0) {
+      // Take the most meaningful word (usually a noun or key concept)
+      const keyTopic = meaningfulWords[0]
+      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Quiz`
     }
 
-    // Default fallback based on question type
+    // Priority 6: Question type-based fallbacks
     if (questionLower.includes('true') || questionLower.includes('false')) {
       return 'True/False Question'
     }
     if (questionLower.includes('best') || questionLower.includes('correct') || questionLower.includes('most')) {
       return 'Multiple Choice Question'
     }
+    if (questionLower.includes('define') || questionLower.includes('definition')) {
+      return 'Definition Quiz'
+    }
+    if (questionLower.includes('compare') || questionLower.includes('contrast')) {
+      return 'Comparison Quiz'
+    }
 
-    return 'Knowledge Check'
+    // Final fallback
+    return 'Knowledge Quiz'
   }
 
   const handleSubmit = () => {

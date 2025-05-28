@@ -26,7 +26,7 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // If title is specific and meaningful, use it
+    // Priority 1: Use title if it's specific and meaningful
     if (conceptContent.title && 
         conceptContent.title !== 'Concept Explanation' && 
         conceptContent.title !== 'Learn about' &&
@@ -35,34 +35,32 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
       return conceptContent.title
     }
 
-    // Extract topic from details or summary
+    // Priority 2: Check for specific educational keywords and create contextual titles
     const detailsLower = conceptContent.details.toLowerCase()
     const summaryLower = conceptContent.summary.toLowerCase()
     const allText = `${summaryLower} ${detailsLower}`
     
-    // Look for key educational terms or concepts
-    const educationalKeywords = [
-      'equation', 'formula', 'theorem', 'principle', 'concept', 'definition',
-      'history', 'biology', 'chemistry', 'physics', 'mathematics', 'science',
-      'literature', 'grammar', 'vocabulary', 'sentence', 'paragraph',
-      'function', 'variable', 'coefficient', 'derivative', 'integral',
-      'cell', 'organism', 'ecosystem', 'evolution', 'genetics',
-      'atom', 'molecule', 'reaction', 'element', 'compound',
-      'force', 'energy', 'motion', 'wave', 'light', 'sound'
+    const topicKeywords = [
+      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Concept' },
+      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Concept' },
+      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Concept' },
+      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Concept' },
+      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Concept' },
+      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Concept' },
+      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Concept' },
+      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Concept' },
+      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Concept' },
+      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Concept' }
     ]
 
-    // Check for educational keywords in content
-    const foundKeywords = educationalKeywords.filter(keyword => 
-      allText.includes(keyword.toLowerCase())
-    )
-    
-    if (foundKeywords.length > 0) {
-      const primaryKeyword = foundKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Concept`
+    for (const topic of topicKeywords) {
+      if (topic.words.some(keyword => allText.includes(keyword))) {
+        return topic.title
+      }
     }
 
-    // Subject-specific patterns based on content
-    if (allText.includes('math') || allText.includes('calculation') || allText.includes('solve') || allText.includes('number')) {
+    // Priority 3: Subject-specific patterns based on content
+    if (allText.includes('math') || allText.includes('calculation') || allText.includes('solve') || allText.includes('number') || /\d+/.test(allText)) {
       return 'Math Concept'
     }
     if (allText.includes('science') || allText.includes('experiment') || allText.includes('hypothesis')) {
@@ -78,11 +76,10 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
       return 'Literature Concept'
     }
 
-    // Look at the examples for context clues
+    // Priority 4: Look at the examples for context clues
     if (conceptContent.examples && conceptContent.examples.length > 0) {
       const allExamplesText = conceptContent.examples.join(' ').toLowerCase()
       
-      // Check if examples suggest a topic
       if (/\d+/.test(allExamplesText) || allExamplesText.includes('=') || allExamplesText.includes('+')) {
         return 'Math Concept'
       }
@@ -94,28 +91,39 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
       }
     }
 
-    // Extract meaningful words from title/summary (excluding common words)
-    const commonWords = ['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'learn', 'about', 'introduction']
-    
-    // Try title first
-    const titleWords = conceptContent.title.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (titleWords.length > 0) {
-      return `${titleWords.join(' ')} Concept`
+    // Priority 5: Extract key topic more intelligently from title
+    if (conceptContent.title) {
+      const meaningfulWords = conceptContent.title.split(' ')
+        .filter(word => {
+          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+          return cleanWord.length > 3 && 
+                 !['learn', 'about', 'introduction', 'concept', 'explanation', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+        })
+        .map(word => word.replace(/[^\w]/g, ''))
+        .filter(word => word.length > 0)
+
+      if (meaningfulWords.length > 0) {
+        const keyTopic = meaningfulWords[0]
+        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Concept`
+      }
     }
 
-    // Try summary if title doesn't yield good words
-    const summaryWords = conceptContent.summary.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (summaryWords.length > 0) {
-      return `${summaryWords.join(' ')} Concept`
+    // Priority 6: Extract from summary if title doesn't work
+    const summaryMeaningfulWords = conceptContent.summary.split(' ')
+      .filter(word => {
+        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+        return cleanWord.length > 3 && 
+               !['learn', 'about', 'introduction', 'concept', 'explanation', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+      })
+      .map(word => word.replace(/[^\w]/g, ''))
+      .filter(word => word.length > 0)
+
+    if (summaryMeaningfulWords.length > 0) {
+      const keyTopic = summaryMeaningfulWords[0]
+      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Concept`
     }
 
-    // Default fallback based on difficulty
+    // Priority 7: Default fallback based on difficulty
     switch (conceptContent.difficulty) {
       case 'beginner':
         return 'Basic Concept'

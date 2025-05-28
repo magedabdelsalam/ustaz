@@ -42,40 +42,38 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // If category is provided and meaningful, use it
+    // Priority 1: Use category if available
     if (dragContent.category && dragContent.category !== 'Drag and Drop') {
-      return dragContent.category
+      return `${dragContent.category} Matching`
     }
 
-    // Extract topic from question and instructions
+    // Priority 2: Check for specific educational keywords and create contextual titles
     const questionLower = dragContent.question.toLowerCase()
     const instructionsLower = dragContent.instructions.toLowerCase()
     const allText = `${questionLower} ${instructionsLower}`
     
-    // Look for key educational terms or concepts
-    const educationalKeywords = [
-      'equation', 'formula', 'theorem', 'principle', 'concept', 'definition',
-      'history', 'biology', 'chemistry', 'physics', 'mathematics', 'science',
-      'literature', 'grammar', 'vocabulary', 'sentence', 'paragraph',
-      'function', 'variable', 'coefficient', 'derivative', 'integral',
-      'cell', 'organism', 'ecosystem', 'evolution', 'genetics',
-      'atom', 'molecule', 'reaction', 'element', 'compound',
-      'force', 'energy', 'motion', 'wave', 'light', 'sound'
+    const topicKeywords = [
+      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Matching' },
+      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Matching' },
+      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Matching' },
+      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Matching' },
+      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Matching' },
+      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Matching' },
+      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Matching' },
+      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Matching' },
+      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Matching' },
+      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Matching' }
     ]
 
-    // Check for educational keywords
-    const foundKeywords = educationalKeywords.filter(keyword => 
-      allText.includes(keyword.toLowerCase())
-    )
-    
-    if (foundKeywords.length > 0) {
-      const primaryKeyword = foundKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Matching`
+    for (const topic of topicKeywords) {
+      if (topic.words.some(keyword => allText.includes(keyword))) {
+        return topic.title
+      }
     }
 
-    // Subject-specific patterns
+    // Priority 3: Subject-specific patterns
     if (allText.includes('match') || allText.includes('pair') || allText.includes('connect')) {
-      if (allText.includes('math') || allText.includes('number') || allText.includes('equation')) {
+      if (allText.includes('math') || allText.includes('number') || allText.includes('equation') || /\d+/.test(allText)) {
         return 'Math Matching'
       }
       if (allText.includes('science') || allText.includes('experiment')) {
@@ -89,13 +87,12 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
       }
     }
 
-    // Look at the items and targets for context
+    // Priority 4: Look at the items and targets for context
     if (dragContent.items && dragContent.targets) {
       const allItemsText = dragContent.items.map(item => item.content).join(' ').toLowerCase()
       const allTargetsText = dragContent.targets.map(target => target.label).join(' ').toLowerCase()
       const itemsAndTargets = `${allItemsText} ${allTargetsText}`
       
-      // Check content for subject clues
       if (/\d+/.test(itemsAndTargets) || itemsAndTargets.includes('=') || itemsAndTargets.includes('+')) {
         return 'Math Matching'
       }
@@ -107,17 +104,22 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
       }
     }
 
-    // Extract meaningful words from question (excluding common words)
-    const commonWords = ['match', 'drag', 'drop', 'connect', 'pair', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
-    const questionWords = dragContent.question.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (questionWords.length > 0) {
-      return `${questionWords.join(' ')} Matching`
+    // Priority 5: Extract key topic more intelligently
+    const meaningfulWords = dragContent.question.split(' ')
+      .filter(word => {
+        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+        return cleanWord.length > 3 && 
+               !['match', 'drag', 'drop', 'connect', 'pair', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+      })
+      .map(word => word.replace(/[^\w]/g, ''))
+      .filter(word => word.length > 0)
+
+    if (meaningfulWords.length > 0) {
+      const keyTopic = meaningfulWords[0]
+      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Matching`
     }
 
-    // Default based on activity type
+    // Priority 6: Activity type-based fallbacks
     if (allText.includes('category') || allText.includes('group') || allText.includes('classify')) {
       return 'Category Matching'
     }

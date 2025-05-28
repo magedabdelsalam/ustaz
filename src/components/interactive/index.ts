@@ -23,6 +23,28 @@ export const ConceptCard = dynamic(
   { ssr: false }
 )
 
+// New interactive components
+export const InteractiveExample = dynamic(
+  () => import('./InteractiveExample').then((m) => m.InteractiveExample),
+  { ssr: false }
+)
+export const ProgressQuiz = dynamic(
+  () => import('./ProgressQuiz').then((m) => m.ProgressQuiz),
+  { ssr: false }
+)
+export const GraphVisualizer = dynamic(
+  () => import('./GraphVisualizer').then((m) => m.GraphVisualizer),
+  { ssr: false }
+)
+export const FormulaExplorer = dynamic(
+  () => import('./FormulaExplorer').then((m) => m.FormulaExplorer),
+  { ssr: false }
+)
+export const TextHighlighter = dynamic(
+  () => import('./TextHighlighter').then((m) => m.TextHighlighter),
+  { ssr: false }
+)
+
 // Component type definitions
 export type ComponentType = 
   | 'multiple-choice'
@@ -34,5 +56,6 @@ export type ComponentType =
   | 'interactive-example'
   | 'progress-quiz'
   | 'graph-visualizer'
+  | 'text-highlighter'
 
 // Note: InteractiveComponentProps is defined in each component file to avoid circular imports 

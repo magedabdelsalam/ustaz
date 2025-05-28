@@ -100,6 +100,15 @@ export function Dashboard() {
             const newSubject = await createSubject(analysis.subjectName)
             console.log('✅ New subject created successfully:', newSubject.name)
             
+            // Notify ChatPane about the new subject for lesson plan creation
+            const newSubjectEvent = new CustomEvent('newSubjectCreated', {
+              detail: {
+                subject: newSubject,
+                triggeringMessage: message
+              }
+            })
+            window.dispatchEvent(newSubjectEvent)
+            
             // Move the triggering message to the new subject
             if (lastUserMessageRef.current && lastUserMessageRef.current.previousSubjectId) {
               console.log('🔄 Moving triggering message to new subject:', lastUserMessageRef.current.id)

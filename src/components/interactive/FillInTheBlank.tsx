@@ -44,70 +44,56 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // If category is provided and meaningful, use it
+    // Priority 1: Use category if available
     if (fillContent.category && fillContent.category !== 'Complete the Text') {
-      return fillContent.category
+      return `${fillContent.category} Exercise`
     }
 
-    // Extract topic from template text
+    // Priority 2: Check for specific educational keywords and create contextual titles
     const templateText = fillContent.template.replace(/___/g, '').trim()
+    const questionLower = fillContent.question.toLowerCase()
+    const combinedText = `${templateText} ${questionLower}`.toLowerCase()
     
-    // Look for key educational terms or concepts in the template
-    const educationalKeywords = [
-      'equation', 'formula', 'theorem', 'principle', 'concept', 'definition',
-      'history', 'biology', 'chemistry', 'physics', 'mathematics', 'science',
-      'literature', 'grammar', 'vocabulary', 'sentence', 'paragraph',
-      'function', 'variable', 'coefficient', 'derivative', 'integral',
-      'cell', 'organism', 'ecosystem', 'evolution', 'genetics',
-      'atom', 'molecule', 'reaction', 'element', 'compound',
-      'force', 'energy', 'motion', 'wave', 'light', 'sound'
+    const topicKeywords = [
+      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Exercise' },
+      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Practice' },
+      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Exercise' },
+      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Exercise' },
+      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Exercise' },
+      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Exercise' },
+      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Exercise' },
+      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Exercise' },
+      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Exercise' },
+      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Exercise' }
     ]
 
-    // Check for educational keywords in template
-    const foundKeywords = educationalKeywords.filter(keyword => 
-      templateText.toLowerCase().includes(keyword.toLowerCase())
-    )
-    
-    if (foundKeywords.length > 0) {
-      const primaryKeyword = foundKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Exercise`
+    for (const topic of topicKeywords) {
+      if (topic.words.some(keyword => combinedText.includes(keyword))) {
+        return topic.title
+      }
     }
 
-    // Look for specific subjects or topics mentioned in question
-    const questionLower = fillContent.question.toLowerCase()
-    
-    // Subject-specific patterns
-    if (questionLower.includes('math') || questionLower.includes('calculation') || questionLower.includes('solve')) {
-      return 'Math Problem'
+    // Priority 3: Subject-specific patterns
+    if (questionLower.includes('math') || questionLower.includes('calculation') || questionLower.includes('solve') || /\d+/.test(combinedText)) {
+      return 'Math Exercise'
     }
     if (questionLower.includes('science') || questionLower.includes('experiment')) {
-      return 'Science Concept'
+      return 'Science Exercise'
     }
     if (questionLower.includes('history') || questionLower.includes('historical')) {
-      return 'History Facts'
+      return 'History Exercise'
     }
     if (questionLower.includes('language') || questionLower.includes('grammar') || questionLower.includes('sentence')) {
-      return 'Language Skills'
+      return 'Language Arts Exercise'
     }
     if (questionLower.includes('literature') || questionLower.includes('story') || questionLower.includes('poem')) {
-      return 'Literature Study'
+      return 'Literature Exercise'
     }
 
-    // Extract first meaningful words from template (excluding common words)
-    const commonWords = ['the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
-    const templateWords = templateText.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (templateWords.length > 0) {
-      return `${templateWords.join(' ')} Exercise`
-    }
-
-    // Look at the answers for context clues
+    // Priority 4: Look at the answers for context clues
     if (fillContent.answers && fillContent.answers.length > 0) {
       const firstAnswer = fillContent.answers[0].toLowerCase()
       
-      // Check if answers suggest a topic
       if (/^\d+$/.test(firstAnswer) || firstAnswer.includes('=') || firstAnswer.includes('+') || firstAnswer.includes('-')) {
         return 'Math Exercise'
       }
@@ -119,7 +105,22 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
       }
     }
 
-    // Determine based on number of blanks
+    // Priority 5: Extract key topic more intelligently
+    const meaningfulWords = templateText.split(' ')
+      .filter(word => {
+        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+        return cleanWord.length > 3 && 
+               !['what', 'which', 'how', 'where', 'when', 'why', 'who', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+      })
+      .map(word => word.replace(/[^\w]/g, ''))
+      .filter(word => word.length > 0)
+
+    if (meaningfulWords.length > 0) {
+      const keyTopic = meaningfulWords[0]
+      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Exercise`
+    }
+
+    // Priority 6: Determine based on exercise characteristics
     if (blanksCount === 1) {
       return 'Complete the Statement'
     } else if (blanksCount <= 3) {

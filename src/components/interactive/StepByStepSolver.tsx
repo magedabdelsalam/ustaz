@@ -40,52 +40,39 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // If category is provided and meaningful, use it
+    // Priority 1: Use category if available
     if (solverContent.category && solverContent.category !== 'Problem Solution') {
-      return solverContent.category
+      return `${solverContent.category} Problem`
     }
 
-    // Use problemType if it's specific and meaningful
+    // Priority 2: Use problemType if it's specific and meaningful
     if (solverContent.problemType && solverContent.problemType !== 'Problem Solution') {
       return solverContent.problemType
     }
 
-    // Extract topic from problem text
+    // Priority 3: Check for specific problem types and create contextual titles
     const problemLower = solverContent.problem.toLowerCase()
     
-    // Look for key mathematical and scientific terms
-    const mathKeywords = [
-      'equation', 'algebra', 'calculus', 'geometry', 'trigonometry',
-      'derivative', 'integral', 'function', 'polynomial', 'logarithm',
-      'matrix', 'vector', 'probability', 'statistics', 'graph'
+    const problemTypeKeywords = [
+      { words: ['derivative', 'differentiate', 'rate of change'], title: 'Calculus Problem' },
+      { words: ['integral', 'integrate', 'area under curve'], title: 'Integration Problem' },
+      { words: ['quadratic', 'parabola', 'x²'], title: 'Quadratic Equation' },
+      { words: ['linear equation', 'slope', 'y = mx + b'], title: 'Linear Equation' },
+      { words: ['triangle', 'angle', 'pythagorean'], title: 'Geometry Problem' },
+      { words: ['probability', 'chance', 'odds'], title: 'Probability Problem' },
+      { words: ['logarithm', 'log', 'exponential'], title: 'Logarithmic Problem' },
+      { words: ['matrix', 'determinant', 'eigenvalue'], title: 'Linear Algebra Problem' },
+      { words: ['optimize', 'maximum', 'minimum'], title: 'Optimization Problem' },
+      { words: ['physics', 'force', 'velocity', 'acceleration'], title: 'Physics Problem' }
     ]
 
-    const scienceKeywords = [
-      'physics', 'chemistry', 'biology', 'force', 'energy', 'motion',
-      'reaction', 'molecule', 'atom', 'cell', 'genetics'
-    ]
-
-    // Check for mathematical keywords in problem
-    const foundMathKeywords = mathKeywords.filter(keyword => 
-      problemLower.includes(keyword.toLowerCase())
-    )
-    
-    if (foundMathKeywords.length > 0) {
-      const primaryKeyword = foundMathKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Problem`
+    for (const problemType of problemTypeKeywords) {
+      if (problemType.words.some(keyword => problemLower.includes(keyword))) {
+        return problemType.title
+      }
     }
 
-    // Check for science keywords in problem
-    const foundScienceKeywords = scienceKeywords.filter(keyword => 
-      problemLower.includes(keyword.toLowerCase())
-    )
-    
-    if (foundScienceKeywords.length > 0) {
-      const primaryKeyword = foundScienceKeywords[0]
-      return `${primaryKeyword.charAt(0).toUpperCase()}${primaryKeyword.slice(1)} Problem`
-    }
-
-    // Subject-specific patterns based on problem content
+    // Priority 4: Subject-specific patterns based on problem content
     if (problemLower.includes('solve') || problemLower.includes('find') || problemLower.includes('calculate')) {
       if (problemLower.includes('x') || problemLower.includes('=') || /\d+/.test(problemLower)) {
         return 'Math Problem'
@@ -96,10 +83,6 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
       return 'Mathematical Proof'
     }
 
-    if (problemLower.includes('optimize') || problemLower.includes('maximum') || problemLower.includes('minimum')) {
-      return 'Optimization Problem'
-    }
-
     if (problemLower.includes('rate') || problemLower.includes('speed') || problemLower.includes('velocity')) {
       return 'Rate Problem'
     }
@@ -108,7 +91,7 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
       return 'Geometry Problem'
     }
 
-    // Look at the steps for context clues
+    // Priority 5: Look at the steps for context clues
     if (solverContent.steps && solverContent.steps.length > 0) {
       const allStepsText = solverContent.steps.map(step => step.description).join(' ').toLowerCase()
       
@@ -123,17 +106,22 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
       }
     }
 
-    // Extract meaningful words from problem (excluding common words)
-    const commonWords = ['find', 'solve', 'calculate', 'determine', 'what', 'how', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by']
-    const problemWords = solverContent.problem.split(' ')
-      .filter(word => word.length > 3 && !commonWords.includes(word.toLowerCase()))
-      .slice(0, 2)
-    
-    if (problemWords.length > 0) {
-      return `${problemWords.join(' ')} Problem`
+    // Priority 6: Extract key topic more intelligently
+    const meaningfulWords = solverContent.problem.split(' ')
+      .filter(word => {
+        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+        return cleanWord.length > 3 && 
+               !['find', 'solve', 'calculate', 'determine', 'what', 'how', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
+      })
+      .map(word => word.replace(/[^\w]/g, ''))
+      .filter(word => word.length > 0)
+
+    if (meaningfulWords.length > 0) {
+      const keyTopic = meaningfulWords[0]
+      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Problem`
     }
 
-    // Default fallback based on number of steps
+    // Priority 7: Default fallback based on number of steps
     if (solverContent.steps.length === 1) {
       return 'Single-Step Solution'
     } else if (solverContent.steps.length <= 3) {

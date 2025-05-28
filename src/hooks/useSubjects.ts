@@ -271,13 +271,71 @@ export function useSubjects() {
       return analysis
     } catch (error) {
       console.error('AI analysis failed:', error)
-      // Fallback logic
-      const isLearningMessage = /\b(learn|study|teach me|explain)\b/i.test(message)
-      const fallbackResult = {
-        subjectName: isLearningMessage ? 'General Study' : currentSubject?.name || 'General Study',
-        isNewSubject: !currentSubject || isLearningMessage,
-        confidence: 0.5
+      
+      // Enhanced fallback logic with better subject extraction
+      // Extract potential subject from common patterns
+      let extractedSubject = 'General Study'
+      
+      // Pattern: "learn [subject]", "study [subject]", "teach me [subject]"
+      const learnPattern = /(?:learn|study|teach me|help me learn|explain|about)\s+([a-zA-Z\s&]+?)(?:\s|$|\.|\?|!)/i
+      const learnMatch = message.match(learnPattern)
+      if (learnMatch && learnMatch[1]) {
+        extractedSubject = learnMatch[1].trim()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
       }
+      
+      // Pattern: "[subject] help", "[subject] course", "[subject] tutorial"  
+      const subjectPattern = /^([a-zA-Z\s&]+?)\s+(help|course|tutorial|training|class|lesson)/i
+      const subjectMatch = message.match(subjectPattern)
+      if (subjectMatch && subjectMatch[1]) {
+        extractedSubject = subjectMatch[1].trim()
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+      }
+      
+      // Specific subject detection patterns
+      const subjectPatterns = [
+        { pattern: /social media|social networking|instagram|facebook|twitter|linkedin|tiktok|marketing/i, subject: 'Social Media Management' },
+        { pattern: /advertising|ads|google ads|facebook ads|ppc|sem|marketing campaigns/i, subject: 'Digital Advertising' },
+        { pattern: /math|mathematics|algebra|calculus|geometry|statistics/i, subject: 'Mathematics' },
+        { pattern: /science|physics|chemistry|biology/i, subject: 'Science' },
+        { pattern: /history|historical/i, subject: 'History' },
+        { pattern: /english|literature|writing|grammar/i, subject: 'English' },
+        { pattern: /programming|coding|javascript|python|web development/i, subject: 'Programming' },
+        { pattern: /business|entrepreneurship|management|leadership/i, subject: 'Business' },
+        { pattern: /spanish|french|german|language/i, subject: 'Language Learning' },
+        { pattern: /art|design|drawing|painting/i, subject: 'Art & Design' },
+        { pattern: /music|piano|guitar|singing/i, subject: 'Music' },
+        { pattern: /cooking|recipe|culinary/i, subject: 'Cooking' },
+        { pattern: /fitness|exercise|workout|health/i, subject: 'Health & Fitness' }
+      ]
+      
+      for (const { pattern, subject } of subjectPatterns) {
+        if (pattern.test(message)) {
+          extractedSubject = subject
+          break
+        }
+      }
+      
+      // If we extracted a meaningful subject, it's likely a new subject request
+      const isLearningMessage = /\b(learn|study|teach me|explain|help me|about|course|tutorial|training)\b/i.test(message)
+      const hasSpecificSubject = extractedSubject !== 'General Study'
+      
+      const fallbackResult = {
+        subjectName: extractedSubject,
+        isNewSubject: !currentSubject || isLearningMessage || hasSpecificSubject,
+        confidence: hasSpecificSubject ? 0.8 : 0.5
+      }
+      
+      console.log('🎯 Fallback subject analysis:', {
+        message: message.substring(0, 50) + '...',
+        extractedSubject,
+        isNewSubject: fallbackResult.isNewSubject,
+        confidence: fallbackResult.confidence
+      })
       
       // Cache fallback results too (to avoid repeated API failures)
       messageAnalysisCache.set(cacheKey, fallbackResult)

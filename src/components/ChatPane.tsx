@@ -11,7 +11,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
-import { aiTutor, LessonPlan, LearningProgress } from '@/lib/aiService'
+import { aiTutor, LessonPlan, LearningProgress, Lesson } from '@/lib/aiService'
 
 interface Message {
   id: string
@@ -143,41 +143,55 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }
   }, [user, selectedSubject])
 
-  const createLessonPlan = useCallback(async (subjectName: string) => {
+  const createLessonPlan = useCallback(async (subjectName: string, targetSubject?: Subject) => {
+    setIsTyping(true)
     try {
-      console.log('📚 Creating lesson plan for subject:', subjectName)
-      const lessonPlan = await aiTutor.createLearningPlan(subjectName)
-      console.log('📋 Generated lesson plan:', lessonPlan)
-      setCurrentLessonPlan(lessonPlan)
+      console.log('📋 Creating lesson plan for:', subjectName)
       
+      // Use the provided subject or fall back to selectedSubject
+      const subjectForPlan = targetSubject || selectedSubject
+      console.log('🎯 Subject for lesson plan:', { provided: targetSubject?.name, selected: selectedSubject?.name, final: subjectForPlan?.name })
+      
+      const lessonPlan = await aiTutor.createLearningPlan(subjectName)
       const progress = aiTutor.getProgress(subjectName)
+
+      setCurrentLessonPlan(lessonPlan)
       setCurrentProgress(progress)
 
-      // Save lesson plan and progress to database for persistence
-      if (selectedSubject && user) {
-        console.log('💾 Saving lesson plan and progress to database...')
+      // Also save to database (if user and subject are available)
+      if (user && subjectForPlan && progress) {
         try {
-          const updatedSubject = {
-            ...selectedSubject,
-            lessonPlan: lessonPlan,
+          const updatedSubject: Subject = {
+            ...subjectForPlan,
+            lessonPlan,
             learningProgress: {
-              correctAnswers: progress?.correctAnswers || 0,
-              totalAttempts: progress?.totalAttempts || 0,
-              needsReview: progress?.needsReview || false,
-              readyForNext: progress?.readyForNext || false,
-              currentLessonIndex: lessonPlan.currentLessonIndex,
-              totalLessons: lessonPlan.lessons.length
+              correctAnswers: progress.correctAnswers,
+              totalAttempts: progress.totalAttempts,
+              needsReview: progress.needsReview || false,
+              readyForNext: progress.readyForNext || false
             },
             lastActive: new Date()
           }
-          
+
           await persistenceService.saveSubject({
-            id: selectedSubject.id,
+            id: subjectForPlan.id,
             user_id: user.id,
-            name: selectedSubject.name,
-            keywords: selectedSubject.topicKeywords || [],
-            lesson_plan: updatedSubject.lessonPlan,
-            learning_progress: updatedSubject.learningProgress,
+            name: subjectForPlan.name,
+            keywords: subjectForPlan.topicKeywords || [],
+            lesson_plan: {
+              subject: subjectName,
+              lessons: lessonPlan.lessons.map((lesson: Lesson) => ({
+                ...lesson,
+                completed: false
+              })),
+              currentLessonIndex: lessonPlan.currentLessonIndex
+            },
+            learning_progress: {
+              correctAnswers: progress.correctAnswers,
+              totalAttempts: progress.totalAttempts,
+              needsReview: progress.needsReview || false,
+              readyForNext: progress.readyForNext || false
+            },
             last_active: updatedSubject.lastActive.toISOString()
           })
           
@@ -188,7 +202,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       }
 
       const planMessage = `Great! I've created a learning plan for ${subjectName}:\n\n` +
-        lessonPlan.lessons.map((lesson, i) => `${i + 1}. ${lesson.title}`).join('\n') +
+        lessonPlan.lessons.map((lesson: Lesson, i: number) => `${i + 1}. ${lesson.title}`).join('\n') +
         `\n\nLet's start with lesson 1: "${lessonPlan.lessons[0].title}"`
 
       const aiResponse: Message = {
@@ -201,15 +215,15 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       setMessages(prev => [...prev, aiResponse])
       
       // Save AI response (should have subject by now, but handle pending just in case)
-      if (selectedSubject) {
+      if (subjectForPlan) {
         await saveMessageToPersistence(aiResponse)
           } else {
         console.log('⏳ Adding AI response to pending queue')
         setPendingMessages(prev => [...prev, aiResponse])
       }
 
-      // Generate content for first lesson - pass the lesson plan directly to avoid state timing issues
-      await generateLessonContent(lessonPlan, progress, subjectName)
+      // Generate content for first lesson - pass the correct subject ID
+      await generateLessonContent(lessonPlan, progress, subjectName, subjectForPlan?.id)
     } catch (error) {
       console.error('Error creating lesson plan:', error)
       setIsTyping(false)
@@ -230,7 +244,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         if (recentUserMessages.length > 0) {
           console.log('🆕 Creating lesson plan for new subject:', selectedSubject.name)
           lessonPlanCreationAttempted.current = selectedSubject.name
-          await createLessonPlan(selectedSubject.name)
+          await createLessonPlan(selectedSubject.name, selectedSubject)
       }
     }
   }, [selectedSubject, currentLessonPlan, createLessonPlan, messages])
@@ -279,7 +293,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       if (selectedSubject) {
         // Check if we need to create a lesson plan
         if (!currentLessonPlan) {
-          await createLessonPlan(selectedSubject.name)
+          await createLessonPlan(selectedSubject.name, selectedSubject)
         } else {
           // We have a lesson plan, generate content for current lesson
           await generateCurrentLessonContent()
@@ -309,7 +323,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }, 500)
   }
 
-  const generateLessonContent = async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, userAction?: string) => {
+  const generateLessonContent = async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, subjectId?: string, userAction?: string) => {
     try {
       const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
       console.log('📖 Generating content for lesson:', currentLesson.title)
@@ -366,12 +380,17 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       
       console.log('✅ Generated lesson content:', lessonContent)
 
+      // Use the provided subjectId or fall back to selectedSubject
+      const targetSubjectId = subjectId || selectedSubject?.id
+      console.log('🎯 Using subject ID for content:', { provided: subjectId, selected: selectedSubject?.id, final: targetSubjectId })
+
       // Send the interactive content to ContentPane via custom event
       const contentData = {
         id: `lesson-${currentLesson.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: lessonContent.type,
         data: lessonContent.data,
-        title: currentLesson.title
+        title: currentLesson.title,
+        subjectId: targetSubjectId
       }
       console.log('📤 Dispatching content event:', contentData)
       
@@ -392,7 +411,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       return
     }
 
-    await generateLessonContent(currentLessonPlan, currentProgress, selectedSubject.name, userAction)
+    await generateLessonContent(currentLessonPlan, currentProgress, selectedSubject.name, selectedSubject.id, userAction)
   }
 
   const handleNextInteractiveContent = async (action: string, lessonPlan: LessonPlan, progress: LearningProgress | null) => {
@@ -696,6 +715,26 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       handleSendMessage()
     }
   }
+
+  // Listen for new subject creation events from Dashboard
+  useEffect(() => {
+    const handleNewSubject = (event: Event) => {
+      const customEvent = event as CustomEvent
+      const { subject } = customEvent.detail
+      console.log('🆕 ChatPane received new subject event:', subject.name)
+      
+      // Create lesson plan immediately with the new subject context
+      if (!currentLessonPlan || currentLessonPlan.subject !== subject.name) {
+        console.log('📚 Creating lesson plan for newly created subject:', subject.name)
+        createLessonPlan(subject.name, subject)
+      }
+    }
+
+    window.addEventListener('newSubjectCreated', handleNewSubject)
+    return () => {
+      window.removeEventListener('newSubjectCreated', handleNewSubject)
+    }
+  }, [createLessonPlan, currentLessonPlan])
 
   if (!selectedSubject) {
     return (

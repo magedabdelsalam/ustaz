@@ -14,7 +14,12 @@ import {
   StepByStepSolver,
   FillInTheBlank,
   DragAndDrop,
-  ComponentType
+  ComponentType,
+  InteractiveExample,
+  ProgressQuiz,
+  GraphVisualizer,
+  FormulaExplorer,
+  TextHighlighter
 } from '@/components/interactive'
 
 interface InteractiveComponentProps {
@@ -135,6 +140,16 @@ export function ContentPane({
     const handleContentGenerated = (event: CustomEvent) => {
       const contentData = event.detail
       console.log('📥 ContentPane received content event:', contentData)
+      console.log('🔍 Current subject:', selectedSubject?.id, selectedSubject?.name)
+      console.log('🔍 Content subject:', contentData.subjectId)
+      
+      // Validate that content is for the currently selected subject
+      if (!selectedSubject || contentData.subjectId !== selectedSubject.id) {
+        console.log('⚠️ Content subject mismatch - ignoring content for wrong subject')
+        console.log('📝 Expected:', selectedSubject?.id, 'Received:', contentData.subjectId)
+        return
+      }
+      
       console.log('🔍 Current saving set size:', savingContentIdsRef.current.size)
       
       // Check if content already exists to prevent duplicates
@@ -159,6 +174,12 @@ export function ContentPane({
         // Persist to backend (use setTimeout to avoid blocking)
         setTimeout(async () => {
           if (user && selectedSubject) {
+            // Double-check subject hasn't changed during async operation
+            if (contentData.subjectId !== selectedSubject.id) {
+              console.log('⚠️ Subject changed during persist operation, skipping save')
+              return
+            }
+            
             // Check if we're already saving this content ID
             if (savingContentIdsRef.current.has(newContent.id)) {
               console.log('⚠️ Content save already in progress, skipping:', newContent.id)
@@ -227,6 +248,16 @@ export function ContentPane({
         return <FillInTheBlank {...props} />
       case 'drag-drop':
         return <DragAndDrop {...props} />
+      case 'interactive-example':
+        return <InteractiveExample {...props} />
+      case 'progress-quiz':
+        return <ProgressQuiz {...props} />
+      case 'graph-visualizer':
+        return <GraphVisualizer {...props} />
+      case 'formula-explorer':
+        return <FormulaExplorer {...props} />
+      case 'text-highlighter':
+        return <TextHighlighter {...props} />
       default:
         return (
           <Card>
