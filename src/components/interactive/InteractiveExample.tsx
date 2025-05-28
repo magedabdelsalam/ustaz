@@ -42,10 +42,12 @@ interface DisplayElement {
 }
 
 export const InteractiveExample = memo(function InteractiveExample({ 
-  onInteraction, 
+  onInteraction: _onInteraction, 
   content, 
-  id 
+  id: _id 
 }: InteractiveComponentProps) {
+  void _onInteraction // Intentionally unused - interface requirement
+  void _id // Intentionally unused - interface requirement
   const [controlValues, setControlValues] = useState<Record<string, number | boolean>>({})
   const [isPlaying, setIsPlaying] = useState(false)
   const [animationFrame, setAnimationFrame] = useState(0)
@@ -91,21 +93,10 @@ export const InteractiveExample = memo(function InteractiveExample({
       ...prev,
       [controlId]: value
     }))
-    
-    onInteraction('control_changed', {
-      componentId: id,
-      controlId,
-      value,
-      allValues: { ...controlValues, [controlId]: value }
-    })
   }
 
   const handlePlayPause = () => {
     setIsPlaying(!isPlaying)
-    onInteraction('animation_toggled', {
-      componentId: id,
-      isPlaying: !isPlaying
-    })
   }
 
   const handleReset = () => {
@@ -118,8 +109,6 @@ export const InteractiveExample = memo(function InteractiveExample({
     setControlValues(resetValues)
     setIsPlaying(false)
     setAnimationFrame(0)
-    
-    onInteraction('example_reset', { componentId: id })
   }
 
   const evaluateExpression = (expression: string): string => {

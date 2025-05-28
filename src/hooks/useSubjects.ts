@@ -250,7 +250,7 @@ export function useSubjects() {
   // Optimized subject analysis - cached and efficient
   const analyzeMessage = useCallback(async (message: string) => {
     // Create cache key from message content (first 50 chars + length)
-    const cacheKey = `${message.toLowerCase().slice(0, 50)}_${message.length}`
+    const cacheKey = `${message.toLowerCase().slice(0, 50)}_${message.length}_${currentSubject?.name || 'none'}`
     
     // Check cache first
     if (messageAnalysisCache.has(cacheKey)) {
@@ -260,11 +260,17 @@ export function useSubjects() {
 
     try {
       logger.debug('🤖 Making AI analysis call (cache miss)')
+      
+      // Enhanced prompt with current subject context
+      const contextPrompt = currentSubject 
+        ? `Current subject context: "${currentSubject.name}" with keywords: ${currentSubject.topicKeywords.join(', ')}\n\nAnalyze if this message is:\n1. A question/request related to the current subject context (stay in subject)\n2. A completely new subject request (create new subject)\n\nFor current subject questions, also suggest the best interactive component type from: explainer, multiple-choice, concept-card, fill-blank, step-solver, progress-quiz, interactive-example, text-highlighter, drag-drop, graph-visualizer, formula-explorer.\n\nMessage: "${message}"\n\nReturn JSON: {"subjectName": string, "isNewSubject": boolean, "confidence": number, "suggestedComponent": string | null, "reasoning": string}`
+        : `Analyze if this message indicates a new subject request. Return JSON: {"subjectName": string, "isNewSubject": boolean, "confidence": number, "suggestedComponent": null, "reasoning": string}`
+
       const response = await chatCompletion({
         messages: [
           {
             role: "system",
-            content: "Analyze if this message indicates a new subject. Return JSON: {\"subjectName\": string, \"isNewSubject\": boolean, \"confidence\": number}"
+            content: contextPrompt
           },
           {
             role: "user",
@@ -272,7 +278,7 @@ export function useSubjects() {
           }
         ],
         temperature: 0.1,
-        max_tokens: 100
+        max_tokens: 200
       })
 
       const content = response.choices[0].message.content
@@ -295,8 +301,33 @@ export function useSubjects() {
     } catch (error) {
       console.error('AI analysis failed:', error)
       
-      // Enhanced fallback logic with better subject extraction
-      // Extract potential subject from common patterns
+      // Enhanced fallback logic with context awareness
+      const isContextRelated = currentSubject ? analyzeContextRelatedness(message, currentSubject) : false
+      
+      if (isContextRelated && currentSubject) {
+        // Message seems related to current subject - suggest appropriate component
+        const suggestedComponent = suggestInteractiveComponent(message)
+        
+        const contextResult = {
+          subjectName: currentSubject.name,
+          isNewSubject: false,
+          confidence: 0.7,
+          suggestedComponent,
+          reasoning: `Message appears related to current subject "${currentSubject.name}"`
+        }
+        
+        console.log('🎯 Context-aware fallback (staying in subject):', {
+          message: message.substring(0, 50) + '...',
+          currentSubject: currentSubject.name,
+          suggestedComponent,
+          isNewSubject: false
+        })
+        
+        messageAnalysisCache.set(cacheKey, contextResult)
+        return contextResult
+      }
+      
+      // Enhanced fallback logic for new subject detection
       let extractedSubject = 'General Study'
       
       // Pattern: "learn [subject]", "study [subject]", "teach me [subject]"
@@ -350,7 +381,9 @@ export function useSubjects() {
       const fallbackResult = {
         subjectName: extractedSubject,
         isNewSubject: !currentSubject || isLearningMessage || hasSpecificSubject,
-        confidence: hasSpecificSubject ? 0.8 : 0.5
+        confidence: hasSpecificSubject ? 0.8 : 0.5,
+        suggestedComponent: null,
+        reasoning: 'Fallback analysis - no current subject context'
       }
       
       console.log('🎯 Fallback subject analysis:', {
@@ -364,7 +397,108 @@ export function useSubjects() {
       messageAnalysisCache.set(cacheKey, fallbackResult)
       return fallbackResult
     }
-  }, [currentSubject])
+  }, [currentSubject]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Helper function to analyze if message is related to current subject context
+  const analyzeContextRelatedness = useCallback((message: string, subject: Subject): boolean => {
+    const messageLower = message.toLowerCase()
+    const subjectNameLower = subject.name.toLowerCase()
+    const keywords = subject.topicKeywords.map(k => k.toLowerCase())
+    
+    // Check if message contains subject name or keywords
+    const containsSubjectName = messageLower.includes(subjectNameLower)
+    const containsKeywords = keywords.some(keyword => messageLower.includes(keyword))
+    
+    // Check for context-indicating phrases (asking about current topic)
+    const contextPhrases = [
+      'explain', 'why', 'how', 'what is', 'tell me about', 'more about',
+      'clarify', 'elaborate', 'expand on', 'give me examples', 'show me',
+      'help me understand', 'break it down', 'what does', 'how does'
+    ]
+    const hasContextPhrase = contextPhrases.some(phrase => messageLower.includes(phrase))
+    
+    // Check for question words/patterns that suggest context questions
+    const questionPatterns = [
+      /^why\s/i, /^how\s/i, /^what\s/i, /^where\s/i, /^when\s/i,
+      /explain.*why/i, /explain.*how/i, /tell me.*why/i, /tell me.*how/i,
+      /\?$/, /help me/i, /show me/i, /give me/i
+    ]
+    const hasQuestionPattern = questionPatterns.some(pattern => pattern.test(message))
+    
+    // Subject-specific context detection
+    let hasSubjectSpecificContext = false
+    if (subjectNameLower.includes('photosynthesis') || keywords.includes('photosynthesis')) {
+      const photosyntheticTerms = ['chlorophyll', 'green', 'sunlight', 'leaves', 'plants', 'oxygen', 'carbon dioxide', 'glucose']
+      hasSubjectSpecificContext = photosyntheticTerms.some(term => messageLower.includes(term))
+    } else if (subjectNameLower.includes('math') || keywords.includes('mathematics')) {
+      const mathTerms = ['equation', 'solve', 'calculate', 'formula', 'number', 'variable', 'algebra']
+      hasSubjectSpecificContext = mathTerms.some(term => messageLower.includes(term))
+    } else if (subjectNameLower.includes('history')) {
+      const historyTerms = ['war', 'battle', 'revolution', 'treaty', 'empire', 'king', 'queen', 'president']
+      hasSubjectSpecificContext = historyTerms.some(term => messageLower.includes(term))
+    }
+    
+    // NOT a new subject request if contains typical new subject patterns
+    const newSubjectPatterns = [
+      /^learn\s+(?!more|about)/i, /^study\s+(?!this|more)/i, /^teach me\s+(?!more|about)/i,
+      /^help me learn\s+(?!more|about)/i, /course|tutorial|training/i
+    ]
+    const looksLikeNewSubject = newSubjectPatterns.some(pattern => pattern.test(message))
+    
+    console.log('🔍 Context analysis:', {
+      message: message.substring(0, 50) + '...',
+      subject: subject.name,
+      containsSubjectName,
+      containsKeywords,
+      hasContextPhrase,
+      hasQuestionPattern,
+      hasSubjectSpecificContext,
+      looksLikeNewSubject,
+      finalDecision: (containsSubjectName || containsKeywords || hasSubjectSpecificContext || hasContextPhrase || hasQuestionPattern) && !looksLikeNewSubject
+    })
+    
+    return (containsSubjectName || containsKeywords || hasSubjectSpecificContext || hasContextPhrase || hasQuestionPattern) && !looksLikeNewSubject
+  }, [])
+
+  // Helper function to suggest appropriate interactive component based on message content
+  const suggestInteractiveComponent = useCallback((message: string): string => {
+    const messageLower = message.toLowerCase()
+    
+    // Component selection based on message intent
+    if (/quiz|test|question|check my knowledge/i.test(messageLower)) {
+      return 'multiple-choice'
+    }
+    if (/explain|why|how|tell me about|what is|elaborate|clarify|breakdown|detailed/i.test(messageLower)) {
+      return 'explainer'
+    }
+    if (/examples|show me|demonstrate|illustrate/i.test(messageLower)) {
+      return 'interactive-example'
+    }
+    if (/practice|exercise|try|drill|work on/i.test(messageLower)) {
+      return 'fill-blank'
+    }
+    if (/step by step|solve|solution|process|methodology/i.test(messageLower)) {
+      return 'step-solver'
+    }
+    if (/match|pair|connect|categorize|group|sort/i.test(messageLower)) {
+      return 'drag-drop'
+    }
+    if (/highlight|identify|find|analyze text|mark/i.test(messageLower)) {
+      return 'text-highlighter'
+    }
+    if (/graph|chart|visualize|plot|data/i.test(messageLower)) {
+      return 'graph-visualizer'
+    }
+    if (/formula|equation|calculate|mathematical/i.test(messageLower)) {
+      return 'formula-explorer'
+    }
+    if (/concept|understand|basic|foundation/i.test(messageLower)) {
+      return 'concept-card'
+    }
+    
+    // Default to explainer for general questions
+    return 'explainer'
+  }, [])
 
   // Optimized subject selection
   const selectSubject = useCallback((subject: Subject) => {

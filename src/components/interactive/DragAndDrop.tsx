@@ -151,12 +151,6 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
         [draggedItem]: targetId
       }))
       setDraggedItem(null)
-      
-      onInteraction('item_dropped', {
-        componentId: id,
-        itemId: draggedItem,
-        targetId: targetId
-      })
     }
   }
 

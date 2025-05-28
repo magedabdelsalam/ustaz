@@ -355,7 +355,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }, 500)
   }
 
-  const generateLessonContent = async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, subjectId?: string, userAction?: string) => {
+  const generateLessonContent = useCallback(async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, subjectId?: string, userAction?: string) => {
     try {
       const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
       console.log('📖 Generating content for lesson:', currentLesson.title)
@@ -365,7 +365,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.log('📊 Content variety for this lesson:', varietyStats)
       
       // Determine content type based on user action and progress
-      let contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' = 'explanation'
+      let contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' = 'explanation'
       
       if (userAction === 'practice') {
         // User specifically wants to practice - prioritize interactive components
@@ -392,6 +392,13 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         // User wants deeper explanation - give them explanations
         contentType = 'explanation'
         console.log('🎯 User wants deeper explanation, selected:', contentType)
+      } else if (userAction === 'explainer' || userAction === 'concept-card' || userAction === 'step-solver' || 
+                 userAction === 'interactive-example' || userAction === 'text-highlighter' || 
+                 userAction === 'drag-drop' || userAction === 'graph-visualizer' || 
+                 userAction === 'formula-explorer' || userAction === 'multiple-choice') {
+        // Direct content type mapping from suggested components
+        contentType = userAction
+        console.log('🎯 Direct component type requested:', contentType)
       } else {
         // Default behavior based on progress
         if (progress && progress.totalAttempts === 0) {
@@ -435,16 +442,16 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.error('❌ Error generating lesson content:', error)
       setIsTyping(false)
     }
-  }
+  }, [selectedSubject])
 
-  const generateCurrentLessonContent = async (userAction?: string) => {
+  const generateCurrentLessonContent = useCallback(async (userAction?: string) => {
     if (!currentLessonPlan || !selectedSubject) {
       console.log('❌ Cannot generate content: missing lesson plan or subject')
       return
     }
 
     await generateLessonContent(currentLessonPlan, currentProgress, selectedSubject.name, selectedSubject.id, userAction)
-  }
+  }, [currentLessonPlan, selectedSubject, currentProgress, generateLessonContent])
 
   const handleNextInteractiveContent = async (action: string, lessonPlan: LessonPlan, progress: LearningProgress | null) => {
     console.log('🎯 Handling next content with lesson progression:', { action, progress })
@@ -623,58 +630,58 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       // Handle quiz interaction
       console.log('🎯 Handling quiz interaction:', interactionData.quiz)
       // Implementation of handling quiz interaction
-      } else if (action === 'concept_expanded' || action === 'examples_requested' || action === 'help_requested') {
-        // For concept interactions, provide deeper explanation and generate new content
-        console.log('🎯 Handling concept interaction:', action, data)
+    } else if (action === 'concept_expanded' || action === 'examples_requested' || action === 'help_requested') {
+      // For concept interactions, provide deeper explanation and generate new content
+      console.log('🎯 Handling concept interaction:', action, data)
       
       // Type guard for data with concept property
       const conceptData = data as { concept?: string } | null
       const conceptName = conceptData?.concept || currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title || 'this topic'
         
-        let responseMessage = ''
-        let contentAction = ''
-        
-        if (action === 'concept_expanded') {
+      let responseMessage = ''
+      let contentAction = ''
+      
+      if (action === 'concept_expanded') {
         responseMessage = `Let me provide a deeper explanation of "${conceptName}".`
-          contentAction = 'concept_expanded'
-        } else if (action === 'examples_requested') {
+        contentAction = 'concept_expanded'
+      } else if (action === 'examples_requested') {
         responseMessage = `Here are more examples for "${conceptName}".`
-          contentAction = 'examples_requested'
-        } else {
+        contentAction = 'examples_requested'
+      } else {
         responseMessage = `Let me help you understand "${conceptName}" better.`
-          contentAction = 'concept_expanded'
-        }
-        
-        const explanationMessage: Message = {
-          id: `explanation-${Date.now()}`,
-          role: 'assistant',
-          content: responseMessage,
-          timestamp: new Date(),
-          hasGeneratedContent: true
-        }
-        setMessages(prev => [...prev, explanationMessage])
-        await saveMessageToPersistence(explanationMessage)
-        
-        // Generate new interactive content based on the specific action
-        await generateCurrentLessonContent(contentAction)
-      } else if (action === 'ready_for_next') {
-        // Student indicates they're ready to move forward (Practice This button)
-        const readyMessage: Message = {
-          id: `ready-${Date.now()}`,
-          role: 'assistant',
+        contentAction = 'concept_expanded'
+      }
+      
+      const explanationMessage: Message = {
+        id: `explanation-${Date.now()}`,
+        role: 'assistant',
+        content: responseMessage,
+        timestamp: new Date(),
+        hasGeneratedContent: true
+      }
+      setMessages(prev => [...prev, explanationMessage])
+      await saveMessageToPersistence(explanationMessage)
+      
+      // Generate new interactive content based on the specific action
+      await generateCurrentLessonContent(contentAction)
+    } else if (action === 'ready_for_next') {
+      // Student indicates they're ready to move forward (Practice This button)
+      const readyMessage: Message = {
+        id: `ready-${Date.now()}`,
+        role: 'assistant',
         content: `Great! Let's practice "${currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title}" with some hands-on exercises:`,
-          timestamp: new Date(),
-          hasGeneratedContent: true
-        }
-        setMessages(prev => [...prev, readyMessage])
-        await saveMessageToPersistence(readyMessage)
-        
-        // Generate practice content specifically
-        await generateCurrentLessonContent('practice')
-      } else if (action === 'next_exercise' || action === 'next_question' || action === 'next_problem') {
-        // Handle all "Next" button interactions with proper lesson progression
-        console.log('🎯 Next button clicked - calling handleNextInteractiveContent with:', {
-          action,
+        timestamp: new Date(),
+        hasGeneratedContent: true
+      }
+      setMessages(prev => [...prev, readyMessage])
+      await saveMessageToPersistence(readyMessage)
+      
+      // Generate practice content specifically
+      await generateCurrentLessonContent('practice')
+    } else if (action === 'next_exercise' || action === 'next_question' || action === 'next_problem') {
+      // Handle all "Next" button interactions with proper lesson progression
+      console.log('🎯 Next button clicked - calling handleNextInteractiveContent with:', {
+        action,
         hasLessonPlan: !!currentLessonPlan,
         hasProgress: !!currentProgress,
         progressDetails: currentProgress ? {
@@ -682,65 +689,88 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
           totalAttempts: currentProgress.totalAttempts,
           readyForNext: currentProgress.readyForNext,
           needsReview: currentProgress.needsReview
-          } : null
-        })
-        
-        // Track this as a new learning attempt when user requests more content
-        // This ensures their engagement is counted towards advancement
-        console.log('📊 Tracking new content request as learning engagement...')
+        } : null
+      })
+      
+      // Track this as a new learning attempt when user requests more content
+      // This ensures their engagement is counted towards advancement
+      console.log('📊 Tracking new content request as learning engagement...')
       const currentLesson = currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]
       const updatedProgress = aiTutor.updateProgress(selectedSubject!.name, true, currentLesson?.id) // Count as engagement/correct attempt
-        setCurrentProgress(updatedProgress)
-        console.log('✅ Progress updated for new content request:', updatedProgress)
+      setCurrentProgress(updatedProgress)
+      console.log('✅ Progress updated for new content request:', updatedProgress)
 
-        // Dispatch progress update event to Dashboard
-        const progressEvent = new CustomEvent('progressUpdated', {
-          detail: {
+      // Dispatch progress update event to Dashboard
+      const progressEvent = new CustomEvent('progressUpdated', {
+        detail: {
           subjectId: selectedSubject?.id,
-            learningProgress: {
-              ...updatedProgress,
-              currentLessonIndex: currentLessonPlan?.currentLessonIndex || 0,
-              totalLessons: currentLessonPlan?.lessons.length || 0
-            }
+          learningProgress: {
+            ...updatedProgress,
+            currentLessonIndex: currentLessonPlan?.currentLessonIndex || 0,
+            totalLessons: currentLessonPlan?.lessons.length || 0
           }
-        })
-        window.dispatchEvent(progressEvent)
-        console.log('📡 Dispatched progress update event for content request')
-        
+        }
+      })
+      window.dispatchEvent(progressEvent)
+      console.log('📡 Dispatched progress update event for content request')
+      
       await handleNextInteractiveContent(action, currentLessonPlan!, updatedProgress)
-      } else {
-        // Handle other interactions with brief response but focus on action
-        console.log('🤔 Unknown action received:', action, '- Not handled as advancement trigger')
-        console.log('📝 Full interaction data:', data)
-        
-      // Only call generateTutorResponse if we have valid lesson and progress data
+    } else if (action === 'answer_submitted' || action === 'fill_blank_submitted' || action === 'drag_drop_submitted' || action === 'quiz_submitted') {
+      // Handle final submission actions - these are the "final" buttons that should trigger AI feedback
+      console.log('✅ Final submission action received:', action, data)
+      
       if (currentLessonPlan && currentProgress) {
         const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
         if (currentLesson) {
-        const response = await aiTutor.generateTutorResponse(
+          const response = await aiTutor.generateTutorResponse(
             selectedSubject!.name,
-          action,
-          data,
+            action,
+            data,
             { lesson: currentLesson, progress: currentProgress }
-        )
+          )
 
-        const interactionResponse: Message = {
-          id: `interaction-${Date.now()}`,
-          role: 'assistant',
-          content: response,
-          timestamp: new Date()
+          const interactionResponse: Message = {
+            id: `interaction-${Date.now()}`,
+            role: 'assistant',
+            content: response,
+            timestamp: new Date()
+          }
+          setMessages(prev => [...prev, interactionResponse])
+          await saveMessageToPersistence(interactionResponse)
         }
-        setMessages(prev => [...prev, interactionResponse])
       }
+    } else {
+      // For any other actions (like explain_more, practice_this), provide appropriate responses
+      console.log('🔍 Other action received:', action, data)
+      
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const response = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            action,
+            data,
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const interactionResponse: Message = {
+            id: `interaction-${Date.now()}`,
+            role: 'assistant',
+            content: response,
+            timestamp: new Date()
+          }
+          setMessages(prev => [...prev, interactionResponse])
+          await saveMessageToPersistence(interactionResponse)
+        }
       } else {
         // Fallback response when lesson plan or progress is not available
-      const fallbackResponse: Message = {
-        id: `fallback-${Date.now()}`,
-        role: 'assistant',
+        const fallbackResponse: Message = {
+          id: `fallback-${Date.now()}`,
+          role: 'assistant',
           content: "I'm still setting up your learning plan. Please try again in a moment!",
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, fallbackResponse])
+          timestamp: new Date()
+        }
+        setMessages(prev => [...prev, fallbackResponse])
       }
     }
   }
@@ -776,6 +806,86 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       window.removeEventListener('newSubjectCreated', handleNewSubject)
     }
   }, [createLessonPlan, currentLessonPlan])
+
+  // Listen for contextual content generation events from Dashboard
+  useEffect(() => {
+    const handleContextualContent = async (event: Event) => {
+      const customEvent = event as CustomEvent
+      const { subject, userMessage, suggestedComponent, confidence, reasoning } = customEvent.detail
+      
+      console.log('🎯 ChatPane received contextual content request:', {
+        subject: subject.name,
+        message: userMessage.substring(0, 50) + '...',
+        suggestedComponent,
+        confidence,
+        reasoning
+      })
+
+      // Generate AI response acknowledging the question
+      const responseMessage: Message = {
+        id: `contextual-${Date.now()}`,
+        role: 'assistant',
+        content: `Let me help you with that! I'll create some interactive content to explain this.`,
+        timestamp: new Date(),
+        hasGeneratedContent: true
+      }
+      setMessages(prev => [...prev, responseMessage])
+      await saveMessageToPersistence(responseMessage)
+
+      // If we have a lesson plan, generate contextual content
+      if (currentLessonPlan && currentProgress) {
+        console.log('📚 Generating contextual content with suggested component:', suggestedComponent)
+        
+        // Map suggested component to content action for generateLessonContent
+        let contentAction = 'explanation' // default
+        switch (suggestedComponent) {
+          case 'explainer':
+            contentAction = 'explainer'
+            break
+          case 'multiple-choice':
+            contentAction = 'multiple-choice'
+            break
+          case 'fill-blank':
+            contentAction = 'fill-blank'
+            break
+          case 'concept-card':
+            contentAction = 'concept-card'
+            break
+          case 'step-solver':
+            contentAction = 'step-solver'
+            break
+          case 'interactive-example':
+            contentAction = 'interactive-example'
+            break
+          case 'text-highlighter':
+            contentAction = 'text-highlighter'
+            break
+          case 'drag-drop':
+            contentAction = 'drag-drop'
+            break
+          case 'graph-visualizer':
+            contentAction = 'graph-visualizer'
+            break
+          case 'formula-explorer':
+            contentAction = 'formula-explorer'
+            break
+          default:
+            contentAction = 'explainer'
+        }
+        
+        await generateCurrentLessonContent(contentAction)
+      } else if (selectedSubject) {
+        // If no lesson plan exists, create one first
+        console.log('📋 No lesson plan exists, creating one first for contextual content')
+        await createLessonPlan(selectedSubject.name, selectedSubject)
+      }
+    }
+
+    window.addEventListener('generateContextualContent', handleContextualContent)
+    return () => {
+      window.removeEventListener('generateContextualContent', handleContextualContent)
+    }
+  }, [currentLessonPlan, currentProgress, selectedSubject, saveMessageToPersistence, generateCurrentLessonContent, createLessonPlan])
 
   if (!selectedSubject) {
     return (

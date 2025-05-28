@@ -54,6 +54,8 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   content, 
   id 
 }: InteractiveComponentProps) {
+  void onInteraction // Intentionally unused - interface requirement
+  void id // Intentionally unused - interface requirement
   const [variableValues, setVariableValues] = useState<Record<string, number>>({})
   const [showSteps, setShowSteps] = useState(false)
   const [selectedExample, setSelectedExample] = useState<string | null>(null)
@@ -116,13 +118,6 @@ export const FormulaExplorer = memo(function FormulaExplorer({
       ...prev,
       [variableId]: value
     }))
-
-    onInteraction('variable_changed', {
-      componentId: id,
-      variableId,
-      value,
-      allValues: { ...variableValues, [variableId]: value }
-    })
   }
 
   const calculateStep = (stepExpression: string): number | string => {
@@ -158,11 +153,6 @@ export const FormulaExplorer = memo(function FormulaExplorer({
     if (example) {
       setVariableValues(example.values)
       setSelectedExample(exampleId)
-      onInteraction('example_selected', {
-        componentId: id,
-        exampleId,
-        values: example.values
-      })
     }
   }
 
@@ -174,7 +164,6 @@ export const FormulaExplorer = memo(function FormulaExplorer({
     setVariableValues(resetValues)
     setSelectedExample(null)
     setShowSteps(false)
-    onInteraction('formula_reset', { componentId: id })
   }
 
   const renderFormula = (formula: string, large = false) => {

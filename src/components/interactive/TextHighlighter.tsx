@@ -107,28 +107,16 @@ export const TextHighlighter = memo(function TextHighlighter({
 
     setUserHighlights(prev => [...prev, newHighlight])
     selection.removeAllRanges()
-
-    onInteraction('text_highlighted', {
-      componentId: id,
-      highlight: newHighlight,
-      totalHighlights: userHighlights.length + 1
-    })
   }
 
   const removeHighlight = (highlightId: string) => {
     setUserHighlights(prev => prev.filter(h => h.id !== highlightId))
-    onInteraction('highlight_removed', {
-      componentId: id,
-      highlightId,
-      totalHighlights: userHighlights.length - 1
-    })
   }
 
   const handleReset = () => {
     setUserHighlights([])
     setShowResults(false)
     setShowTargets(false)
-    onInteraction('highlighter_reset', { componentId: id })
   }
 
   const handleCheckAnswers = () => {

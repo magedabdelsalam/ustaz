@@ -371,3 +371,120 @@ import { LoadingText } from '@/components/ui/loading-spinner'
 ## Development
 
 To run the development server:
+
+```
+
+# Ustaz - AI-Powered Learning Platform
+
+Ustaz is an intelligent tutoring system that creates personalized, interactive learning experiences. It uses AI to generate contextually appropriate educational content and interactive components.
+
+## Key Features
+
+### 🎯 Context-Aware Learning
+Ustaz now intelligently distinguishes between:
+- **Context questions**: Questions about the current lesson that should generate interactive components
+- **New subject requests**: Requests to start learning something completely different
+
+**Example scenarios:**
+- During a **Photosynthesis** lesson, asking "explain to me why it's green" will generate an **Explainer** component about chlorophyll and plant coloration within the photosynthesis context
+- Asking "help me learn social media marketing" will create a new **Social Media Marketing** subject
+
+### 🧩 Smart Component Selection
+The AI automatically selects the most appropriate interactive component based on your question:
+
+| Question Intent | Generated Component |
+|---|---|
+| "explain why...", "tell me about..." | **Explainer** - Detailed explanations |
+| "quiz me", "test my knowledge" | **Multiple Choice** - Knowledge assessment |
+| "show me examples", "demonstrate" | **Interactive Example** - Hands-on demos |
+| "practice", "exercise" | **Fill-in-the-Blank** - Practice exercises |
+| "step by step", "solve this" | **Step Solver** - Problem-solving guide |
+| "match", "categorize" | **Drag & Drop** - Matching exercises |
+| "highlight", "identify in text" | **Text Highlighter** - Text analysis |
+| "graph", "visualize data" | **Graph Visualizer** - Data visualization |
+| "formula", "equation" | **Formula Explorer** - Mathematical exploration |
+
+### 📚 Interactive Learning Components
+
+Ustaz provides 11 different types of interactive components:
+- **Explainer**: Comprehensive explanations with multiple sections
+- **Concept Card**: Quick concept summaries with examples
+- **Multiple Choice**: Knowledge assessment quizzes
+- **Fill-in-the-Blank**: Practice exercises with hints
+- **Step-by-Step Solver**: Guided problem solving
+- **Interactive Example**: Hands-on demonstrations with controls
+- **Drag & Drop**: Matching and categorization exercises
+- **Text Highlighter**: Reading comprehension and analysis
+- **Graph Visualizer**: Data exploration and chart analysis
+- **Formula Explorer**: Mathematical formula manipulation
+- **Progress Quiz**: Comprehensive assessment with detailed feedback
+
+### 🔍 Context Analysis Engine
+
+The system uses advanced AI analysis to understand:
+1. **Subject relevance**: Is the question about the current topic?
+2. **Question intent**: What type of learning activity is most appropriate?
+3. **Learning progression**: Where is the student in their learning journey?
+
+**Context indicators the system recognizes:**
+- Subject-specific keywords and terminology
+- Question patterns ("why", "how", "explain", "show me")
+- Contextual phrases ("about this", "more details", "clarify")
+- Learning intent signals ("quiz", "practice", "examples")
+
+## Getting Started
+
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Set up environment variables (see `.env.example`)
+4. Run the development server: `npm run dev`
+
+## How It Works
+
+1. **Message Analysis**: When you send a message, the AI analyzes it for context and intent
+2. **Component Selection**: Based on your current subject and question type, it selects the best interactive component
+3. **Content Generation**: AI generates educational content specifically for that component type
+4. **Interactive Learning**: You engage with the component to learn and practice
+
+## Example Learning Flow
+
+```
+Student: "I want to learn about photosynthesis"
+→ Creates new "Photosynthesis" subject
+→ Generates lesson plan
+→ Shows Concept Card introducing photosynthesis
+
+Student: "explain to me why it's green"
+→ Stays in Photosynthesis subject (context-aware!)
+→ Generates Explainer component about chlorophyll and green coloration
+→ Interactive content with detailed sections about plant pigments
+
+Student: "quiz me on this"
+→ Still in Photosynthesis context
+→ Generates Multiple Choice quiz about chlorophyll and plant coloration
+
+Student: "help me learn Spanish"
+→ Recognizes new subject request
+→ Creates new "Spanish" subject
+→ Switches context and generates Spanish lesson plan
+```
+
+## Technology Stack
+
+- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
+- **UI Components**: Radix UI, ShadCN/UI
+- **Backend**: Supabase (PostgreSQL, Edge Functions)
+- **AI**: OpenAI GPT-4 for content generation and analysis
+- **Authentication**: Supabase Auth
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details.

@@ -474,8 +474,8 @@ export function ContentPane({
                     </div>
                     <div className="flex-1 overflow-auto p-4">
                       <div className="space-y-3">
-                        {contentFeed.slice(0, -1).reverse().map((content, index) => {
-                          const actualIndex = contentFeed.length - index - 2; // Correct index in original array
+                        {contentFeed.slice(0, -1).map((content, index) => {
+                          const actualIndex = index; // Direct index since we're not reversing
                           const isSelected = selectedContentIndex === actualIndex;
                           
                           return (

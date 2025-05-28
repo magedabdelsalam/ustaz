@@ -92,7 +92,7 @@ export interface Lesson {
 }
 
 export interface LessonContent {
-  type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank'
+  type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank' | 'explainer' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer'
   data: unknown
 }
 
@@ -393,7 +393,11 @@ class AITutorService {
     }
   }
 
-  async generateLessonContent(subject: string, lesson: Lesson, contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' = 'explanation'): Promise<LessonContent> {
+  async generateLessonContent(
+    subject: string, 
+    lesson: Lesson, 
+    contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' = 'explanation'
+  ): Promise<LessonContent> {
     logger.debug('🤖 AI Service: Generating content for:', lesson.title, 'Type:', contentType)
     
     // Get history of previously generated content for this lesson
@@ -410,7 +414,7 @@ class AITutorService {
     try {
       let prompt = ''
       
-      if (contentType === 'quiz') {
+      if (contentType === 'quiz' || contentType === 'multiple-choice') {
         const avoidanceText = previousQuestions.length > 0 
           ? `\n\nIMPORTANT - AVOID REPETITION:
 - DO NOT ask about these topics already covered: ${[...new Set(previousTopics)].join(', ')}
@@ -437,6 +441,213 @@ Return JSON:
 }
 
 Make it appropriately challenging but fair.${avoidanceText}`
+
+      } else if (contentType === 'explainer') {
+        prompt = `Create a detailed interactive explanation for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "explainer",
+  "data": {
+    "title": "${lesson.title}",
+    "overview": "Brief paragraph introducing the topic",
+    "sections": [
+      {
+        "heading": "Key Concept 1",
+        "paragraphs": ["Detailed explanation paragraph 1", "Supporting information paragraph"]
+      },
+      {
+        "heading": "Key Concept 2", 
+        "paragraphs": ["Another detailed explanation", "More supporting details"]
+      }
+    ],
+    "conclusion": "Summary paragraph tying everything together",
+    "difficulty": "beginner|intermediate|advanced",
+    "estimatedReadTime": 3
+  }
+}
+
+Create a comprehensive, well-structured explanation that breaks down the topic into digestible sections.`
+
+      } else if (contentType === 'concept-card') {
+        prompt = `Create an interactive concept card for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "concept-card", 
+  "data": {
+    "title": "${lesson.title}",
+    "summary": "One clear sentence summary",
+    "details": "2-3 sentences explaining the concept clearly",
+    "examples": ["example1", "example2", "example3"],
+    "keyPoints": ["point1", "point2", "point3"],
+    "difficulty": "beginner|intermediate|advanced"
+  }
+}
+
+Explain like you're talking to a student. Be clear and engaging.`
+
+      } else if (contentType === 'step-solver') {
+        const avoidanceText = previousQuestions.length > 0 
+          ? `\n\nIMPORTANT - AVOID REPETITION:
+- DO NOT repeat these problem types: ${previousQuestions.slice(-2).join(' | ')}
+- Create a DIFFERENT scenario or application within "${lesson.title}"
+- Vary the complexity and context (real-world applications, different scenarios)`
+          : ''
+
+        prompt = `Create a step-by-step practice problem for "${lesson.title}" in ${subject}.
+
+This is problem #${contentHistory.filter(item => item.type === 'step-solver').length + 1} for this lesson.
+
+Return JSON:
+{
+  "type": "step-solver",
+  "data": {
+    "problem": "A specific problem to solve",
+    "problemType": "${lesson.title}",
+    "steps": [
+      {
+        "id": "1",
+        "description": "What to do",
+        "calculation": "The work shown",
+        "result": "What you get",
+        "explanation": "Why this step matters"
+      }
+    ],
+    "finalAnswer": "The complete answer",
+    "difficulty": "beginner|intermediate|advanced",
+    "learningObjective": "What specific skill this develops"
+  }
+}
+
+Make it practical and educational.${avoidanceText}`
+
+      } else if (contentType === 'interactive-example') {
+        prompt = `Create an interactive example for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "interactive-example",
+  "data": {
+    "title": "${lesson.title} Interactive Demo",
+    "description": "Learn by exploring and adjusting parameters",
+    "controls": [
+      {
+        "id": "param1",
+        "type": "slider",
+        "label": "Parameter 1",
+        "min": 0,
+        "max": 10,
+        "step": 0.1,
+        "defaultValue": 5
+      }
+    ],
+    "display": [
+      {
+        "id": "result",
+        "type": "text",
+        "content": "Result will show here based on parameter changes"
+      }
+    ],
+    "explanation": "Detailed explanation of what the example demonstrates"
+  }
+}
+
+Create an engaging interactive demonstration.`
+
+      } else if (contentType === 'text-highlighter') {
+        prompt = `Create a text analysis exercise for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "text-highlighter",
+  "data": {
+    "title": "${lesson.title} Text Analysis",
+    "description": "Identify and highlight key elements in the text",
+    "text": "A relevant passage of text to analyze (3-4 sentences)",
+    "categories": [
+      {
+        "id": "category1",
+        "name": "Key Concept",
+        "color": "#22c55e",
+        "description": "Main ideas or concepts",
+        "shortcut": "K"
+      }
+    ],
+    "instructions": "Select text and highlight according to the categories",
+    "explanation": "Why this analysis is important for understanding ${lesson.title}"
+  }
+}
+
+Create meaningful text that students can analyze and learn from.`
+
+      } else if (contentType === 'drag-drop') {
+        prompt = `Create a drag and drop matching exercise for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "drag-drop",
+  "data": {
+    "question": "Match the following items correctly",
+    "instructions": "Drag items from the left to match with items on the right",
+    "items": ["Item 1", "Item 2", "Item 3"],
+    "targets": ["Target A", "Target B", "Target C"],
+    "correctMatches": {"Item 1": "Target A", "Item 2": "Target B", "Item 3": "Target C"},
+    "category": "${lesson.title}",
+    "explanation": "Why these matches are correct"
+  }
+}
+
+Create logical matching pairs related to the lesson topic.`
+
+      } else if (contentType === 'formula-explorer') {
+        prompt = `Create a formula exploration activity for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "formula-explorer",
+  "data": {
+    "title": "${lesson.title} Formula Explorer",
+    "formula": "A relevant mathematical formula",
+    "variables": [
+      {
+        "name": "x",
+        "description": "Variable description",
+        "min": 0,
+        "max": 10,
+        "step": 0.1,
+        "defaultValue": 1
+      }
+    ],
+    "explanation": "What this formula represents and how changing variables affects the result"
+  }
+}
+
+Create an educational formula that students can explore by changing variables.`
+
+      } else if (contentType === 'graph-visualizer') {
+        prompt = `Create a data visualization exercise for "${lesson.title}" in ${subject}.
+
+Return JSON:
+{
+  "type": "graph-visualizer",
+  "data": {
+    "title": "${lesson.title} Data Visualization",
+    "description": "Explore data through interactive charts",
+    "dataPoints": [
+      {"x": 1, "y": 2, "label": "Point 1"},
+      {"x": 2, "y": 4, "label": "Point 2"},
+      {"x": 3, "y": 6, "label": "Point 3"}
+    ],
+    "chartType": "line",
+    "xAxisLabel": "X Axis",
+    "yAxisLabel": "Y Axis",
+    "explanation": "What this data represents and what patterns students should observe"
+  }
+}
+
+Create meaningful data that illustrates concepts from the lesson.`
+
       } else if (contentType === 'explanation') {
         prompt = `Create an interactive explanation for "${lesson.title}" in ${subject}.
 
@@ -454,6 +665,7 @@ Return JSON:
 }
 
 Explain like you're talking to a student. Be clear and engaging.`
+
       } else if (contentType === 'fill-blank') {
         const avoidanceText = previousQuestions.length > 0 
           ? `\n\nIMPORTANT - AVOID REPETITION:
@@ -486,7 +698,9 @@ IMPORTANT:
 - Use ___ to mark where students should fill in answers
 - Template should be meaningful educational content, not generic phrases
 - Make it clear what specific concept is being tested${avoidanceText}`
+
       } else {
+        // Default to practice/step-solver for unknown types
         const avoidanceText = previousQuestions.length > 0 
           ? `\n\nIMPORTANT - AVOID REPETITION:
 - DO NOT repeat these problem types: ${previousQuestions.slice(-2).join(' | ')}
@@ -1110,9 +1324,23 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
       return typeof d === 'object' && d !== null && 'correct' in d
     }
     
+    // Handle formula explorer interactions
+    if (action === 'variable_changed') {
+      return "Great exploration! You can see how changing variables affects the formula result. Keep experimenting to understand the relationships."
+    }
+    
+    if (action === 'example_selected') {
+      return "Excellent choice! Real-world examples help you understand practical applications of mathematical formulas."
+    }
+    
+    if (action === 'formula_reset') {
+      return "Formula reset! You can now start fresh and explore different variable combinations."
+    }
+    
     if (action === 'answer_submitted' && isAnswerData(data)) {
       return data.correct ? "That's right! Good job." : "Not quite, but keep trying!"
     }
+    
     return "Keep exploring! You're doing great."
   }
 }

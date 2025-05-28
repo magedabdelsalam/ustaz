@@ -126,8 +126,22 @@ export function Dashboard() {
           }
         }
       } else if (currentSubject) {
-        // Continue with current subject - no additional action needed
+        // Continue with current subject - generate appropriate interactive component
         console.log('📝 Continuing with current subject:', currentSubject.name)
+        console.log('🎯 Suggested component:', analysis.suggestedComponent)
+        console.log('💭 Analysis reasoning:', analysis.reasoning)
+        
+        // Dispatch event to ChatPane to generate context-specific interactive content
+        const contextualContentEvent = new CustomEvent('generateContextualContent', {
+          detail: {
+            subject: currentSubject,
+            userMessage: message,
+            suggestedComponent: analysis.suggestedComponent,
+            confidence: analysis.confidence,
+            reasoning: analysis.reasoning
+          }
+        })
+        window.dispatchEvent(contextualContentEvent)
       }
     } catch (error) {
       console.error('Error handling message:', error)

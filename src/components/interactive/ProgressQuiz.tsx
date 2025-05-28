@@ -144,13 +144,6 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       ...prev,
       [currentQuestion.id]: answer
     }))
-
-    onInteraction('answer_selected', {
-      componentId: id,
-      questionId: currentQuestion.id,
-      answer,
-      questionIndex: currentQuestionIndex
-    })
   }
 
   const handleNextQuestion = () => {

@@ -167,7 +167,6 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
     }
     
     setIsPlaying(true)
-    onInteraction('auto_play_started', { componentId: id })
     
     const playSteps = () => {
       if (currentStep < solverContent.steps.length && isPlaying) {
