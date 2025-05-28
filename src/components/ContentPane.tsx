@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
 import { BookOpen, Sparkles, Trash2, RefreshCw, ChevronUp, History } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
@@ -394,10 +395,7 @@ export function ContentPane({
       <div className="flex-1 relative overflow-hidden" data-scroll-navigation="true">
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
-              <RefreshCw className="h-8 w-8 text-gray-400 mx-auto mb-2 animate-spin" />
-              <p className="text-gray-600">Loading your learning content...</p>
-            </div>
+            <LoadingSpinner size="lg" text="Loading content..." />
           </div>
         ) : currentContent ? (
           <>
@@ -538,14 +536,6 @@ export function ContentPane({
                 Chat with your AI tutor about {selectedSubject?.name} to get personalized 
                 interactive content and exercises in your learning feed.
               </p>
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700 font-medium mb-2">Try saying:</p>
-                <div className="space-y-1 text-sm text-blue-600">
-                  <p>• &quot;Explain quadratic equations&quot;</p>
-                  <p>• &quot;Give me practice problems&quot;</p>
-                  <p>• &quot;I need help with calculus derivatives&quot;</p>
-                </div>
-              </div>
             </div>
           </div>
         )}
@@ -597,7 +587,11 @@ export function ContentPane({
               className="h-8 w-8 p-0"
               title="Refresh content"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? (
+                <SpinnerIcon size="sm" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
             </Button>
             {contentFeed.length > 0 && (
               <Button

@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { Send, Bot, User, MessageCircle, Sparkles, RefreshCw } from 'lucide-react'
+import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
+import { Send, Bot, User, MessageCircle, Sparkles } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
@@ -94,12 +95,43 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingMessages.length, selectedSubject?.id, user?.id])
 
-  // Auto-scroll to bottom when new messages arrive (legitimate useEffect)
-  useEffect(() => {
+  // Auto-scroll to bottom function with reliable timing
+  const scrollToBottom = useCallback(() => {
     if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight
+      // Use requestAnimationFrame for better timing with DOM updates
+      requestAnimationFrame(() => {
+        if (scrollAreaRef.current) {
+          // Find the actual scrollable viewport (Radix UI ScrollArea uses a viewport element)
+          const viewport = scrollAreaRef.current.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement
+          const scrollTarget = viewport || scrollAreaRef.current
+          
+          if (scrollTarget && scrollTarget.scrollHeight > scrollTarget.clientHeight) {
+            // Force a layout recalculation to get accurate scroll height
+            void scrollTarget.offsetHeight
+            scrollTarget.scrollTop = scrollTarget.scrollHeight
+          }
+        }
+      })
     }
-  }, [messages])
+  }, [])
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    scrollToBottom()
+  }, [messages, scrollToBottom])
+
+  // Additional auto-scroll for initial loading - ensures scroll happens after DOM is ready
+  useEffect(() => {
+    if (!isLoadingMessages && messages.length > 0) {
+      // Multiple attempts with increasing delays to ensure DOM is fully rendered
+      const scrollAttempts = [100, 250, 500]
+      scrollAttempts.forEach(delay => {
+        setTimeout(() => {
+          scrollToBottom()
+        }, delay)
+      })
+    }
+  }, [isLoadingMessages, messages.length, scrollToBottom])
 
   // Message persistence functions
   const saveMessageToPersistence = useCallback(async (message: Message) => {
@@ -777,7 +809,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               className="bg-blue-600 hover:bg-blue-700"
             >
               {isTyping ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
+                <SpinnerIcon size="sm" />
               ) : (
                 <Send className="h-4 w-4" />
               )}
@@ -798,10 +830,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         <div className="space-y-4">
           {isLoadingMessages && (
             <div className="flex justify-center py-8">
-              <div className="text-center">
-                <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                <p className="text-sm text-gray-600">Loading conversation...</p>
-              </div>
+              <LoadingSpinner size="lg" text="Loading conversation..." />
             </div>
           )}
           {messages.map((message) => (
@@ -850,7 +879,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               <div className="bg-gray-100 text-gray-900 rounded-lg p-3 max-w-[80%]">
                 <div className="flex items-center space-x-2">
                   <Bot className="h-4 w-4 flex-shrink-0" />
-                  <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />
+                  <SpinnerIcon size="sm" />
                   <span className="text-xs text-gray-500">Generating response...</span>
                 </div>
               </div>
@@ -901,7 +930,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             className="p-6 bg-blue-600 hover:bg-blue-700"
           >
             {isTyping ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
+              <SpinnerIcon size="sm" />
             ) : (
               <Send className="h-4 w-4" />
             )}

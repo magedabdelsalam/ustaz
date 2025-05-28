@@ -210,13 +210,13 @@ src/
 │   └── globals.css        # Global styles
 ├── components/            # React components
 │   ├── ui/               # shadcn/ui components
+│   │   └── loading-spinner.tsx  # Loading components
 │   ├── AuthPage.tsx      # Authentication page
 │   ├── Dashboard.tsx     # Main dashboard
 │   ├── DashboardHeader.tsx
 │   ├── HistoryPane.tsx   # Subject history sidebar
 │   ├── ContentPane.tsx   # AI content display
-│   ├── ChatPane.tsx      # AI chat interface
-│   └── LoadingSpinner.tsx
+│   └── ChatPane.tsx      # AI chat interface
 ├── hooks/                # Custom React hooks
 │   └── useAuth.ts        # Authentication hook
 └── lib/                  # Utility libraries
@@ -320,3 +320,54 @@ This project is licensed under the MIT License.
 ## Support
 
 For support, email support@aistudymate.com or open an issue in the repository.
+
+## Components
+
+### Loading Components
+
+The application uses standardized loading components for consistent UX:
+
+#### LoadingSpinner
+Main loading component with multiple variants and sizes:
+
+```jsx
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+
+// Basic spinner
+<LoadingSpinner />
+
+// Large spinner with custom text
+<LoadingSpinner size="lg" text="Loading content..." />
+
+// Skeleton loading for content areas
+<LoadingSpinner variant="skeleton" skeletonRows={5} />
+
+// Full screen loading
+<LoadingSpinner fullScreen size="xl" text="Loading Ustaz..." />
+```
+
+#### SpinnerIcon
+Standalone spinner icon for buttons and inline use:
+
+```jsx
+import { SpinnerIcon } from '@/components/ui/loading-spinner'
+
+// Small spinner for buttons
+<SpinnerIcon size="sm" />
+
+// Custom styled spinner
+<SpinnerIcon size="md" className="text-blue-500" />
+```
+
+#### LoadingText
+Simple loading text component:
+
+```jsx
+import { LoadingText } from '@/components/ui/loading-spinner'
+
+<LoadingText text="Saving..." size="sm" />
+```
+
+## Development
+
+To run the development server:

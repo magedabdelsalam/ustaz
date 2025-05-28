@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { AuthPage } from '@/components/AuthPage'
 import { Dashboard } from '@/components/Dashboard'
-import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
 
 export default function Home() {
   const { user, loading } = useAuth()
@@ -16,7 +16,7 @@ export default function Home() {
 
   if (loading) {
     console.log('⏳ Auth loading...')
-    return <LoadingSpinner />
+    return <LoadingSpinner fullScreen text="Loading Ustaz..." />
   }
 
   if (!user) {
