@@ -263,7 +263,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             )}
             {fillContent.difficulty && (
               <Badge className={getDifficultyColor(fillContent.difficulty)}>
-                <span className="text-xs font-semibold uppercase tracking-wide">{fillContent.difficulty}</span>
+                <span className="text-xs font-semibold capitalize tracking-wide">{fillContent.difficulty}</span>
               </Badge>
             )}
             {showResult && (

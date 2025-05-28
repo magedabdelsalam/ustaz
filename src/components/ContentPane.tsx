@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
-import { BookOpen, Sparkles, Trash2, RefreshCw, ChevronUp, History } from 'lucide-react'
+import { BookOpen, Sparkles, Trash2, RefreshCw, ChevronUp, ChevronDown, History } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { persistenceService } from '@/lib/persistenceService'
@@ -57,6 +57,7 @@ export function ContentPane({
   const savingContentIdsRef = useRef<Set<string>>(new Set())
   const currentSubjectRef = useRef<string | null>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const contentContainerRef = useRef<HTMLDivElement>(null)
   
   // Get the current content for center display
   const currentContent = selectedContentIndex >= 0 
@@ -97,11 +98,18 @@ export function ContentPane({
   }, [getCurrentIndex])
 
   // Handle wheel scrolling for navigation (legitimate useEffect for event listener)
+  // This handles wheel events ONLY within the content area to navigate between activities.
+  // The event listener is scoped to the contentContainerRef to prevent interference 
+  // with chat scrolling or other scroll areas in the application.
   useEffect(() => {
     const handleWheel = (e: Event) => {
       if (contentFeed.length <= 1 || showHistory) return
       
       const wheelEvent = e as WheelEvent
+      
+      // Prevent event bubbling to ensure it doesn't affect other scroll areas
+      wheelEvent.preventDefault()
+      wheelEvent.stopPropagation()
       
       // Debounce wheel events
       if (scrollTimeoutRef.current) {
@@ -120,14 +128,65 @@ export function ContentPane({
       }, 100)
     }
 
-    window.addEventListener('wheel', handleWheel, { passive: true })
-    return () => {
-      window.removeEventListener('wheel', handleWheel)
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
+    // Get the content pane container element instead of listening globally
+    const contentContainer = contentContainerRef.current
+    
+    if (contentContainer) {
+      contentContainer.addEventListener('wheel', handleWheel, { passive: false })
+      return () => {
+        contentContainer.removeEventListener('wheel', handleWheel)
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
+      }
+    } else {
+      // Fallback cleanup in case container isn't found
+      return () => {
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current)
+        }
       }
     }
   }, [contentFeed.length, showHistory, selectedContentIndex, goToNextActivity, goToPreviousActivity])
+
+  // Handle keyboard navigation for arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle navigation if we have multiple activities and history is not open
+      if (contentFeed.length <= 1 || showHistory) return
+      
+      // Only handle arrow keys
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // Check if the focus is on an input element or textarea - if so, don't interfere
+        const activeElement = document.activeElement
+        if (activeElement && (
+          activeElement.tagName === 'INPUT' || 
+          activeElement.tagName === 'TEXTAREA' || 
+          (activeElement as HTMLElement).contentEditable === 'true' ||
+          activeElement.closest('[role="textbox"]') ||
+          activeElement.closest('[contenteditable]')
+        )) {
+          return // Let normal input behavior work
+        }
+        
+        e.preventDefault()
+        
+        if (e.key === 'ArrowUp') {
+          goToPreviousActivity()
+        } else if (e.key === 'ArrowDown') {
+          goToNextActivity()
+        }
+      }
+    }
+
+    // Add keyboard listener to document when ContentPane is mounted and has content
+    if (contentFeed.length > 1) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => {
+        document.removeEventListener('keydown', handleKeyDown)
+      }
+    }
+  }, [contentFeed.length, showHistory, goToNextActivity, goToPreviousActivity])
 
   const loadContentFeed = useCallback(async () => {
     if (!selectedSubject || !user) {
@@ -392,7 +451,7 @@ export function ContentPane({
   return (
     <div className="flex flex-col h-full">
       {/* Main content area */}
-      <div className="flex-1 relative overflow-hidden" data-scroll-navigation="true">
+      <div className="flex-1 relative overflow-hidden" data-scroll-navigation="true" ref={contentContainerRef}>
         {isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center">
             <LoadingSpinner size="lg" text="Loading content..." />
@@ -447,6 +506,39 @@ export function ContentPane({
                 </motion.div>
               </AnimatePresence>
             </div>
+
+            {/* Navigation Indicators - show when there are multiple activities */}
+            {contentFeed.length > 1 && !showHistory && (
+              <>
+                {/* Previous Activity Indicator */}
+                {getCurrentIndex() > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="absolute top-4 left-1/2 transform -translate-x-1/2 z-20 
+                               bg-gray-400 text-white px-3 py-1 rounded-full 
+                               text-xs flex items-center space-x-1 pointer-events-none"
+                  >
+                    <ChevronUp className="h-3 w-3" />
+                    <span>Scroll or key up for previous</span>
+                  </motion.div>
+                )}
+                
+                {/* Next Activity Indicator */}
+                {getCurrentIndex() < contentFeed.length - 1 && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20 
+                               bg-gray-400 text-white px-3 py-1 rounded-full 
+                               text-xs flex items-center space-x-1 pointer-events-none"
+                  >
+                    <span>Scroll or key down for next</span>
+                    <ChevronDown className="h-3 w-3" />
+                  </motion.div>
+                )}
+              </>
+            )}
 
             {/* History Sidebar */}
             <AnimatePresence>

@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
-import { aiTutor, LessonPlan, LearningProgress, Lesson } from '@/lib/aiService'
+import { aiTutor, Lesson, LessonPlan, LearningProgress } from '@/lib/aiService'
 import { Message } from '@/types/chat'
 import { ChatMessageList } from './ChatMessageList'
 
@@ -19,6 +19,7 @@ interface ChatPaneProps {
   onNewMessage?: (message: string, isUserMessage?: boolean) => void
 }
 
+// Add this interface for the exposed ref methods
 export interface ChatPaneRef {
   handleContentInteraction: (action: string, data: unknown) => void
 }
@@ -299,6 +300,31 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     setInputValue('')
     setIsTyping(true)
 
+    // Check if user wants to continue with current lesson
+    const continueKeywords = ['continue', 'continue with', 'alright let\'s continue', 'let\'s continue', 'next', 'keep going', 'go on']
+    const isRequestingContinue = continueKeywords.some(keyword => 
+      currentInput.toLowerCase().includes(keyword.toLowerCase())
+    )
+
+    // If user wants to continue and we have a current lesson plan, generate content directly
+    if (isRequestingContinue && currentLessonPlan && selectedSubject) {
+      console.log('🎯 User wants to continue lesson - generating content directly')
+      
+      // Save user message to persistence
+      if (selectedSubject) {
+        await saveMessageToPersistence(userMessage)
+      } else {
+        console.log('⏳ Adding message to pending queue (no subject yet)')
+        setPendingMessages(prev => [...prev, userMessage])
+      }
+      
+      // Generate content immediately without template response
+      await generateCurrentLessonContent()
+      setIsTyping(false)
+      return
+    }
+
+    // Original message handling for other cases
     // Emit event for Dashboard to track this message
     const userMessageEvent = new CustomEvent('userMessageSent', {
       detail: {
@@ -445,7 +471,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.error('❌ Error generating lesson content:', error)
       setIsTyping(false)
     }
-  }, [selectedSubject])
+  }, [selectedSubject, setIsTyping])
 
   const generateCurrentLessonContent = useCallback(async (userAction?: string) => {
     if (!currentLessonPlan || !selectedSubject) {
@@ -566,16 +592,28 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       }
     } else if (needsMorePractice) {
       console.log('📚 Student needs more practice in current lesson')
-      // Student needs more practice in current lesson
-      const practiceMessage: Message = {
-        id: `practice-${Date.now()}`,
-        role: 'assistant',
-        content: `Let's get some more practice with this concept to strengthen your understanding:`,
-        timestamp: new Date(),
-        hasGeneratedContent: true
+      // Student needs more practice in current lesson - generate AI response instead of template
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const aiResponse = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            'needs_more_practice',
+            { lesson: currentLesson.title, progress: currentProgress },
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const practiceMessage: Message = {
+            id: `practice-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, practiceMessage])
+          await saveMessageToPersistence(practiceMessage)
+        }
       }
-      setMessages(prev => [...prev, practiceMessage])
-      await saveMessageToPersistence(practiceMessage)
       
       // Generate more content for current lesson
       const contentType = action === 'next_question' ? 'next_question' : 
@@ -583,16 +621,33 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       await generateCurrentLessonContent(contentType)
     } else {
       console.log('📈 Student is making progress but not ready to advance yet')
-      // Student is making progress but not ready to advance yet
-      const encouragementMessage: Message = {
-        id: `encourage-${Date.now()}`,
-        role: 'assistant',
-        content: `Great work! Let's continue practicing to build your confidence:`,
-        timestamp: new Date(),
-        hasGeneratedContent: true
+      // Student is making progress but not ready to advance yet - generate AI response instead of template
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const aiResponse = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            'continue_practicing',
+            { 
+              lesson: currentLesson.title, 
+              progress: currentProgress,
+              action: action,
+              encouragementNeeded: true
+            },
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const encouragementMessage: Message = {
+            id: `encourage-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, encouragementMessage])
+          await saveMessageToPersistence(encouragementMessage)
+        }
       }
-      setMessages(prev => [...prev, encouragementMessage])
-      await saveMessageToPersistence(encouragementMessage)
       
       // Generate more content for current lesson
       const contentType = action === 'next_question' ? 'next_question' : 
@@ -641,43 +696,69 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       const conceptData = data as { concept?: string } | null
       const conceptName = conceptData?.concept || currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title || 'this topic'
         
-      let responseMessage = ''
-      let contentAction = ''
-      
-      if (action === 'concept_expanded') {
-        responseMessage = `Let me provide a deeper explanation of "${conceptName}".`
-        contentAction = 'concept_expanded'
-      } else if (action === 'examples_requested') {
-        responseMessage = `Here are more examples for "${conceptName}".`
-        contentAction = 'examples_requested'
-      } else {
-        responseMessage = `Let me help you understand "${conceptName}" better.`
-        contentAction = 'concept_expanded'
+      // Generate AI response instead of template
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const aiResponse = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            action,
+            { 
+              concept: conceptName,
+              requestType: action,
+              lesson: currentLesson.title
+            },
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const explanationMessage: Message = {
+            id: `explanation-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, explanationMessage])
+          await saveMessageToPersistence(explanationMessage)
+        }
       }
-      
-      const explanationMessage: Message = {
-        id: `explanation-${Date.now()}`,
-        role: 'assistant',
-        content: responseMessage,
-        timestamp: new Date(),
-        hasGeneratedContent: true
-      }
-      setMessages(prev => [...prev, explanationMessage])
-      await saveMessageToPersistence(explanationMessage)
       
       // Generate new interactive content based on the specific action
+      let contentAction = ''
+      if (action === 'concept_expanded') {
+        contentAction = 'concept_expanded'
+      } else if (action === 'examples_requested') {
+        contentAction = 'examples_requested'
+      } else {
+        contentAction = 'concept_expanded'
+      }
       await generateCurrentLessonContent(contentAction)
     } else if (action === 'ready_for_next') {
       // Student indicates they're ready to move forward (Practice This button)
-      const readyMessage: Message = {
-        id: `ready-${Date.now()}`,
-        role: 'assistant',
-        content: `Great! Let's practice "${currentLessonPlan?.lessons[currentLessonPlan?.currentLessonIndex]?.title}" with some hands-on exercises:`,
-        timestamp: new Date(),
-        hasGeneratedContent: true
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const aiResponse = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            'ready_for_practice',
+            { 
+              lesson: currentLesson.title,
+              readyForPractice: true
+            },
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const readyMessage: Message = {
+            id: `ready-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, readyMessage])
+          await saveMessageToPersistence(readyMessage)
+        }
       }
-      setMessages(prev => [...prev, readyMessage])
-      await saveMessageToPersistence(readyMessage)
       
       // Generate practice content specifically
       await generateCurrentLessonContent('practice')
@@ -826,15 +907,44 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       })
 
       // Generate AI response acknowledging the question
-      const responseMessage: Message = {
-        id: `contextual-${Date.now()}`,
-        role: 'assistant',
-        content: `Let me help you with that! I'll create some interactive content to explain this.`,
-        timestamp: new Date(),
-        hasGeneratedContent: true
+      if (currentLessonPlan && currentProgress) {
+        const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+        if (currentLesson) {
+          const aiResponse = await aiTutor.generateTutorResponse(
+            selectedSubject!.name,
+            'contextual_content_request',
+            { 
+              userMessage: userMessage,
+              suggestedComponent: suggestedComponent,
+              confidence: confidence,
+              reasoning: reasoning,
+              lesson: currentLesson.title
+            },
+            { lesson: currentLesson, progress: currentProgress }
+          )
+
+          const responseMessage: Message = {
+            id: `contextual-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, responseMessage])
+          await saveMessageToPersistence(responseMessage)
+        }
+      } else {
+        // Fallback if no lesson plan available yet
+        const responseMessage: Message = {
+          id: `contextual-${Date.now()}`,
+          role: 'assistant',
+          content: `Let me help you with that! I'll create some interactive content to explain this.`,
+          timestamp: new Date(),
+          hasGeneratedContent: true
+        }
+        setMessages(prev => [...prev, responseMessage])
+        await saveMessageToPersistence(responseMessage)
       }
-      setMessages(prev => [...prev, responseMessage])
-      await saveMessageToPersistence(responseMessage)
 
       // If we have a lesson plan, generate contextual content
       if (currentLessonPlan && currentProgress) {

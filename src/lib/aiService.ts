@@ -103,6 +103,18 @@ export interface LearningProgress {
   readyForNext: boolean
 }
 
+export interface ProgressCriteria {
+  minCorrectAnswers: number
+  minTotalAttempts: number
+  minAccuracy: number
+  adaptiveFactors: {
+    difficultyAdjustment: number
+    engagementWeight: number
+    retentionFactor: number
+  }
+  reasoning?: string
+}
+
 class AITutorService {
   private lessonPlans: Map<string, LessonPlan> = new Map()
   private progress: Map<string, LearningProgress> = new Map()
@@ -245,30 +257,74 @@ class AITutorService {
     try {
       logger.debug('🤖 AI Service creating lesson plan for:', subject)
       
-      // Determine appropriate lesson count based on subject complexity
-      const getExpectedLessonCount = (subject: string): number => {
-        const complexSubjects = [
-          'history', 'war', 'wwii', 'ww2', 'world war', 'economics', 'biology', 'chemistry', 
-          'physics', 'literature', 'philosophy', 'psychology', 'sociology', 'political science',
-          'computer science', 'programming', 'calculus', 'advanced', 'university', 'college'
-        ]
-        
-        const isComplex = complexSubjects.some(keyword => 
-          subject.toLowerCase().includes(keyword.toLowerCase())
-        )
-        
-        return isComplex ? 12 : 8 // Complex subjects get 12 lessons, others get 8
+      // Define interface for plan structure data
+      interface PlanStructureData {
+        recommendedLessons: number
+        complexity: 'beginner' | 'intermediate' | 'advanced'
+        focusAreas: string[]
+        learningObjectives: string[]
+        estimatedHoursPerLesson: number
+        prerequisites: string[]
+        reasoning: string
       }
       
-      const expectedLessons = getExpectedLessonCount(subject)
-      logger.debug(`📚 Planning ${expectedLessons} lessons for "${subject}" (complexity-based)`)
+      // Use AI to determine appropriate lesson count and structure based on subject
+      const planStructureData = await this.cachedApiCall(
+        'lesson-structure',
+        { subject },
+        async () => {
+          const response = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert curriculum designer. Analyze the subject "${subject}" and determine the optimal learning structure.`
+              },
+              {
+                role: "user", 
+                content: `Analyze "${subject}" and return JSON with:
+{
+  "recommendedLessons": number (6-15 based on complexity),
+  "complexity": "beginner|intermediate|advanced",
+  "focusAreas": ["area1", "area2", "area3"],
+  "learningObjectives": ["objective1", "objective2"],
+  "estimatedHoursPerLesson": number (0.5-3),
+  "prerequisites": ["prereq1", "prereq2"] or [],
+  "reasoning": "Why this structure works for this subject"
+}
+
+Consider:
+- Subject complexity and depth
+- Typical learning progression
+- Practical vs theoretical balance
+- Student engagement factors`
+              }
+            ],
+            temperature: 0.4,
+            max_tokens: 800
+          })
+
+          const content = response.choices[0].message.content
+          if (!content) throw new Error('No structure analysis received')
+          
+          const cleanedContent = this.cleanJsonResponse(content)
+          return JSON.parse(cleanedContent)
+        }
+      ) as PlanStructureData
+
+      const expectedLessons = planStructureData.recommendedLessons || 8
+      const complexity = planStructureData.complexity || 'intermediate'
       
-      // Use higher token limit for complex subjects
-      const maxTokens = expectedLessons >= 12 ? 2500 : 1500 // Reduced from 3000/2000
+      logger.debug(`📚 AI recommended ${expectedLessons} lessons for "${subject}" (complexity: ${complexity})`)
+      
+      // Determine token limit based on AI analysis rather than hardcoded rules
+      const maxTokens = expectedLessons >= 12 ? 2500 : 
+                        complexity === 'advanced' ? 2200 : 
+                        complexity === 'beginner' ? 1200 : 1600
+      
       logger.debug(`🎯 Using ${maxTokens} tokens for ${expectedLessons} lessons`)
       
       // Create cache parameters for this lesson plan request
-      const cacheParams = { subject, expectedLessons, maxTokens }
+      const cacheParams = { subject, expectedLessons, maxTokens, complexity, focusAreas: planStructureData.focusAreas }
       
       // Use cached API call with retry logic
       const planData = await this.cachedApiCall(
@@ -287,7 +343,36 @@ class AITutorService {
                 messages: [
                   {
                     role: "system",
-                    content: `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons. Return JSON: {"subject": "${subject}", "lessons": [{"id": "lesson-1", "title": "...", "description": "...", "completed": false}]}`
+                    content: `You are an expert curriculum designer creating a comprehensive learning plan. Create exactly ${expectedLessons} progressive lessons that build upon each other logically.`
+                  },
+                  {
+                    role: "user",
+                    content: `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons.
+
+Subject Analysis:
+- Complexity: ${complexity}
+- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}
+- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}
+
+Return JSON:
+{
+  "subject": "${subject}",
+  "lessons": [
+    {
+      "id": "lesson-1",
+      "title": "Descriptive, engaging lesson title",
+      "description": "What students will learn and why it matters",
+      "completed": false
+    }
+  ]
+}
+
+Requirements:
+- Each lesson should build naturally on previous ones
+- Titles should be specific and engaging, not generic
+- Descriptions should explain practical value
+- Progress from foundational to advanced concepts
+- Include real-world applications where relevant`
                   }
                 ],
                 temperature: 0.3,
@@ -368,12 +453,10 @@ class AITutorService {
       }
 
       this.lessonPlans.set(subject, lessonPlan)
-      this.progress.set(subject, {
-        correctAnswers: 0,
-        totalAttempts: 0,
-        needsReview: false,
-        readyForNext: false
-      })
+      
+      // Initialize dynamic progress criteria based on AI analysis
+      const initialProgress = await this.initializeDynamicProgress(subject, complexity)
+      this.progress.set(subject, initialProgress)
 
       logger.debug(`✅ Lesson plan created and cached for "${subject}"`)
       logger.debug(`📚 Cache stats:`, this.aiCache.getStats())
@@ -387,516 +470,213 @@ class AITutorService {
         timestamp: new Date().toISOString()
       })
       
-      // Fallback plan if AI fails
-      logger.debug('⚠️ Using fallback plan for subject:', subject)
-      return this.createFallbackPlan(subject)
+      // Generate dynamic fallback plan if AI fails
+      logger.debug('⚠️ Generating dynamic fallback plan for subject:', subject)
+      return await this.generateDynamicFallbackPlan(subject)
     }
   }
 
-  async generateLessonContent(
-    subject: string, 
-    lesson: Lesson, 
-    contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' = 'explanation'
-  ): Promise<LessonContent> {
-    logger.debug('🤖 AI Service: Generating content for:', lesson.title, 'Type:', contentType)
-    
-    // Get history of previously generated content for this lesson
-    const contentHistory = this.getGeneratedContentHistory(subject, lesson.id)
-    const previousQuestions = contentHistory.filter(item => item.type === contentType).map(item => item.question)
-    const previousTopics = contentHistory.filter(item => item.type === contentType).map(item => item.topic)
-    
-    logger.debug('📚 Previous content for this lesson:', {
-      totalGenerated: contentHistory.length,
-      previousQuestions: previousQuestions.slice(-3), // Show last 3
-      previousTopics: [...new Set(previousTopics)] // Unique topics
-    })
-    
+  // Store dynamic criteria for each subject
+  private subjectCriteria: Map<string, ProgressCriteria> = new Map()
+
+  // Initialize progress with dynamic criteria based on subject analysis
+  private async initializeDynamicProgress(subject: string, complexity: string): Promise<LearningProgress> {
     try {
-      let prompt = ''
-      
-      if (contentType === 'quiz' || contentType === 'multiple-choice') {
-        const avoidanceText = previousQuestions.length > 0 
-          ? `\n\nIMPORTANT - AVOID REPETITION:
-- DO NOT ask about these topics already covered: ${[...new Set(previousTopics)].join(', ')}
-- DO NOT repeat these questions: ${previousQuestions.slice(-2).join(' | ')}
-- Focus on a DIFFERENT aspect or sub-topic of "${lesson.title}"
-- Vary the question type (factual, conceptual, application, analysis)`
-          : ''
-
-        prompt = `Create a multiple choice question for "${lesson.title}" in ${subject}. 
-
-This is question #${contentHistory.filter(item => item.type === 'quiz').length + 1} for this lesson.
-
-Return JSON:
-{
-  "type": "multiple-choice",
-  "data": {
-    "question": "Clear, specific question",
-    "options": ["option1", "option2", "option3", "option4"],
-    "correctAnswer": 0,
-    "explanation": "Why this answer is correct and others are wrong",
-    "learningObjective": "What specific skill/knowledge this tests",
-    "difficulty": "beginner|intermediate|advanced"
-  }
-}
-
-Make it appropriately challenging but fair.${avoidanceText}`
-
-      } else if (contentType === 'explainer') {
-        prompt = `Create a detailed interactive explanation for "${lesson.title}" in ${subject}.
+      const progressCriteria = await this.cachedApiCall(
+        'progress-criteria',
+        { subject, complexity },
+        async () => {
+          const response = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert in learning analytics. Determine optimal progress criteria for "${subject}".`
+              },
+              {
+                role: "user",
+                content: `Analyze "${subject}" (complexity: ${complexity}) and determine optimal learning progress criteria.
 
 Return JSON:
 {
-  "type": "explainer",
-  "data": {
-    "title": "${lesson.title}",
-    "overview": "Brief paragraph introducing the topic",
-    "sections": [
-      {
-        "heading": "Key Concept 1",
-        "paragraphs": ["Detailed explanation paragraph 1", "Supporting information paragraph"]
-      },
-      {
-        "heading": "Key Concept 2", 
-        "paragraphs": ["Another detailed explanation", "More supporting details"]
-      }
-    ],
-    "conclusion": "Summary paragraph tying everything together",
-    "difficulty": "beginner|intermediate|advanced",
-    "estimatedReadTime": 3
-  }
+  "minCorrectAnswers": number (2-5),
+  "minTotalAttempts": number (3-6), 
+  "minAccuracy": number (0.6-0.8),
+  "adaptiveFactors": {
+    "difficultyAdjustment": number (0.8-1.2),
+    "engagementWeight": number (0.1-0.3),
+    "retentionFactor": number (0.7-0.9)
+  },
+  "reasoning": "Why these criteria work for this subject"
 }
 
-Create a comprehensive, well-structured explanation that breaks down the topic into digestible sections.`
+Consider:
+- Subject difficulty and abstract nature
+- Typical learning curves
+- Importance of accuracy vs exploration
+- Student motivation factors`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 400
+          })
 
-      } else if (contentType === 'concept-card') {
-        prompt = `Create an interactive concept card for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "concept-card", 
-  "data": {
-    "title": "${lesson.title}",
-    "summary": "One clear sentence summary",
-    "details": "2-3 sentences explaining the concept clearly",
-    "examples": ["example1", "example2", "example3"],
-    "keyPoints": ["point1", "point2", "point3"],
-    "difficulty": "beginner|intermediate|advanced"
-  }
-}
-
-Explain like you're talking to a student. Be clear and engaging.`
-
-      } else if (contentType === 'step-solver') {
-        const avoidanceText = previousQuestions.length > 0 
-          ? `\n\nIMPORTANT - AVOID REPETITION:
-- DO NOT repeat these problem types: ${previousQuestions.slice(-2).join(' | ')}
-- Create a DIFFERENT scenario or application within "${lesson.title}"
-- Vary the complexity and context (real-world applications, different scenarios)`
-          : ''
-
-        prompt = `Create a step-by-step practice problem for "${lesson.title}" in ${subject}.
-
-This is problem #${contentHistory.filter(item => item.type === 'step-solver').length + 1} for this lesson.
-
-Return JSON:
-{
-  "type": "step-solver",
-  "data": {
-    "problem": "A specific problem to solve",
-    "problemType": "${lesson.title}",
-    "steps": [
-      {
-        "id": "1",
-        "description": "What to do",
-        "calculation": "The work shown",
-        "result": "What you get",
-        "explanation": "Why this step matters"
-      }
-    ],
-    "finalAnswer": "The complete answer",
-    "difficulty": "beginner|intermediate|advanced",
-    "learningObjective": "What specific skill this develops"
-  }
-}
-
-Make it practical and educational.${avoidanceText}`
-
-      } else if (contentType === 'interactive-example') {
-        prompt = `Create an interactive example for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "interactive-example",
-  "data": {
-    "title": "${lesson.title} Interactive Demo",
-    "description": "Learn by exploring and adjusting parameters",
-    "controls": [
-      {
-        "id": "param1",
-        "type": "slider",
-        "label": "Parameter 1",
-        "min": 0,
-        "max": 10,
-        "step": 0.1,
-        "defaultValue": 5
-      }
-    ],
-    "display": [
-      {
-        "id": "result",
-        "type": "text",
-        "content": "Result will show here based on parameter changes"
-      }
-    ],
-    "explanation": "Detailed explanation of what the example demonstrates"
-  }
-}
-
-Create an engaging interactive demonstration.`
-
-      } else if (contentType === 'text-highlighter') {
-        prompt = `Create a text analysis exercise for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "text-highlighter",
-  "data": {
-    "title": "${lesson.title} Text Analysis",
-    "description": "Identify and highlight key elements in the text",
-    "text": "A relevant passage of text to analyze (3-4 sentences)",
-    "categories": [
-      {
-        "id": "category1",
-        "name": "Key Concept",
-        "color": "#22c55e",
-        "description": "Main ideas or concepts",
-        "shortcut": "K"
-      }
-    ],
-    "instructions": "Select text and highlight according to the categories",
-    "explanation": "Why this analysis is important for understanding ${lesson.title}"
-  }
-}
-
-Create meaningful text that students can analyze and learn from.`
-
-      } else if (contentType === 'drag-drop') {
-        prompt = `Create a drag and drop matching exercise for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "drag-drop",
-  "data": {
-    "question": "Match the following items correctly",
-    "instructions": "Drag items from the left to match with items on the right",
-    "items": ["Item 1", "Item 2", "Item 3"],
-    "targets": ["Target A", "Target B", "Target C"],
-    "correctMatches": {"Item 1": "Target A", "Item 2": "Target B", "Item 3": "Target C"},
-    "category": "${lesson.title}",
-    "explanation": "Why these matches are correct"
-  }
-}
-
-Create logical matching pairs related to the lesson topic.`
-
-      } else if (contentType === 'formula-explorer') {
-        prompt = `Create a formula exploration activity for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "formula-explorer",
-  "data": {
-    "title": "${lesson.title} Formula Explorer",
-    "formula": "A relevant mathematical formula",
-    "variables": [
-      {
-        "name": "x",
-        "description": "Variable description",
-        "min": 0,
-        "max": 10,
-        "step": 0.1,
-        "defaultValue": 1
-      }
-    ],
-    "explanation": "What this formula represents and how changing variables affects the result"
-  }
-}
-
-Create an educational formula that students can explore by changing variables.`
-
-      } else if (contentType === 'graph-visualizer') {
-        prompt = `Create a data visualization exercise for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "graph-visualizer",
-  "data": {
-    "title": "${lesson.title} Data Visualization",
-    "description": "Explore data through interactive charts",
-    "dataPoints": [
-      {"x": 1, "y": 2, "label": "Point 1"},
-      {"x": 2, "y": 4, "label": "Point 2"},
-      {"x": 3, "y": 6, "label": "Point 3"}
-    ],
-    "chartType": "line",
-    "xAxisLabel": "X Axis",
-    "yAxisLabel": "Y Axis",
-    "explanation": "What this data represents and what patterns students should observe"
-  }
-}
-
-Create meaningful data that illustrates concepts from the lesson.`
-
-      } else if (contentType === 'explanation') {
-        prompt = `Create an interactive explanation for "${lesson.title}" in ${subject}.
-
-Return JSON:
-{
-  "type": "concept-card", 
-  "data": {
-    "title": "${lesson.title}",
-    "summary": "One sentence summary",
-    "details": "2-3 sentences explaining the concept clearly",
-    "examples": ["example1", "example2", "example3"],
-    "keyPoints": ["point1", "point2", "point3"],
-    "difficulty": "beginner"
-  }
-}
-
-Explain like you're talking to a student. Be clear and engaging.`
-
-      } else if (contentType === 'fill-blank') {
-        const avoidanceText = previousQuestions.length > 0 
-          ? `\n\nIMPORTANT - AVOID REPETITION:
-- DO NOT repeat these exercises: ${previousQuestions.slice(-2).join(' | ')}
-- Focus on a DIFFERENT concept or formula within "${lesson.title}"
-- Vary the exercise type (definitions, formulas, processes, examples)`
-          : ''
-
-        prompt = `Create a fill-in-the-blank exercise for "${lesson.title}" in ${subject}.
-
-This is exercise #${contentHistory.filter(item => item.type === 'fill-blank').length + 1} for this lesson.
-
-Return JSON:
-{
-  "type": "fill-blank",
-  "data": {
-    "question": "A specific, contextual question about the topic - NOT generic text like 'Complete the following statement'",
-    "template": "Educational text with ___ where students fill in blanks ___",
-    "answers": ["answer1", "answer2"],
-    "hints": ["hint for blank 1", "hint for blank 2"],
-    "explanation": "Why these answers are correct",
-    "category": "${lesson.title}",
-    "difficulty": "beginner|intermediate|advanced",
-    "learningObjective": "What specific skill/knowledge this tests"
-  }
-}
-
-IMPORTANT: 
-- Make the question specific and educational, like "Fill in the missing parts of this quadratic formula:" or "Complete this definition of photosynthosis:"
-- Use ___ to mark where students should fill in answers
-- Template should be meaningful educational content, not generic phrases
-- Make it clear what specific concept is being tested${avoidanceText}`
-
-      } else {
-        // Default to practice/step-solver for unknown types
-        const avoidanceText = previousQuestions.length > 0 
-          ? `\n\nIMPORTANT - AVOID REPETITION:
-- DO NOT repeat these problem types: ${previousQuestions.slice(-2).join(' | ')}
-- Create a DIFFERENT scenario or application within "${lesson.title}"
-- Vary the complexity and context (real-world applications, different scenarios)`
-          : ''
-
-        prompt = `Create a step-by-step practice problem for "${lesson.title}" in ${subject}.
-
-This is problem #${contentHistory.filter(item => item.type === 'step-solver').length + 1} for this lesson.
-
-Return JSON:
-{
-  "type": "step-solver",
-  "data": {
-    "problem": "A specific problem to solve",
-    "problemType": "${lesson.title}",
-    "steps": [
-      {
-        "id": "1",
-        "description": "What to do",
-        "calculation": "The work shown",
-        "result": "What you get",
-        "explanation": "Why this step matters"
-      }
-    ],
-    "finalAnswer": "The complete answer",
-    "difficulty": "beginner|intermediate|advanced",
-    "learningObjective": "What specific skill this develops"
-  }
-}
-
-Make it practical and educational.${avoidanceText}`
-      }
-
-      logger.debug('🎯 AI prompt being sent:', prompt)
-
-      const response = await chatCompletion({
-        messages: [
-          {
-            role: "system",
-            content: "You are an expert tutor creating educational content. Always return valid JSON."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
-
-      logger.debug('🤖 Raw AI response received:', response)
-
-      const content = response.choices[0].message.content
-      if (!content) {
-        logger.error('❌ AI Service: No content received from OpenAI')
-        throw new Error('No content received')
-      }
-
-      logger.debug('📝 Raw content from AI:', content)
-
-      const cleanedContent = this.cleanJsonResponse(content)
-      logger.debug('🧹 Cleaned lesson content response:', cleanedContent)
-      
-      // Try to fix incomplete JSON before parsing
-      const fixedContent = this.fixIncompleteJson(cleanedContent)
-      logger.debug('🔧 Fixed JSON content:', fixedContent)
-      
-      try {
-        const parsedContent = JSON.parse(fixedContent)
-        logger.debug('✅ Successfully parsed AI content:', parsedContent)
-        
-        // Validate the content structure
-        if (!parsedContent.type || !parsedContent.data) {
-          logger.error('❌ Invalid lesson content structure from AI:', parsedContent)
-          throw new Error('Invalid lesson content structure from AI')
+          const content = response.choices[0].message.content
+          if (!content) throw new Error('No criteria received')
+          
+          const cleanedContent = this.cleanJsonResponse(content)
+          return JSON.parse(cleanedContent)
         }
-        
-        logger.debug('🎯 AI Service: Successfully generated content:', parsedContent)
-        
-        // Track this generated content to avoid repetition
-        this.trackGeneratedContent(subject, lesson.id, contentType, parsedContent)
-        
-        return parsedContent
-      } catch (parseError) {
-        logger.error('❌ JSON parsing failed:', parseError)
-        logger.error('❌ Failed content:', fixedContent)
-        throw new Error(`JSON parsing failed: ${parseError}`)
+      )
+
+      // Store dynamic criteria for this subject
+      this.subjectCriteria.set(subject, progressCriteria as ProgressCriteria)
+      
+      return {
+        correctAnswers: 0,
+        totalAttempts: 0,
+        needsReview: false,
+        readyForNext: false
       }
-      
     } catch (error) {
-      console.error('❌ AI Service: Error generating lesson content:', error)
-      logger.error('❌ Full error details:', {
-        message: (error as Error).message,
-        stack: (error as Error).stack,
-        subject,
-        lessonTitle: lesson.title,
-        contentType
-      })
-      
-      const fallbackContent = this.createFallbackContent(lesson, contentType)
-      logger.debug('⚠️ AI Service: Using fallback content:', fallbackContent)
-      console.log('⚠️ Using fallback content due to AI error. If this happens frequently, check your OpenAI API key and network connection.')
-      
-      return fallbackContent
+      logger.error('Failed to initialize dynamic progress, using adaptive defaults:', error)
+      return {
+        correctAnswers: 0,
+        totalAttempts: 0,
+        needsReview: false,
+        readyForNext: false
+      }
     }
   }
 
-  async generateTutorResponse(
-    subject: string, 
-    userAction: string, 
-    actionData: unknown,
-    context: { lesson: Lesson; progress: LearningProgress }
-  ): Promise<string> {
-    try {
-      const response = await chatCompletion({
-        messages: [
-          {
-            role: "system",
-            content: `You are a concise, action-oriented tutor teaching ${subject}. The student is working on "${context.lesson.title}". 
-
-IMPORTANT: Be brief and actionable. Don't ask questions - provide clear explanations or confirmations. Focus on teaching, not conversation.
-
-For correct answers: Brief praise + key insight
-For wrong answers: Brief correction + explanation  
-For interactions: Direct, helpful response
-
-Student's progress: ${context.progress.correctAnswers}/${context.progress.totalAttempts} correct so far.`
-          },
-          {
-            role: "user",
-            content: `Student action: ${userAction}. Data: ${JSON.stringify(actionData)}`
-          }
-        ],
-        temperature: 0.6,
-        max_tokens: 150
-      })
-
-      return response.choices[0].message.content || "Keep going! You're doing great."
-    } catch (error) {
-      console.error('Error generating tutor response:', error)
-      return this.generateFallbackResponse(userAction, actionData)
+  // Get intelligent default criteria when dynamic criteria aren't available
+  private getAdaptiveDefaults(subject: string): ProgressCriteria {
+    // Analyze subject name for hints about difficulty and learning style
+    const subjectLower = subject.toLowerCase()
+    
+    // Math/Science subjects might need more precision
+    const isMathScience = ['math', 'physics', 'chemistry', 'calculus', 'algebra', 'geometry', 'statistics'].some(term => 
+      subjectLower.includes(term)
+    )
+    
+    // Language/Literature subjects might benefit from more exploration
+    const isLanguageArts = ['language', 'literature', 'writing', 'english', 'spanish', 'french', 'poetry'].some(term => 
+      subjectLower.includes(term)
+    )
+    
+    // Creative subjects might need different success metrics
+    const isCreative = ['art', 'music', 'design', 'creative', 'drawing', 'painting'].some(term => 
+      subjectLower.includes(term)
+    )
+    
+    // History/Social studies might benefit from broader exploration
+    const isSocial = ['history', 'geography', 'social', 'politics', 'economics', 'culture'].some(term => 
+      subjectLower.includes(term)
+    )
+    
+    if (isMathScience) {
+      return {
+        minCorrectAnswers: 4,
+        minTotalAttempts: 5,
+        minAccuracy: 0.75,
+        adaptiveFactors: {
+          difficultyAdjustment: 1.1,
+          engagementWeight: 0.15,
+          retentionFactor: 0.85
+        }
+      }
+    } else if (isLanguageArts) {
+      return {
+        minCorrectAnswers: 3,
+        minTotalAttempts: 4,
+        minAccuracy: 0.6,
+        adaptiveFactors: {
+          difficultyAdjustment: 0.9,
+          engagementWeight: 0.25,
+          retentionFactor: 0.75
+        }
+      }
+    } else if (isCreative) {
+      return {
+        minCorrectAnswers: 2,
+        minTotalAttempts: 3,
+        minAccuracy: 0.55,
+        adaptiveFactors: {
+          difficultyAdjustment: 0.8,
+          engagementWeight: 0.3,
+          retentionFactor: 0.7
+        }
+      }
+    } else if (isSocial) {
+      return {
+        minCorrectAnswers: 3,
+        minTotalAttempts: 4,
+        minAccuracy: 0.65,
+        adaptiveFactors: {
+          difficultyAdjustment: 0.95,
+          engagementWeight: 0.2,
+          retentionFactor: 0.8
+        }
+      }
+    } else {
+      // General subjects
+      return {
+        minCorrectAnswers: 3,
+        minTotalAttempts: 4,
+        minAccuracy: 0.65,
+        adaptiveFactors: {
+          difficultyAdjustment: 1.0,
+          engagementWeight: 0.2,
+          retentionFactor: 0.75
+        }
+      }
     }
   }
 
-  updateProgress(subject: string, correct: boolean, lessonId?: string): LearningProgress {
-    const progress = this.progress.get(subject) || {
-      correctAnswers: 0,
-      totalAttempts: 0,
-      needsReview: false,
-      readyForNext: false
+  // Evaluate content variety dynamically based on subject and performance
+  private evaluateDynamicContentVariety(subject: string, lessonId: string, progress: LearningProgress): boolean {
+    const history = this.getGeneratedContentHistory(subject, lessonId)
+    const accuracy = progress.correctAnswers / progress.totalAttempts
+    
+    // High performers need less variety, struggling students might benefit from more
+    if (accuracy >= 0.8) {
+      // High accuracy - less variety needed
+      return history.length >= 2
+    } else if (accuracy >= 0.6) {
+      // Medium accuracy - moderate variety
+      return history.length >= 3 && new Set(history.map(h => h.type)).size >= 2
+    } else {
+      // Lower accuracy - more variety to find what works
+      return history.length >= 4 && new Set(history.map(h => h.type)).size >= 3
     }
+  }
 
-    progress.totalAttempts++
-    if (correct) progress.correctAnswers++
-
-    // More reasonable advancement criteria for better UX
-    const minCorrectAnswers = 3 // Need at least 3 correct answers
-    const minTotalAttempts = 3 // Need at least 3 total attempts (reduced from 4)
-    const minAccuracy = 0.65 // Need 65% accuracy or better
+  // Calculate engagement score based on recent interaction patterns
+  private calculateEngagementScore(subject: string, lessonId?: string): number {
+    if (!lessonId) return 0.5 // Default neutral engagement
     
-    // Check if student has enough practice and high enough accuracy
-    const hasEnoughPractice = progress.totalAttempts >= minTotalAttempts && progress.correctAnswers >= minCorrectAnswers
-    const hasGoodAccuracy = progress.correctAnswers / progress.totalAttempts >= minAccuracy
+    const history = this.getGeneratedContentHistory(subject, lessonId)
+    if (history.length === 0) return 0.5
     
-    // Simplified content variety check - just need some practice, not all types
-    let hasContentVariety = true
-    if (lessonId) {
-      const varietyStats = this.getContentVarietyStats(subject, lessonId)
-      // More lenient: just need 2+ total items OR good performance
-      hasContentVariety = varietyStats.totalItems >= 2 || hasGoodAccuracy
-      
-      logger.debug(`📊 Content variety check for ${lessonId}:`, {
-        totalItems: varietyStats.totalItems,
-        byType: varietyStats.byType,
-        uniqueTopics: varietyStats.uniqueTopics.length,
-        hasContentVariety,
-        originalVariety: varietyStats.hasMinimumVariety
-      })
-    }
+    // Look at recent activity (last 5 interactions)
+    const recentHistory = history.slice(-5)
+    const timeNow = Date.now()
     
-    progress.readyForNext = hasEnoughPractice && hasGoodAccuracy && hasContentVariety
-    progress.needsReview = progress.totalAttempts >= 3 && !progress.readyForNext // Reduced from 4
-
-    logger.debug(`📊 Progress update for ${subject}:`, {
-      correctAnswers: progress.correctAnswers,
-      totalAttempts: progress.totalAttempts,
-      accuracy: Math.round((progress.correctAnswers / progress.totalAttempts) * 100) + '%',
-      readyForNext: progress.readyForNext,
-      needsReview: progress.needsReview,
-      hasContentVariety
-    })
-
-    this.progress.set(subject, progress)
-    return progress
+    // Calculate recency score (more recent = higher engagement)
+    const recencyScore = recentHistory.reduce((score, item) => {
+      const hoursSince = (timeNow - item.timestamp) / (1000 * 60 * 60)
+      const recencyWeight = Math.max(0, 1 - (hoursSince / 24)) // Decay over 24 hours
+      return score + recencyWeight
+    }, 0) / recentHistory.length
+    
+    // Calculate variety score (more variety = higher engagement)
+    const uniqueTypes = new Set(recentHistory.map(h => h.type)).size
+    const varietyScore = Math.min(1, uniqueTypes / 3) // Cap at 3 types
+    
+    // Calculate consistency score (steady progress = higher engagement)
+    const consistencyScore = recentHistory.length >= 3 ? 1 : recentHistory.length / 3
+    
+    // Combine scores with weights
+    return (recencyScore * 0.4) + (varietyScore * 0.3) + (consistencyScore * 0.3)
   }
 
   getLessonPlan(subject: string): LessonPlan | null {
@@ -905,6 +685,72 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
 
   getProgress(subject: string): LearningProgress | null {
     return this.progress.get(subject) || null
+  }
+
+  // Update progress for a subject
+  updateProgress(subject: string, isCorrect: boolean, lessonId?: string): LearningProgress | null {
+    const currentProgress = this.progress.get(subject)
+    if (!currentProgress) {
+      logger.debug('❌ No progress found for subject:', subject)
+      return null
+    }
+
+    // Update basic stats
+    currentProgress.totalAttempts += 1
+    if (isCorrect) {
+      currentProgress.correctAnswers += 1
+    }
+
+    const accuracy = currentProgress.correctAnswers / currentProgress.totalAttempts
+
+    // Get dynamic criteria for this subject
+    const criteria = this.subjectCriteria.get(subject) || this.getAdaptiveDefaults(subject)
+    
+    // Calculate engagement score if lesson ID provided
+    let engagementScore = 0.5 // Default neutral
+    if (lessonId) {
+      engagementScore = this.calculateEngagementScore(subject, lessonId)
+    }
+
+    // Apply adaptive factors to criteria
+    const adjustedMinCorrect = Math.ceil(criteria.minCorrectAnswers * criteria.adaptiveFactors.difficultyAdjustment)
+    const adjustedMinAccuracy = criteria.minAccuracy * (1 + (engagementScore - 0.5) * criteria.adaptiveFactors.engagementWeight)
+    const adjustedMinAttempts = Math.max(criteria.minTotalAttempts, adjustedMinCorrect + 1)
+
+    // Determine if student is ready for next lesson
+    const meetsMinimumCorrect = currentProgress.correctAnswers >= adjustedMinCorrect
+    const meetsMinimumAttempts = currentProgress.totalAttempts >= adjustedMinAttempts
+    const meetsAccuracy = accuracy >= adjustedMinAccuracy
+    
+    // Content variety check if lesson ID provided
+    let hasContentVariety = true
+    if (lessonId) {
+      hasContentVariety = this.evaluateDynamicContentVariety(subject, lessonId, currentProgress)
+    }
+
+    currentProgress.readyForNext = meetsMinimumCorrect && meetsMinimumAttempts && meetsAccuracy && hasContentVariety
+    currentProgress.needsReview = accuracy < (adjustedMinAccuracy * 0.8) // Needs review if accuracy is significantly below target
+
+    logger.debug('📊 Progress updated:', {
+      subject,
+      correctAnswers: currentProgress.correctAnswers,
+      totalAttempts: currentProgress.totalAttempts,
+      accuracy: Math.round(accuracy * 100),
+      readyForNext: currentProgress.readyForNext,
+      needsReview: currentProgress.needsReview,
+      criteria: {
+        adjustedMinCorrect,
+        adjustedMinAccuracy: Math.round(adjustedMinAccuracy * 100),
+        adjustedMinAttempts,
+        engagementScore: Math.round(engagementScore * 100),
+        hasContentVariety
+      }
+    })
+
+    // Update in-memory progress
+    this.progress.set(subject, currentProgress)
+    
+    return currentProgress
   }
 
   // Load lesson plan from database (for resuming progress)
@@ -1002,13 +848,8 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
       if (item.topic) topics.add(item.topic)
     })
     
-    // Check if lesson has minimum content variety
-    const hasMinQuiz = (byType['quiz'] || 0) >= 2
-    const hasMinFillBlank = (byType['fill-blank'] || 0) >= 1  
-    const hasMinPractice = (byType['step-solver'] || 0) >= 1
-    const hasMinTopics = topics.size >= 3
-    
-    const hasMinimumVariety = hasMinQuiz && hasMinFillBlank && hasMinPractice && hasMinTopics
+    // Use dynamic variety evaluation instead of hardcoded requirements
+    const hasMinimumVariety = this.evaluateDynamicContentVariety(subject, lessonId, { correctAnswers: 1, totalAttempts: 1, needsReview: false, readyForNext: false })
     
     return {
       totalItems: history.length,
@@ -1066,45 +907,87 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
     }
   }
 
-  private createFallbackPlan(subject: string): LessonPlan {
-    return {
-      subject,
-      lessons: [
-        {
-          id: 'lesson-1',
-          title: `Introduction to ${subject}`,
-          description: `Learn the basics of ${subject}`,
-          content: { type: 'concept-card', data: {} },
-          completed: false
-        },
-        {
-          id: 'lesson-2', 
-          title: `Core Concepts in ${subject}`,
-          description: `Understand key principles`,
-          content: { type: 'multiple-choice', data: {} },
-          completed: false
-        },
-        {
-          id: 'lesson-3',
-          title: `Practice with ${subject}`,
-          description: `Apply what you've learned`,
-          content: { type: 'step-solver', data: {} },
-          completed: false
+  private createFallbackContent(lesson: Lesson, contentType: string): LessonContent {
+    // Generate dynamic fallback content using AI
+    return this.generateDynamicFallbackContent(lesson, contentType)
+  }
+
+  // Generate dynamic fallback content using AI when main content generation fails
+  private generateDynamicFallbackContent(lesson: Lesson, contentType: string): LessonContent {
+    try {
+      // Use a simplified AI call for fallback content
+      const fallbackPrompt = this.createFallbackPrompt(lesson, contentType)
+      
+      // Try to generate with AI, but with shorter timeout and simpler prompts
+      chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content: "You are a tutor creating simple educational content. Keep responses concise and practical."
+          },
+          {
+            role: "user",
+            content: fallbackPrompt
+          }
+        ],
+        temperature: 0.5,
+        max_tokens: 800
+      }).then(response => {
+        const content = response.choices[0].message.content
+        if (content) {
+          try {
+            const cleanedContent = this.cleanJsonResponse(content)
+            return JSON.parse(cleanedContent)
+          } catch (error) {
+            logger.debug('Fallback AI parse failed, using template fallback:', error)
+          }
         }
-      ],
-      currentLessonIndex: 0
+      }).catch(error => {
+        logger.debug('Fallback AI generation failed:', error)
+      })
+    } catch (error) {
+      logger.debug('Dynamic fallback content generation failed:', error)
+    }
+
+    // Ultimate template fallback if AI is completely unavailable
+    return this.createTemplateFallback(lesson, contentType)
+  }
+
+  private createFallbackPrompt(lesson: Lesson, contentType: string): string {
+    switch (contentType) {
+      case 'quiz':
+      case 'multiple-choice':
+        return `Create a simple multiple choice question about "${lesson.title}".
+Return JSON: {"type": "multiple-choice", "data": {"question": "Simple question", "options": ["A", "B", "C", "D"], "correctAnswer": 0, "explanation": "Brief explanation"}}`
+
+      case 'fill-blank':
+        return `Create a fill-in-the-blank exercise about "${lesson.title}".
+Return JSON: {"type": "fill-blank", "data": {"question": "Complete this about ${lesson.title}", "template": "Text with ___ blanks ___", "answers": ["answer1", "answer2"], "hints": ["hint1", "hint2"], "explanation": "Why these answers work"}}`
+
+      case 'concept-card':
+        return `Create a concept card explaining "${lesson.title}".
+Return JSON: {"type": "concept-card", "data": {"title": "${lesson.title}", "summary": "One sentence summary", "details": "Brief explanation", "examples": ["example1", "example2"], "keyPoints": ["point1", "point2"], "difficulty": "beginner"}}`
+
+      case 'step-solver':
+        return `Create a step-by-step problem for "${lesson.title}".
+Return JSON: {"type": "step-solver", "data": {"problem": "Simple problem", "steps": [{"id": "1", "description": "Step", "calculation": "Work", "result": "Result", "explanation": "Why"}], "finalAnswer": "Answer", "difficulty": "beginner"}}`
+
+      default:
+        return `Create educational content about "${lesson.title}" in format "${contentType}".
+Return valid JSON with type "${contentType}" and appropriate data structure.`
     }
   }
 
-  private createFallbackContent(lesson: Lesson, contentType: string): LessonContent {
-    if (contentType === 'quiz') {
+  private createTemplateFallback(lesson: Lesson, contentType: string): LessonContent {
+    if (contentType === 'quiz' || contentType === 'multiple-choice') {
       return {
         type: 'multiple-choice',
         data: {
           question: `What is an important aspect of ${lesson.title}?`,
           options: ['Understanding the concept', 'Memorizing facts', 'Skipping practice', 'Avoiding questions'],
           correctAnswer: 0,
-          explanation: 'Understanding concepts is always better than just memorizing facts.'
+          explanation: 'Understanding concepts is always better than just memorizing facts.',
+          difficulty: 'beginner'
         }
       }
     }
@@ -1123,184 +1006,42 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
         }
       }
     }
-    
-    // Create detailed, subject-specific fallback content for explanations
-    const lessonTitleLower = lesson.title.toLowerCase()
-    
-    // Photosynthesis specific content
-    if (lessonTitleLower.includes('photosynthesis')) {
+
+    if (contentType === 'step-solver') {
       return {
-        type: 'concept-card',
+        type: 'step-solver',
         data: {
-          title: lesson.title,
-          summary: 'Photosynthesis is the process by which plants convert sunlight, carbon dioxide, and water into glucose and oxygen.',
-          details: 'Photosynthesis occurs in two main stages: the light-dependent reactions (which capture sunlight energy) and the Calvin cycle (which fixes carbon dioxide into glucose). This process takes place primarily in the chloroplasts of plant cells and is essential for life on Earth as it produces oxygen and forms the base of most food chains.',
-          examples: [
-            'Trees using sunlight to produce energy during the day',
-            'Grass converting CO₂ from the air into organic compounds',
-            'Algae in oceans producing oxygen through photosynthesis'
+          problem: `Apply the principles of ${lesson.title} to solve this practice problem`,
+          problemType: lesson.title,
+          steps: [
+            {
+              id: "1",
+              description: "Identify the key concepts",
+              calculation: "Review what you know about " + lesson.title,
+              result: "Clear understanding of fundamentals",
+              explanation: "Starting with basics ensures solid foundation"
+            },
+            {
+              id: "2", 
+              description: "Apply the concepts",
+              calculation: "Use your knowledge to work through the problem",
+              result: "Solution using " + lesson.title + " principles",
+              explanation: "Practical application reinforces learning"
+            }
           ],
-          keyPoints: [
-            'Occurs in chloroplasts of plant cells',
-            'Converts light energy into chemical energy (glucose)',
-            'Produces oxygen as a byproduct',
-            'Essential for most life on Earth'
-          ],
-          difficulty: 'intermediate'
+          finalAnswer: `Successful application of ${lesson.title} concepts`,
+          difficulty: 'beginner',
+          learningObjective: `Practice applying ${lesson.title} in real scenarios`
         }
       }
     }
     
-    // Biology concepts
-    if (lessonTitleLower.includes('cell') || lessonTitleLower.includes('biology') || lessonTitleLower.includes('organism')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Understanding the fundamental building blocks and processes of living organisms.',
-          details: 'Biological concepts help us understand how living things function, from the smallest cellular processes to complex organism behaviors. These principles apply across all forms of life and help explain the diversity and unity we see in nature.',
-          examples: [
-            'Cell division creating new cells for growth',
-            'DNA storing genetic information',
-            'Enzymes speeding up chemical reactions in the body'
-          ],
-          keyPoints: [
-            'All living things are made of cells',
-            'Organisms maintain homeostasis',
-            'Evolution drives species change over time',
-            'Energy flows through living systems'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // Chemistry concepts
-    if (lessonTitleLower.includes('chemistry') || lessonTitleLower.includes('atom') || lessonTitleLower.includes('molecule') || lessonTitleLower.includes('chemical')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Exploring the composition, structure, and reactions of matter at the atomic and molecular level.',
-          details: 'Chemistry explains how atoms bond to form molecules, how chemical reactions occur, and how energy changes during these processes. Understanding chemical principles helps us comprehend everything from basic reactions to complex biological processes.',
-          examples: [
-            'Water molecules (H₂O) forming hydrogen bonds',
-            'Sodium and chlorine combining to make salt (NaCl)',
-            'Combustion reactions releasing energy and producing CO₂'
-          ],
-          keyPoints: [
-            'Atoms are the basic building blocks of matter',
-            'Chemical bonds hold atoms together in molecules',
-            'Reactions involve breaking and forming bonds',
-            'Energy changes accompany chemical reactions'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // Math concepts
-    if (lessonTitleLower.includes('math') || lessonTitleLower.includes('algebra') || lessonTitleLower.includes('equation') || lessonTitleLower.includes('calculate')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Building mathematical understanding through logical reasoning and problem-solving techniques.',
-          details: 'Mathematical concepts provide tools for analyzing patterns, solving problems, and understanding relationships between quantities. These skills are fundamental for many fields and help develop logical thinking abilities.',
-          examples: [
-            'Using variables to represent unknown quantities',
-            'Solving equations to find specific values',
-            'Graphing functions to visualize relationships'
-          ],
-          keyPoints: [
-            'Mathematical symbols represent specific operations',
-            'Equations show relationships between quantities',
-            'Systematic approaches help solve complex problems',
-            'Abstract thinking builds problem-solving skills'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // Physics concepts
-    if (lessonTitleLower.includes('physics') || lessonTitleLower.includes('force') || lessonTitleLower.includes('energy') || lessonTitleLower.includes('motion')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Understanding the fundamental laws that govern motion, energy, and the behavior of matter.',
-          details: 'Physics explains how objects move, how forces interact, and how energy transforms from one form to another. These principles apply to everything from subatomic particles to galaxies and help us understand the natural world.',
-          examples: [
-            'Gravity pulling objects toward Earth',
-            'Electric current flowing through circuits',
-            'Sound waves traveling through air'
-          ],
-          keyPoints: [
-            'Forces cause changes in motion',
-            'Energy cannot be created or destroyed',
-            'Mathematical laws describe physical phenomena',
-            'Physics principles apply universally'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // History concepts
-    if (lessonTitleLower.includes('history') || lessonTitleLower.includes('war') || lessonTitleLower.includes('revolution') || lessonTitleLower.includes('historical')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Examining past events to understand their causes, effects, and significance for today.',
-          details: 'Historical study helps us understand how societies developed, what factors influenced major changes, and how past events continue to shape our world. Learning history develops critical thinking and analytical skills.',
-          examples: [
-            'Economic factors contributing to major conflicts',
-            'Technological innovations changing society',
-            'Political movements influencing government systems'
-          ],
-          keyPoints: [
-            'Historical events have multiple causes',
-            'Past events influence present conditions',
-            'Different perspectives shape historical interpretation',
-            'Patterns in history help predict future trends'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // Literature concepts
-    if (lessonTitleLower.includes('literature') || lessonTitleLower.includes('writing') || lessonTitleLower.includes('language') || lessonTitleLower.includes('text')) {
-      return {
-        type: 'concept-card',
-        data: {
-          title: lesson.title,
-          summary: 'Analyzing written works to understand their meaning, structure, and cultural significance.',
-          details: 'Literature study develops reading comprehension, critical analysis, and appreciation for language. Through examining various texts, we learn about different cultures, time periods, and human experiences.',
-          examples: [
-            'Identifying themes in novels and short stories',
-            'Analyzing character development and motivation',
-            'Understanding how setting influences plot'
-          ],
-          keyPoints: [
-            'Literary works reflect their historical context',
-            'Authors use various techniques to convey meaning',
-            'Reading develops empathy and understanding',
-            'Critical analysis improves thinking skills'
-          ],
-          difficulty: 'intermediate'
-        }
-      }
-    }
-    
-    // Generic fallback for other subjects
+    // Default to concept card for any other content type
     return {
       type: 'concept-card',
       data: {
         title: lesson.title,
-        summary: `An important topic that builds foundational understanding in this subject area.`,
+        summary: `${lesson.title} is an important topic that builds foundational understanding.`,
         details: `This lesson introduces key concepts that will help you develop a deeper understanding of the subject. The material covers essential principles that connect to broader topics and practical applications.`,
         examples: [
           'Real-world applications of these concepts',
@@ -1313,36 +1054,576 @@ Student's progress: ${context.progress.correctAnswers}/${context.progress.totalA
           'Building skills for advanced topics',
           'Developing critical thinking abilities'
         ],
-        difficulty: 'intermediate'
+        difficulty: 'beginner'
       }
     }
   }
 
   private generateFallbackResponse(action: string, data: unknown): string {
+    // Try to generate AI fallback response first
+    try {
+      // Create a simple prompt for fallback responses
+      const prompt = this.createFallbackResponsePrompt(action, data)
+      
+      // Attempt quick AI generation with reduced complexity
+      chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content: "You are a supportive tutor. Give brief, encouraging responses (1-2 sentences max). Be specific to the action."
+          },
+          {
+            role: "user", 
+            content: prompt
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 100
+      }).then(response => {
+        const content = response.choices[0].message.content
+        if (content && content.length > 0) {
+          return content.trim()
+        }
+      }).catch(() => {
+        // Silent fail to ultimate fallback
+      })
+    } catch {
+      // Silent fail to ultimate fallback
+    }
+
+    // Ultimate simple fallbacks only if AI completely fails
+    return this.getUltimateFallbackResponse(action, data)
+  }
+
+  private createFallbackResponsePrompt(action: string, data: unknown): string {
+    // Type guard for answer submission data
+    const isAnswerData = (d: unknown): d is { correct: boolean } => {
+      return typeof d === 'object' && d !== null && 'correct' in d
+    }
+
+    switch (action) {
+      // From ChatPane.tsx - tutor response actions
+      case 'needs_more_practice':
+        return "Student needs more practice with a concept. Give an encouraging response about the value of practice (1-2 sentences max)."
+        
+      case 'continue_practicing':
+        return "Student is making progress but needs to continue practicing. Give encouraging feedback about their progress (1-2 sentences)."
+        
+      case 'ready_for_practice':
+        return "Student is ready to practice. Give an enthusiastic response about starting practice activities (1-2 sentences)."
+        
+      case 'contextual_content_request':
+        return "Student asked a question and you're creating interactive content. Acknowledge their question and explain what you'll create (1-2 sentences)."
+
+      // From ConceptCard.tsx
+      case 'concept_expanded':
+        return "Student wants a deeper explanation. Acknowledge their request and explain you'll provide more detail (1-2 sentences)."
+        
+      case 'examples_requested':
+        return "Student wants more examples. Acknowledge their request and explain you'll provide practical examples (1-2 sentences)."
+        
+      case 'ready_for_next':
+        return "Student is ready to move forward. Give an encouraging response about their progress (1-2 sentences)."
+
+      // From MultipleChoice.tsx, FillInTheBlank.tsx, DragAndDrop.tsx, StepByStepSolver.tsx
+      case 'answer_submitted':
+        if (isAnswerData(data)) {
+          return data.correct 
+            ? "Student got the answer correct. Give brief praise and encouragement (1-2 sentences)."
+            : "Student got the answer wrong. Give brief encouragement to keep trying (1-2 sentences)."
+        }
+        return "Student submitted an answer. Give a brief encouraging response about their attempt (1-2 sentences)."
+
+      case 'fill_blank_submitted':
+        return "Student completed a fill-in-the-blank exercise. Give encouraging feedback on their completion (1-2 sentences)."
+
+      case 'drag_drop_submitted':
+        return "Student completed a drag and drop exercise. Give encouraging feedback on their matching attempt (1-2 sentences)."
+
+      // Reset actions from various components
+      case 'reset_question':
+      case 'fill_blank_reset':
+      case 'drag_drop_reset':
+      case 'solver_reset':
+      case 'quiz_reset':
+      case 'graph_reset':
+        return "Student reset an exercise. Acknowledge the reset and encourage them to try again (1-2 sentences)."
+
+      // Request more content actions
+      case 'explain_more':
+        return "Student wants more explanation about a topic. Acknowledge their request and explain you'll provide deeper insight (1-2 sentences)."
+
+      case 'next_question':
+      case 'next_exercise':
+      case 'next_problem':
+        return "Student wants to move to the next challenge. Give encouraging response about their readiness for more practice (1-2 sentences)."
+
+      // From Explainer.tsx
+      case 'question_requested':
+        return "Student wants to ask a question about the explanation. Encourage their curiosity and explain you'll help them understand (1-2 sentences)."
+
+      case 'detail_expanded':
+        return "Student expanded a detail section. Acknowledge their exploration and encourage deeper learning (1-2 sentences)."
+
+      // From ProgressQuiz.tsx
+      case 'quiz_started':
+        return "Student started a quiz. Give encouraging words about their readiness to test their knowledge (1-2 sentences)."
+
+      case 'quiz_submitted':
+        return "Student completed a quiz. Give encouraging feedback on their quiz completion (1-2 sentences)."
+
+      // From TextHighlighter.tsx
+      case 'highlights_checked':
+        return "Student completed a text highlighting exercise. Give feedback on their text analysis work (1-2 sentences)."
+
+      // From GraphVisualizer.tsx
+      case 'graph_control_changed':
+        return "Student adjusted graph controls. Encourage their exploration of data relationships (1-2 sentences)."
+        
+      default:
+        return `Student performed action "${action}". Give a brief, encouraging response that acknowledges their engagement (1-2 sentences).`
+    }
+  }
+
+  private getUltimateFallbackResponse(action: string, data: unknown): string {
     // Type guard for answer submission data
     const isAnswerData = (d: unknown): d is { correct: boolean } => {
       return typeof d === 'object' && d !== null && 'correct' in d
     }
     
-    // Handle formula explorer interactions
-    if (action === 'variable_changed') {
-      return "Great exploration! You can see how changing variables affects the formula result. Keep experimenting to understand the relationships."
+    // Minimal, generic responses only when AI is completely unavailable
+    switch (action) {
+      // Practice and progression
+      case 'needs_more_practice':
+      case 'continue_practicing':
+        return "Keep practicing - you're making progress!"
+        
+      case 'ready_for_practice':
+      case 'ready_for_next':
+        return "Great! Let's continue."
+        
+      // Help and explanation requests
+      case 'concept_expanded':
+      case 'examples_requested':
+      case 'explain_more':
+      case 'question_requested':
+      case 'detail_expanded':
+      case 'contextual_content_request':
+        return "I'll help you understand this better."
+
+      // Answer submissions
+      case 'answer_submitted':
+      case 'fill_blank_submitted':
+      case 'drag_drop_submitted':
+      case 'quiz_submitted':
+        if (isAnswerData(data)) {
+          return data.correct ? "Correct! Well done." : "Not quite - keep trying!"
+        }
+        return "Thanks for your response!"
+
+      // Reset actions
+      case 'reset_question':
+      case 'fill_blank_reset':
+      case 'drag_drop_reset':
+      case 'solver_reset':
+      case 'quiz_reset':
+      case 'graph_reset':
+        return "Reset complete. Try again!"
+
+      // Next content requests
+      case 'next_question':
+      case 'next_exercise':
+      case 'next_problem':
+        return "Ready for more practice!"
+
+      // Other interactions
+      case 'quiz_started':
+        return "Good luck on your quiz!"
+
+      case 'highlights_checked':
+        return "Good work analyzing the text!"
+
+      case 'graph_control_changed':
+        return "Great exploration!"
+        
+      default:
+        return "Keep exploring!"
+    }
+  }
+
+  // Generate dynamic fallback plan using AI
+  private async generateDynamicFallbackPlan(subject: string): Promise<LessonPlan> {
+    try {
+      const response = await chatCompletion({
+        messages: [
+          {
+            role: "system",
+            content: `You are an expert tutor creating a simple but effective learning plan as a fallback. Keep it practical and engaging.`
+          },
+          {
+            role: "user",
+            content: `Create a simple 6-lesson learning plan for "${subject}" that covers the most essential concepts.
+
+Return JSON:
+{
+  "subject": "${subject}",
+  "lessons": [
+    {
+      "id": "lesson-1",
+      "title": "Engaging title for essential concept",
+      "description": "What students will learn",
+      "completed": false
+    }
+  ]
+}
+
+Focus on:
+- Most fundamental concepts students need to know
+- Practical, real-world applications
+- Clear progression from basic to more advanced
+- Engaging, specific lesson titles (not generic)`
+          }
+        ],
+        temperature: 0.4,
+        max_tokens: 1000
+      })
+
+      const content = response.choices[0].message.content
+      if (!content) throw new Error('No fallback plan content received')
+
+      const cleanedContent = this.cleanJsonResponse(content)
+      const parsedData = JSON.parse(cleanedContent)
+
+      if (!parsedData.lessons || !Array.isArray(parsedData.lessons)) {
+        throw new Error('Invalid fallback plan structure')
+      }
+
+      return {
+        subject: parsedData.subject || subject,
+        lessons: parsedData.lessons.map((lesson: { id?: string; title?: string; description?: string }, index: number) => ({
+          id: lesson.id || `lesson-${index + 1}`,
+          title: lesson.title || `Essential ${subject} Concepts ${index + 1}`,
+          description: lesson.description || `Learn fundamental concepts of ${subject}`,
+          completed: false,
+          content: { type: 'concept-card', data: {} }
+        })),
+        currentLessonIndex: 0
+      }
+    } catch (error) {
+      logger.error('Failed to generate dynamic fallback plan:', error)
+      // Ultimate fallback with minimal structure
+      return {
+        subject,
+        lessons: [
+          {
+            id: 'lesson-1',
+            title: `Introduction to ${subject}`,
+            description: `Learn the fundamentals of ${subject}`,
+            content: { type: 'concept-card', data: {} },
+            completed: false
+          },
+          {
+            id: 'lesson-2', 
+            title: `Core Concepts in ${subject}`,
+            description: `Understand key principles`,
+            content: { type: 'multiple-choice', data: {} },
+            completed: false
+          },
+          {
+            id: 'lesson-3',
+            title: `Practice with ${subject}`,
+            description: `Apply what you've learned`,
+            content: { type: 'step-solver', data: {} },
+            completed: false
+          }
+        ],
+        currentLessonIndex: 0
+      }
+    }
+  }
+
+  // Generate lesson content for a specific lesson
+  async generateLessonContent(
+    subjectName: string, 
+    lesson: Lesson, 
+    contentType: string
+  ): Promise<LessonContent> {
+    try {
+      logger.debug(`🎨 Generating ${contentType} content for lesson: ${lesson.title}`)
+      
+      // Track content generation for variety
+      this.trackGeneratedContent(subjectName, lesson.id, contentType, { data: { title: lesson.title } })
+      
+      const response = await this.cachedApiCall(
+        'lesson-content',
+        { subjectName, lessonId: lesson.id, contentType, lessonTitle: lesson.title },
+        async () => {
+          const contentPrompt = this.createContentPrompt(lesson, contentType, subjectName)
+          
+          const result = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert educational content creator. Create engaging, interactive content that helps students learn effectively.`
+              },
+              {
+                role: "user",
+                content: contentPrompt
+              }
+            ],
+            temperature: 0.6,
+            max_tokens: 1500
+          })
+
+          const content = result.choices[0].message.content
+          if (!content) throw new Error('No content generated')
+          
+          const cleanedContent = this.cleanJsonResponse(content)
+          const fixedContent = this.fixIncompleteJson(cleanedContent)
+          return JSON.parse(fixedContent)
+        }
+      )
+      
+      // Validate and return the lesson content
+      if (!response || typeof response !== 'object') {
+        throw new Error('Invalid lesson content structure')
+      }
+      
+      return response as LessonContent
+      
+    } catch (error) {
+      logger.error('Failed to generate lesson content:', error)
+      // Fall back to dynamic content generation
+      return this.generateDynamicFallbackContent(lesson, contentType)
+    }
+  }
+
+  // Generate tutor responses for user interactions
+  async generateTutorResponse(
+    subjectName: string,
+    action: string,
+    data: unknown,
+    context?: unknown
+  ): Promise<string> {
+    try {
+      logger.debug(`🤖 Generating tutor response for action: ${action}`)
+      
+      const response = await this.cachedApiCall(
+        'tutor-response',
+        { subjectName, action, data, context },
+        async () => {
+          const responsePrompt = this.createTutorResponsePrompt(action, data, context, subjectName)
+          
+          const result = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are an encouraging AI tutor. Give supportive, specific feedback that motivates students and guides their learning. Keep responses conversational and under 3 sentences.`
+              },
+              {
+                role: "user",
+                content: responsePrompt
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 200
+          })
+
+          const content = result.choices[0].message.content
+          if (!content) throw new Error('No response generated')
+          
+          return content.trim()
+        }
+      )
+      
+      return response as string
+      
+    } catch (error) {
+      logger.error('Failed to generate tutor response:', error)
+      // Fall back to generated fallback response
+      return this.generateFallbackResponse(action, data)
+    }
+  }
+
+  // Create content prompts for different lesson content types
+  private createContentPrompt(lesson: Lesson, contentType: string, subjectName: string): string {
+    const baseContext = `Subject: ${subjectName}\nLesson: ${lesson.title}\nDescription: ${lesson.description}`
+    
+    switch (contentType) {
+      case 'quiz':
+      case 'multiple-choice':
+        return `${baseContext}
+
+Create a multiple-choice question that tests understanding of this lesson.
+
+Return JSON:
+{
+  "type": "multiple-choice",
+  "data": {
+    "question": "Clear, specific question about the lesson topic",
+    "options": ["Option A", "Option B", "Option C", "Option D"],
+    "correctAnswer": 0,
+    "explanation": "Why this answer is correct and others are wrong",
+    "difficulty": "beginner|intermediate|advanced",
+    "category": "${lesson.title}"
+  }
+}
+
+Make the question practical and test real understanding, not just memorization.`
+
+      case 'fill-blank':
+        return `${baseContext}
+
+Create a fill-in-the-blank exercise for this lesson.
+
+Return JSON:
+{
+  "type": "fill-blank",
+  "data": {
+    "question": "Complete this statement about ${lesson.title}",
+    "template": "Text with ___ blanks ___ to fill in ___",
+    "answers": ["answer1", "answer2", "answer3"],
+    "hints": ["Hint for blank 1", "Hint for blank 2", "Hint for blank 3"],
+    "explanation": "Why these answers are correct",
+    "category": "${lesson.title}",
+    "difficulty": "beginner|intermediate|advanced"
+  }
+}
+
+Create meaningful blanks that test key concepts.`
+
+      case 'concept-card':
+        return `${baseContext}
+
+Create a concept card that explains the key ideas in this lesson.
+
+Return JSON:
+{
+  "type": "concept-card",
+  "data": {
+    "title": "${lesson.title}",
+    "summary": "One clear sentence explaining the main concept",
+    "details": "2-3 sentences with deeper explanation",
+    "examples": ["Real-world example 1", "Real-world example 2"],
+    "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
+    "difficulty": "beginner|intermediate|advanced"
+  }
+}
+
+Focus on clarity and practical understanding.`
+
+      case 'step-solver':
+      case 'practice':
+        return `${baseContext}
+
+Create a step-by-step problem that applies the lesson concepts.
+
+Return JSON:
+{
+  "type": "step-solver",
+  "data": {
+    "problem": "A practical problem that uses ${lesson.title} concepts",
+    "problemType": "${lesson.title}",
+    "steps": [
+      {
+        "id": "1",
+        "description": "What to do in this step",
+        "calculation": "The work or reasoning",
+        "result": "Result of this step",
+        "explanation": "Why this step is needed"
+      }
+    ],
+    "finalAnswer": "The complete solution",
+    "difficulty": "beginner|intermediate|advanced",
+    "learningObjective": "What students learn from solving this"
+  }
+}
+
+Create a meaningful problem that builds understanding.`
+
+      case 'explainer':
+        return `${baseContext}
+
+Create an interactive explanation for this lesson.
+
+Return JSON:
+{
+  "type": "explainer",
+  "data": {
+    "title": "${lesson.title}",
+    "content": "Clear, engaging explanation of the concept",
+    "sections": [
+      {
+        "title": "Section 1",
+        "content": "Detailed explanation of this aspect"
+      }
+    ],
+    "examples": ["Example 1", "Example 2"],
+    "interactiveElements": ["Element that students can explore"],
+    "difficulty": "beginner|intermediate|advanced"
+  }
+}
+
+Make it engaging and interactive.`
+
+      default:
+        return `${baseContext}
+
+Create educational content of type "${contentType}" for this lesson.
+Return valid JSON with type "${contentType}" and appropriate data structure.
+Focus on student engagement and practical understanding.`
+    }
+  }
+
+  // Create prompts for tutor responses
+  private createTutorResponsePrompt(action: string, data: unknown, context: unknown, subjectName: string): string {
+    const baseContext = `You are tutoring a student in ${subjectName}.`
+    
+    // Type guards for different data structures
+    const isAnswerData = (d: unknown): d is { correct: boolean } => {
+      return typeof d === 'object' && d !== null && 'correct' in d
     }
     
-    if (action === 'example_selected') {
-      return "Excellent choice! Real-world examples help you understand practical applications of mathematical formulas."
+    const isContextWithLesson = (c: unknown): c is { lesson?: { title: string }; progress?: { correctAnswers: number; totalAttempts: number } } => {
+      return typeof c === 'object' && c !== null
     }
-    
-    if (action === 'formula_reset') {
-      return "Formula reset! You can now start fresh and explore different variable combinations."
+
+    switch (action) {
+      case 'needs_more_practice':
+        return `${baseContext} The student needs more practice with a concept. Give encouraging feedback about the value of practice (2-3 sentences max).`
+        
+      case 'continue_practicing':
+        return `${baseContext} The student is making progress but needs to continue practicing. Give encouraging feedback about their progress (2-3 sentences max).`
+        
+      case 'ready_for_practice':
+        return `${baseContext} The student is ready to practice. Give an enthusiastic response about starting practice activities (2-3 sentences max).`
+
+      case 'answer_submitted':
+        if (isAnswerData(data)) {
+          return data.correct 
+            ? `${baseContext} The student got an answer correct. Give specific praise and encouragement to continue (2-3 sentences max).`
+            : `${baseContext} The student got an answer wrong. Give encouraging feedback to keep trying and learn from mistakes (2-3 sentences max).`
+        }
+        return `${baseContext} The student submitted an answer. Give encouraging feedback about their attempt (2-3 sentences max).`
+
+      case 'concept_expanded':
+        return `${baseContext} The student wants a deeper explanation. Acknowledge their curiosity and explain you'll provide more detail (2-3 sentences max).`
+        
+      case 'examples_requested':
+        return `${baseContext} The student wants more examples. Acknowledge their request and explain you'll provide practical examples (2-3 sentences max).`
+
+      case 'contextual_content_request':
+        if (isContextWithLesson(context)) {
+          const lessonTitle = context.lesson?.title || 'this topic'
+          return `${baseContext} The student asked a question about ${lessonTitle} and you're creating interactive content. Acknowledge their question and explain what you'll create (2-3 sentences max).`
+        }
+        return `${baseContext} The student asked a question and you're creating interactive content. Acknowledge their question and explain what you'll create (2-3 sentences max).`
+
+      default:
+        return `${baseContext} The student performed action "${action}". Give a brief, encouraging response that acknowledges their engagement and supports their learning (2-3 sentences max).`
     }
-    
-    if (action === 'answer_submitted' && isAnswerData(data)) {
-      return data.correct ? "That's right! Good job." : "Not quite, but keep trying!"
-    }
-    
-    return "Keep exploring! You're doing great."
   }
 }
 
 export const aiTutor = new AITutorService() 
+

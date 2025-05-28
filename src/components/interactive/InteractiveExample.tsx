@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { Play, Pause, RotateCcw, Lightbulb, Activity } from 'lucide-react'
+import { Play, Pause, RotateCcw, Lightbulb, Activity, Palette, Calculator, Atom, Zap } from 'lucide-react'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
@@ -35,10 +35,9 @@ interface Control {
 
 interface DisplayElement {
   id: string
-  type: 'text' | 'shape' | 'chart' | 'formula'
+  type: 'text' | 'formula' | 'shape' | 'color' | 'graph' | 'visualization'
   content: string
-  style?: Record<string, string | number>
-  dependsOn?: string[]
+  style?: Record<string, unknown>
 }
 
 export const InteractiveExample = memo(function InteractiveExample({ 
@@ -111,11 +110,12 @@ export const InteractiveExample = memo(function InteractiveExample({
     setAnimationFrame(0)
   }
 
+  // Enhanced evaluation system that handles different domains
   const evaluateExpression = (expression: string): string => {
     try {
-      // Replace control variables with their current values
       let evaluatedExpression = expression
       
+      // Replace control variables with their current values
       Object.entries(controlValues).forEach(([key, value]) => {
         const regex = new RegExp(`\\$${key}`, 'g')
         evaluatedExpression = evaluatedExpression.replace(regex, String(value))
@@ -124,31 +124,96 @@ export const InteractiveExample = memo(function InteractiveExample({
       // Replace time variable if used
       evaluatedExpression = evaluatedExpression.replace(/\$time/g, String(animationFrame * 0.1))
       
-      // Simple evaluation (for display purposes only)
-      if (evaluatedExpression.includes('sin')) {
-        evaluatedExpression = evaluatedExpression.replace(/sin\(([^)]+)\)/g, (_, expr) => {
-          const result = Math.sin(eval(expr))
-          return result.toFixed(2)
-        })
-      }
+      // Handle mathematical functions
+      evaluatedExpression = evaluatedExpression.replace(/sin\(([^)]+)\)/g, (_, expr) => {
+        const result = Math.sin(parseFloat(expr) || 0)
+        return result.toFixed(3)
+      })
       
-      if (evaluatedExpression.includes('cos')) {
-        evaluatedExpression = evaluatedExpression.replace(/cos\(([^)]+)\)/g, (_, expr) => {
-          const result = Math.cos(eval(expr))
-          return result.toFixed(2)
-        })
-      }
+      evaluatedExpression = evaluatedExpression.replace(/cos\(([^)]+)\)/g, (_, expr) => {
+        const result = Math.cos(parseFloat(expr) || 0)
+        return result.toFixed(3)
+      })
+      
+      evaluatedExpression = evaluatedExpression.replace(/tan\(([^)]+)\)/g, (_, expr) => {
+        const result = Math.tan(parseFloat(expr) || 0)
+        return result.toFixed(3)
+      })
+      
+      evaluatedExpression = evaluatedExpression.replace(/sqrt\(([^)]+)\)/g, (_, expr) => {
+        const result = Math.sqrt(parseFloat(expr) || 0)
+        return result.toFixed(3)
+      })
+      
+      evaluatedExpression = evaluatedExpression.replace(/pow\(([^,]+),([^)]+)\)/g, (_, base, exp) => {
+        const result = Math.pow(parseFloat(base) || 0, parseFloat(exp) || 0)
+        return result.toFixed(3)
+      })
       
       // Handle basic arithmetic
       if (/^[\d+\-*/.() ]+$/.test(evaluatedExpression)) {
         const result = eval(evaluatedExpression)
-        return typeof result === 'number' ? result.toFixed(2) : String(result)
+        return typeof result === 'number' ? result.toFixed(3) : String(result)
       }
       
       return evaluatedExpression
     } catch {
       return expression
     }
+  }
+
+  // Convert HSL to RGB
+  const hslToRgb = (h: number, s: number, l: number) => {
+    h = h / 360
+    s = s / 100
+    l = l / 100
+    
+    const c = (1 - Math.abs(2 * l - 1)) * s
+    const x = c * (1 - Math.abs((h * 6) % 2 - 1))
+    const m = l - c / 2
+    
+    let r = 0, g = 0, b = 0
+    
+    if (0 <= h && h < 1/6) {
+      r = c; g = x; b = 0
+    } else if (1/6 <= h && h < 2/6) {
+      r = x; g = c; b = 0
+    } else if (2/6 <= h && h < 3/6) {
+      r = 0; g = c; b = x
+    } else if (3/6 <= h && h < 4/6) {
+      r = 0; g = x; b = c
+    } else if (4/6 <= h && h < 5/6) {
+      r = x; g = 0; b = c
+    } else if (5/6 <= h && h < 1) {
+      r = c; g = 0; b = x
+    }
+    
+    r = Math.round((r + m) * 255)
+    g = Math.round((g + m) * 255)
+    b = Math.round((b + m) * 255)
+    
+    return `rgb(${r}, ${g}, ${b})`
+  }
+
+  // Get domain-specific icon
+  const getDomainIcon = () => {
+    const title = exampleContent.title.toLowerCase()
+    const description = exampleContent.description.toLowerCase()
+    
+    if (title.includes('color') || description.includes('color') || description.includes('hue')) {
+      return <Palette className="h-5 w-5 text-purple-600 mr-2" />
+    }
+    if (title.includes('physics') || description.includes('motion') || description.includes('wave')) {
+      return <Zap className="h-5 w-5 text-blue-600 mr-2" />
+    }
+    if (title.includes('math') || description.includes('formula') || description.includes('equation')) {
+      return <Calculator className="h-5 w-5 text-green-600 mr-2" />
+    }
+    if (title.includes('chemistry') || description.includes('molecule') || description.includes('atom')) {
+      return <Atom className="h-5 w-5 text-red-600 mr-2" />
+    }
+    
+    return <Lightbulb className="h-5 w-5 text-yellow-600 mr-2" />
   }
 
   const renderControl = (control: Control) => {
@@ -160,7 +225,7 @@ export const InteractiveExample = memo(function InteractiveExample({
           <div key={control.id} className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium">{control.label}</label>
-              <span className="text-sm text-gray-600">{value}</span>
+              <span className="text-sm text-gray-600 font-mono">{typeof value === 'number' ? value.toFixed(1) : value}</span>
             </div>
             <Slider
               value={[value as number]}
@@ -210,10 +275,10 @@ export const InteractiveExample = memo(function InteractiveExample({
         return (
           <div 
             key={element.id}
-            className="p-3 bg-gray-50 rounded-lg"
+            className="p-4 bg-gray-50 rounded-lg border"
             style={element.style}
           >
-            <p className="text-sm">{evaluatedContent}</p>
+            <p className="text-sm leading-relaxed">{evaluatedContent}</p>
           </div>
         )
       
@@ -224,36 +289,111 @@ export const InteractiveExample = memo(function InteractiveExample({
             className="p-4 bg-blue-50 rounded-lg border border-blue-200"
             style={element.style}
           >
-            <code className="text-lg font-mono text-blue-800">{evaluatedContent}</code>
+            <code className="text-lg font-mono text-blue-800 block text-center">{evaluatedContent}</code>
+          </div>
+        )
+      
+      case 'color':
+        // Handle color display with HSL or RGB values
+        const hue = Number(controlValues.hue || controlValues['Hue Adjustment'] || 0)
+        const saturation = Number(controlValues.saturation || controlValues['Saturation Level'] || 50)
+        const brightness = Number(controlValues.brightness || controlValues['Brightness Level'] || 50)
+        const currentColor = hslToRgb(hue, saturation, brightness)
+        
+        return (
+          <div key={element.id} className="space-y-4">
+            <div className="text-center">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">The current color based on your adjustments</h4>
+              <div 
+                className="w-full h-32 rounded-lg border-2 border-gray-300 shadow-inner transition-all duration-300"
+                style={{ backgroundColor: currentColor }}
+              />
+              <div className="mt-3 p-3 bg-gray-50 rounded text-sm space-y-1">
+                <div className="flex justify-between">
+                  <span>HSL:</span>
+                  <span className="font-mono">hsl({hue.toFixed(0)}°, {saturation.toFixed(0)}%, {brightness.toFixed(0)}%)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>RGB:</span>
+                  <span className="font-mono">{currentColor}</span>
+                </div>
+              </div>
+            </div>
           </div>
         )
       
       case 'shape':
-        const size = Number(controlValues.size) || 50
+        const size = Number(controlValues.size || controlValues.amplitude || 50)
+        const rotation = isPlaying ? animationFrame * 2 : 0
         const color = controlValues.color ? '#10b981' : '#3b82f6'
         
         return (
           <div 
             key={element.id}
-            className="flex justify-center p-4"
+            className="flex justify-center items-center p-8"
             style={element.style}
           >
             <div
+              className="transition-all duration-300 shadow-lg"
               style={{
-                width: `${size}px`,
-                height: `${size}px`,
+                width: `${Math.max(size, 10)}px`,
+                height: `${Math.max(size, 10)}px`,
                 backgroundColor: color,
-                borderRadius: evaluatedContent.includes('circle') ? '50%' : '4px',
-                transform: `rotate(${animationFrame * 2}deg)`,
-                transition: isPlaying ? 'none' : 'all 0.3s ease'
+                borderRadius: evaluatedContent.includes('circle') ? '50%' : '8px',
+                transform: `rotate(${rotation}deg)`,
               }}
             />
           </div>
         )
       
+      case 'graph':
+        // Simple graph visualization
+        const amplitude = Number(controlValues.amplitude || 5)
+        const frequency = Number(controlValues.frequency || 1)
+        const time = animationFrame * 0.1
+        const points = []
+        
+        for (let i = 0; i < 100; i++) {
+          const x = (i / 100) * 4 * Math.PI
+          const y = amplitude * Math.sin(frequency * x + time)
+          points.push(`${i * 2},${50 - y * 5}`)
+        }
+        
+        return (
+          <div key={element.id} className="p-4 bg-white border rounded-lg">
+            <svg width="200" height="100" className="border">
+              <polyline
+                fill="none"
+                stroke="#3b82f6"
+                strokeWidth="2"
+                points={points.join(' ')}
+              />
+              <line x1="0" y1="50" x2="200" y2="50" stroke="#e5e7eb" strokeWidth="1" />
+            </svg>
+          </div>
+        )
+      
+      case 'visualization':
+        // General purpose visualization based on content
+        return (
+          <div 
+            key={element.id}
+            className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border"
+          >
+            <div className="text-center space-y-2">
+              <div className="text-lg font-semibold text-gray-800">
+                {evaluatedContent}
+              </div>
+              <div className="text-sm text-gray-600">
+                Adjust the sliders to see how changes affect the result.
+              </div>
+            </div>
+          </div>
+        )
+      
       default:
         return (
-          <div key={element.id} className="p-3 bg-gray-100 rounded">
+          <div key={element.id} className="p-4 bg-gray-100 rounded-lg border">
             <span className="text-sm text-gray-600">{evaluatedContent}</span>
           </div>
         )
@@ -265,7 +405,7 @@ export const InteractiveExample = memo(function InteractiveExample({
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center">
-            <Lightbulb className="h-5 w-5 text-yellow-600 mr-2" />
+            {getDomainIcon()}
             {exampleContent.title}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -291,7 +431,7 @@ export const InteractiveExample = memo(function InteractiveExample({
             </Button>
           </div>
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg">
+        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
           <p className="text-yellow-900 text-sm">{exampleContent.description}</p>
         </div>
       </CardHeader>
@@ -303,7 +443,7 @@ export const InteractiveExample = memo(function InteractiveExample({
             <Activity className="h-4 w-4 mr-2" />
             Controls
           </h4>
-          <div className="grid gap-4 p-4 bg-gray-50 rounded-lg">
+          <div className="grid gap-4 p-4 bg-gray-50 rounded-lg border">
             {exampleContent.controls.map(renderControl)}
           </div>
         </div>
@@ -317,9 +457,9 @@ export const InteractiveExample = memo(function InteractiveExample({
         </div>
 
         {/* Explanation */}
-        <div className="bg-blue-50 p-4 rounded-lg">
+        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
           <p className="text-sm text-blue-800 font-medium mb-2">How it works:</p>
-          <p className="text-sm text-blue-700">{exampleContent.explanation}</p>
+          <p className="text-sm text-blue-700 leading-relaxed">{exampleContent.explanation}</p>
         </div>
       </CardContent>
     </Card>

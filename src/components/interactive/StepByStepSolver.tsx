@@ -232,7 +232,7 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
             </Badge>
             {solverContent.difficulty && (
               <Badge className={getDifficultyColor(solverContent.difficulty)}>
-                <span className="text-xs font-semibold uppercase tracking-wide">{solverContent.difficulty}</span>
+                <span className="text-xs font-semibold capitalize tracking-wide">{solverContent.difficulty}</span>
               </Badge>
             )}
           </div>
@@ -313,14 +313,14 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
             
             {currentStepData.formula && (
               <div className="bg-white p-5 rounded-lg border border-emerald-300 shadow-sm">
-                <h5 className="text-sm font-semibold text-emerald-600 mb-2 uppercase tracking-wide">Formula:</h5>
+                <h5 className="text-sm font-semibold text-emerald-600 mb-2 capitalize tracking-wide">Formula:</h5>
                 <p className="text-emerald-800 font-mono text-xl leading-relaxed">{currentStepData.formula}</p>
               </div>
             )}
             
             {currentStepData.calculation && (
               <div className="bg-white p-5 rounded-lg border border-emerald-300 shadow-sm">
-                <h5 className="text-sm font-semibold text-emerald-600 mb-2 uppercase tracking-wide">Calculation:</h5>
+                <h5 className="text-sm font-semibold text-emerald-600 mb-2 capitalize tracking-wide">Calculation:</h5>
                 <p className="text-emerald-800 font-mono text-xl leading-relaxed">{currentStepData.calculation}</p>
               </div>
             )}

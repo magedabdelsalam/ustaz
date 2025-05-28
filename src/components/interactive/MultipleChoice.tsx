@@ -228,7 +228,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
             )}
             {mcContent.difficulty && (
               <Badge className={getDifficultyColor(mcContent.difficulty)}>
-                <span className="text-xs font-semibold uppercase tracking-wide">{mcContent.difficulty}</span>
+                <span className="text-xs font-semibold capitalize tracking-wide">{mcContent.difficulty}</span>
               </Badge>
             )}
           </div>

@@ -195,7 +195,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
               {estimateReadTime()} min read
             </Badge>
             <Badge className={getDifficultyColor(explainerContent.difficulty)}>
-              <span className="text-xs font-semibold uppercase tracking-wide">{explainerContent.difficulty}</span>
+              <span className="text-xs font-semibold capitalize tracking-wide">{explainerContent.difficulty}</span>
             </Badge>
           </div>
         </div>

@@ -178,7 +178,7 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
             <CardTitle className="text-xl font-bold text-gray-900">{generateMeaningfulTitle()}</CardTitle>
           </div>
           <Badge className={getDifficultyColor(conceptContent.difficulty)}>
-            <span className="text-xs font-semibold uppercase tracking-wide">{conceptContent.difficulty}</span>
+            <span className="text-xs font-semibold capitalize tracking-wide">{conceptContent.difficulty}</span>
           </Badge>
         </div>
         <p className="text-gray-700 text-base leading-relaxed mt-2">{conceptContent.summary}</p>

@@ -287,9 +287,9 @@ export const FormulaExplorer = memo(function FormulaExplorer({
               onClick={() => setShowSteps(!showSteps)}
             >
               {showSteps ? (
-                <EyeOff key="eye-off" className="h-4 w-4" />
+                <EyeOff className="h-4 w-4" />
               ) : (
-                <Eye key="eye-on" className="h-4 w-4" />
+                <Eye className="h-4 w-4" />
               )}
               {showSteps ? 'Hide' : 'Show'} Steps
             </Button>
@@ -312,9 +312,9 @@ export const FormulaExplorer = memo(function FormulaExplorer({
           <div className="space-y-4">
             <h4 className="font-medium text-gray-900">Example Scenarios</h4>
             <div className="grid gap-2">
-              {formulaContent.examples.map(example => (
+              {formulaContent.examples.map((example, index) => (
                 <Button
-                  key={example.id}
+                  key={example.id || `example-${index}`}
                   variant={selectedExample === example.id ? "default" : "outline"}
                   className="w-full justify-start h-auto p-3"
                   onClick={() => handleExampleSelect(example.id)}
@@ -338,8 +338,8 @@ export const FormulaExplorer = memo(function FormulaExplorer({
             Variables
           </h4>
           <div className="grid gap-4 p-4 bg-gray-50 rounded-lg">
-            {formulaContent.variables.map(variable => (
-              <div key={variable.id} className="space-y-2">
+            {formulaContent.variables.map((variable, index) => (
+              <div key={variable.id || `variable-${index}`} className="space-y-2">
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <code className="text-sm font-mono bg-white px-2 py-1 rounded">
@@ -392,7 +392,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
             <div className="space-y-3">
               {formulaContent.steps.map((step, index) => (
                 <div 
-                  key={step.id} 
+                  key={step.id || `step-${index}`} 
                   className={`p-3 rounded-lg border ${
                     step.highlight ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-200'
                   }`}
