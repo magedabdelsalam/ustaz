@@ -72,7 +72,7 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
           {/* Logo */}
           <div className="flex items-center space-x-2">
             <GraduationCap className="h-5 w-5 text-blue-600" />
-            <span className="font-semibold text-gray-900">AI StudyMate</span>
+            <span className="font-semibold text-gray-900">Ustaz</span>
           </div>
 
           {/* User Profile and Close Button */}
