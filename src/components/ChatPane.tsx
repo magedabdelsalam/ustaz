@@ -33,6 +33,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   const [pendingMessages, setPendingMessages] = useState<Message[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const lessonPlanCreationAttempted = useRef<string | null>(null)
+  const lessonPlanCreationInProgress = useRef<boolean>(false)
 
   // Custom hooks for better separation of concerns
   const { scheduleRetry, clearRetry } = usePendingMessages({
@@ -55,37 +56,32 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }
   })
 
-  // Load subject session when subject or user changes
+  // Load messages and lesson plan when subject changes
   useEffect(() => {
     if (selectedSubject && user) {
+      // Reset lesson plan creation tracking when subject changes
+      lessonPlanCreationAttempted.current = null
+      lessonPlanCreationInProgress.current = false
+      
       loadSubjectSession()
       
       // Handle pending messages if any
       if (pendingMessages.length > 0) {
         console.log(`💾 Scheduling retry for ${pendingMessages.length} pending messages`)
-      setTimeout(() => {
+        setTimeout(() => {
           scheduleRetry(pendingMessages)
         }, 2000) // Wait 2 seconds to ensure subject is in database
       }
-      } else {
-      // Clear state when no subject is selected
-      setMessages([])
+    } else {
+      // Clear lesson plan and progress when no subject is selected
       setCurrentLessonPlan(null)
       setCurrentProgress(null)
+      setMessages([])
       lessonPlanCreationAttempted.current = null
       clearRetry()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject?.id, user?.id])
-
-  // Schedule retry when pending messages change
-  useEffect(() => {
-    if (pendingMessages.length > 0 && selectedSubject && user) {
-      scheduleRetry(pendingMessages)
-    }
-    return clearRetry
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingMessages.length, selectedSubject?.id, user?.id])
 
   // Auto-scroll to bottom function with reliable timing
   const scrollToBottom = useCallback(() => {
@@ -168,6 +164,16 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   }, [user, selectedSubject])
 
   const createLessonPlan = useCallback(async (subjectName: string, targetSubject?: Subject) => {
+    // Check if creation is already in progress for this subject
+    if (lessonPlanCreationInProgress.current || lessonPlanCreationAttempted.current === subjectName) {
+      console.log('⏸️ Lesson plan creation already in progress or attempted for:', subjectName)
+      return
+    }
+
+    // Mark creation as in progress
+    lessonPlanCreationInProgress.current = true
+    lessonPlanCreationAttempted.current = subjectName
+    
     setIsTyping(true)
     try {
       console.log('📋 Creating lesson plan for:', subjectName)
@@ -231,7 +237,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
 
       const aiResponse: Message = {
         id: (Date.now() + 1).toString(),
-              role: 'assistant',
+        role: 'assistant',
         content: planMessage,
         timestamp: new Date(),
         hasGeneratedContent: true
@@ -241,7 +247,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       // Save AI response (should have subject by now, but handle pending just in case)
       if (subjectForPlan) {
         await saveMessageToPersistence(aiResponse)
-          } else {
+      } else {
         console.log('⏳ Adding AI response to pending queue')
         setPendingMessages(prev => [...prev, aiResponse])
       }
@@ -251,24 +257,27 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     } catch (error) {
       console.error('Error creating lesson plan:', error)
       setIsTyping(false)
+    } finally {
+      // Reset progress tracking
+      lessonPlanCreationInProgress.current = false
     }
-  }, [selectedSubject, user, saveMessageToPersistence]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedSubject, user, saveMessageToPersistence])
 
   // Check if lesson plan creation should be triggered (moved from useEffect to direct logic)
   const checkAndCreateLessonPlan = useCallback(async () => {
-      if (selectedSubject && !currentLessonPlan && 
-          lessonPlanCreationAttempted.current !== selectedSubject.name) {
-        
-        // Check if we have recent user messages (not just loaded from persistence)
-        const recentUserMessages = messages.filter(m => 
-          m.role === 'user' && 
-          Date.now() - m.timestamp.getTime() < 60000 // Within last minute
-        )
-        
-        if (recentUserMessages.length > 0) {
-          console.log('🆕 Creating lesson plan for new subject:', selectedSubject.name)
-          lessonPlanCreationAttempted.current = selectedSubject.name
-          await createLessonPlan(selectedSubject.name, selectedSubject)
+    if (selectedSubject && !currentLessonPlan && 
+        lessonPlanCreationAttempted.current !== selectedSubject.name &&
+        !lessonPlanCreationInProgress.current) {
+      
+      // Check if we have recent user messages (not just loaded from persistence)
+      const recentUserMessages = messages.filter(m => 
+        m.role === 'user' && 
+        Date.now() - m.timestamp.getTime() < 60000 // Within last minute
+      )
+      
+      if (recentUserMessages.length > 0) {
+        console.log('🆕 Creating lesson plan for new subject:', selectedSubject.name)
+        await createLessonPlan(selectedSubject.name, selectedSubject)
       }
     }
   }, [selectedSubject, currentLessonPlan, createLessonPlan, messages])
@@ -316,9 +325,9 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     try {
       if (selectedSubject) {
         // Check if we need to create a lesson plan
-        if (!currentLessonPlan) {
+        if (!currentLessonPlan && !lessonPlanCreationInProgress.current) {
           await createLessonPlan(selectedSubject.name, selectedSubject)
-        } else {
+        } else if (currentLessonPlan) {
           // We have a lesson plan, generate content for current lesson
           await generateCurrentLessonContent()
         }
@@ -341,10 +350,12 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       setIsTyping(false)
     }
 
-    // Check if lesson plan creation is needed after message handling
-    setTimeout(() => {
-      checkAndCreateLessonPlan()
-    }, 500)
+    // Only check for lesson plan creation if we don't already have one and no creation is in progress
+    if (!currentLessonPlan && !lessonPlanCreationInProgress.current) {
+      setTimeout(() => {
+        checkAndCreateLessonPlan()
+      }, 500)
+    }
   }
 
   const generateLessonContent = useCallback(async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, subjectId?: string, userAction?: string) => {
@@ -787,7 +798,8 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.log('🆕 ChatPane received new subject event:', subject.name)
       
       // Create lesson plan immediately with the new subject context
-      if (!currentLessonPlan || currentLessonPlan.subject !== subject.name) {
+      if ((!currentLessonPlan || currentLessonPlan.subject !== subject.name) && 
+          !lessonPlanCreationInProgress.current) {
         console.log('📚 Creating lesson plan for newly created subject:', subject.name)
         createLessonPlan(subject.name, subject)
       }
@@ -866,7 +878,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         }
         
         await generateCurrentLessonContent(contentAction)
-      } else if (selectedSubject) {
+      } else if (selectedSubject && !lessonPlanCreationInProgress.current) {
         // If no lesson plan exists, create one first
         console.log('📋 No lesson plan exists, creating one first for contextual content')
         await createLessonPlan(selectedSubject.name, selectedSubject)

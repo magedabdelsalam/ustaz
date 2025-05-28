@@ -22,7 +22,7 @@ interface ChatMessageListProps {
   isTyping: boolean
   isLoading: boolean
   pendingCount: number
-  scrollRef: React.RefObject<HTMLDivElement>
+  scrollRef: React.RefObject<HTMLDivElement | null>
   lessonInfo?: LessonInfo
   progressInfo?: ProgressInfo
 }

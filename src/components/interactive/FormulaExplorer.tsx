@@ -65,14 +65,65 @@ export const FormulaExplorer = memo(function FormulaExplorer({
 
   // Initialize variable values
   useEffect(() => {
+    if (!formulaContent?.variables || formulaContent.variables.length === 0) {
+      console.warn('No variables found in formula content')
+      return
+    }
+
     const initialValues: Record<string, number> = {}
     formulaContent.variables.forEach(variable => {
-      initialValues[variable.id] = variable.defaultValue
+      if (typeof variable.defaultValue === 'number' && isFinite(variable.defaultValue)) {
+        initialValues[variable.id] = variable.defaultValue
+      } else {
+        console.warn(`Invalid default value for variable ${variable.id}:`, variable.defaultValue)
+        initialValues[variable.id] = 0
+      }
     })
     setVariableValues(initialValues)
-  }, [formulaContent.variables])
+  }, [formulaContent?.variables])
+
+  // Safe mathematical expression evaluator to replace dangerous eval()
+  const safeEvaluate = useCallback((expression: string): number | string => {
+    try {
+      // Clean the expression first
+      const safeExpression = expression
+        .replace(/\^/g, '**')
+        .replace(/sin/g, 'Math.sin')
+        .replace(/cos/g, 'Math.cos')
+        .replace(/tan/g, 'Math.tan')
+        .replace(/log/g, 'Math.log')
+        .replace(/ln/g, 'Math.log')
+        .replace(/sqrt/g, 'Math.sqrt')
+        .replace(/abs/g, 'Math.abs')
+        .replace(/pi/g, 'Math.PI')
+        .replace(/e(?![0-9])/g, 'Math.E')
+
+      // Validate that expression only contains safe mathematical operations
+      const safePattern = /^[0-9+\-*/.()Math\s]+$/
+      if (!safePattern.test(safeExpression.replace(/Math\.(sin|cos|tan|log|sqrt|abs|PI|E)/g, ''))) {
+        return 'Error: Invalid expression'
+      }
+
+      // Use Function constructor for safer evaluation than eval
+      const func = new Function('Math', `"use strict"; return (${safeExpression})`)
+      const result = func(Math)
+      
+      if (typeof result === 'number') {
+        return isFinite(result) ? Number(result.toFixed(4)) : 'Undefined'
+      }
+      
+      return result
+    } catch (error) {
+      console.warn('Formula evaluation error:', error)
+      return 'Error'
+    }
+  }, [])
 
   const calculateFormula = useCallback((): number | string => {
+    if (!formulaContent?.formula || !formulaContent?.variables) {
+      return 'Error: Missing formula or variables'
+    }
+
     try {
       let expression = formulaContent.formula
       
@@ -95,17 +146,11 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         .replace(/pi/g, 'Math.PI')
         .replace(/e(?![0-9])/g, 'Math.E')
 
-      const calculatedResult = eval(expression)
-      
-      if (typeof calculatedResult === 'number') {
-        return isFinite(calculatedResult) ? Number(calculatedResult.toFixed(4)) : 'Undefined'
-      }
-      
-      return calculatedResult
+      return safeEvaluate(expression)
     } catch {
       return 'Error'
     }
-  }, [formulaContent.formula, formulaContent.variables, variableValues])
+  }, [formulaContent?.formula, formulaContent?.variables, variableValues, safeEvaluate])
 
   // Calculate result when variables change
   useEffect(() => {
@@ -114,6 +159,12 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   }, [calculateFormula])
 
   const handleVariableChange = (variableId: string, value: number) => {
+    // Validate the input value
+    if (typeof value !== 'number' || !isFinite(value)) {
+      console.warn(`Invalid value for variable ${variableId}:`, value)
+      return
+    }
+
     setVariableValues(prev => ({
       ...prev,
       [variableId]: value
@@ -121,6 +172,10 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   }
 
   const calculateStep = (stepExpression: string): number | string => {
+    if (!formulaContent?.variables) {
+      return 'Error: Missing variables'
+    }
+
     try {
       let expression = stepExpression
       
@@ -141,15 +196,14 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         .replace(/pi/g, 'Math.PI')
         .replace(/e(?![0-9])/g, 'Math.E')
 
-      const result = eval(expression)
-      return typeof result === 'number' ? Number(result.toFixed(4)) : result
+      return safeEvaluate(expression)
     } catch {
       return 'Error'
     }
   }
 
   const handleExampleSelect = (exampleId: string) => {
-    const example = formulaContent.examples?.find(ex => ex.id === exampleId)
+    const example = formulaContent?.examples?.find(ex => ex.id === exampleId)
     if (example) {
       setVariableValues(example.values)
       setSelectedExample(exampleId)
@@ -157,6 +211,8 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   }
 
   const handleReset = () => {
+    if (!formulaContent?.variables) return
+    
     const resetValues: Record<string, number> = {}
     formulaContent.variables.forEach(variable => {
       resetValues[variable.id] = variable.defaultValue
@@ -167,6 +223,8 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   }
 
   const renderFormula = (formula: string, large = false) => {
+    if (!formulaContent?.variables) return null
+    
     let displayFormula = formula
     
     // Replace variables with their symbols for display
@@ -191,6 +249,22 @@ export const FormulaExplorer = memo(function FormulaExplorer({
       <code className={`font-mono ${large ? 'text-xl' : 'text-base'} bg-gray-100 px-2 py-1 rounded`}>
         {displayFormula}
       </code>
+    )
+  }
+
+  // Error boundary for invalid content - moved after all hooks
+  if (!formulaContent || !formulaContent.formula || !formulaContent.variables) {
+    return (
+      <Card className="w-full">
+        <CardContent className="p-6">
+          <div className="text-center text-red-600">
+            <p className="font-medium">Error: Invalid formula content</p>
+            <p className="text-sm text-gray-600 mt-1">
+              The formula content is missing required properties (formula, variables).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
