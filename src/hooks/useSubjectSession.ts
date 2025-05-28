@@ -2,14 +2,7 @@ import { useState, useCallback } from 'react'
 import { Subject } from './useSubjects'
 import { persistenceService } from '@/lib/persistenceService'
 import { aiTutor, LessonPlan, LearningProgress } from '@/lib/aiService'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  hasGeneratedContent?: boolean
-}
+import { Message } from '@/types/chat'
 
 interface UseSubjectSessionProps {
   user?: { id: string } | null

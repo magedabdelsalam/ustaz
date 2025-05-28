@@ -3,24 +3,16 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Badge } from '@/components/ui/badge'
-import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
-import { Send, Bot, User, MessageCircle, Sparkles } from 'lucide-react'
+import { SpinnerIcon } from '@/components/ui/loading-spinner'
+import { Send, MessageCircle } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
 import { aiTutor, LessonPlan, LearningProgress, Lesson } from '@/lib/aiService'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  hasGeneratedContent?: boolean
-}
+import { Message } from '@/types/chat'
+import { ChatMessageList } from './ChatMessageList'
 
 interface ChatPaneProps {
   selectedSubject: Subject | null
@@ -936,91 +928,30 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <ScrollArea className="flex-1 p-6 overflow-y-auto" ref={scrollAreaRef}>
-        <div className="space-y-4">
-          {isLoadingMessages && (
-            <div className="flex justify-center py-8">
-              <LoadingSpinner size="lg" text="Loading conversation..." />
-            </div>
-          )}
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[85%] ${
-                  message.role === 'user'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900'
-                } rounded-lg p-3`}
-              >
-                <div className="flex items-start space-x-2">
-                  {message.role === 'assistant' && (
-                    <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                    {message.hasGeneratedContent && (
-                      <div className="flex items-center space-x-1 mt-2 pt-2 border-t border-opacity-20">
-                        <Sparkles className="h-3 w-3" />
-                        <span className="text-xs opacity-75">Interactive content created</span>
-                      </div>
-                    )}
-                    <p className={`text-xs mt-1 ${
-                      message.role === 'user' ? 'text-blue-100' : 'text-gray-500'
-                    }`}>
-                      {message.timestamp.toLocaleTimeString([], { 
-                        hour: '2-digit', 
-                        minute: '2-digit' 
-                      })}
-                    </p>
-                  </div>
-                  {message.role === 'user' && (
-                    <User className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="bg-gray-100 text-gray-900 rounded-lg p-3 max-w-[80%]">
-                <div className="flex items-center space-x-2">
-                  <Bot className="h-4 w-4 flex-shrink-0" />
-                  <SpinnerIcon size="sm" />
-                  <span className="text-xs text-gray-500">Generating response...</span>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {/* Progress indicators in chat area */}
-          {currentLessonPlan && currentProgress && messages.length > 0 && (
-            <div className="sticky bottom-0 bg-gradient-to-t from-white to-transparent p-2">
-              <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
-                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
-                  Lesson {currentLessonPlan.currentLessonIndex + 1}/{currentLessonPlan.lessons.length}
-                </Badge>
-                <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
-                  {currentProgress.correctAnswers}/{currentProgress.totalAttempts} correct
-                </Badge>
-                {currentProgress.readyForNext && (
-                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
-                    🎉 Ready to advance!
-                  </Badge>
-                )}
-                {pendingMessages.length > 0 && (
-                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
-                    💾 {pendingMessages.length}
-                  </Badge>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+      <ChatMessageList
+        messages={messages}
+        isTyping={isTyping}
+        isLoading={isLoadingMessages}
+        pendingCount={pendingMessages.length}
+        scrollRef={scrollAreaRef}
+        lessonInfo={
+          currentLessonPlan
+            ? {
+                current: currentLessonPlan.currentLessonIndex + 1,
+                total: currentLessonPlan.lessons.length
+              }
+            : undefined
+        }
+        progressInfo={
+          currentProgress
+            ? {
+                correct: currentProgress.correctAnswers,
+                total: currentProgress.totalAttempts,
+                ready: currentProgress.readyForNext
+              }
+            : undefined
+        }
+      />
 
       {/* Input */}
       <div className="p-6 pt-0">

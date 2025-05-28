@@ -1,13 +1,6 @@
 import { useRef, useCallback } from 'react'
 import { persistenceService } from '@/lib/persistenceService'
-
-interface Message {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  timestamp: Date
-  hasGeneratedContent?: boolean
-}
+import { Message } from '@/types/chat'
 
 interface UsePendingMessagesProps {
   user?: { id: string } | null
