@@ -99,8 +99,12 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         .replace(/e(?![0-9])/g, 'Math.E')
 
       // Validate that expression only contains safe mathematical operations
+      // Allow digits, operators, parentheses, Math functions, and whitespace
       const safePattern = /^[0-9+\-*/.()Math\s]+$/
-      if (!safePattern.test(safeExpression.replace(/Math\.(sin|cos|tan|log|sqrt|abs|PI|E)/g, ''))) {
+      const cleanedForValidation = safeExpression.replace(/Math\.(sin|cos|tan|log|sqrt|abs|PI|E)/g, 'M')
+      
+      if (!safePattern.test(cleanedForValidation)) {
+        console.warn('Invalid expression pattern:', safeExpression)
         return 'Error: Invalid expression'
       }
 
@@ -282,7 +286,11 @@ export const FormulaExplorer = memo(function FormulaExplorer({
               variant="outline"
               onClick={() => setShowSteps(!showSteps)}
             >
-              {showSteps ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showSteps ? (
+                <EyeOff key="eye-off" className="h-4 w-4" />
+              ) : (
+                <Eye key="eye-on" className="h-4 w-4" />
+              )}
               {showSteps ? 'Hide' : 'Show'} Steps
             </Button>
             <Button size="sm" variant="outline" onClick={handleReset}>
