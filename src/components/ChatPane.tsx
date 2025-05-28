@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
-import { Send, Bot, User, MessageCircle, Sparkles } from 'lucide-react'
+import { Send, Bot, User, MessageCircle, Sparkles, RefreshCw } from 'lucide-react'
 import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
@@ -772,7 +772,11 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               size="sm"
               className="bg-blue-600 hover:bg-blue-700"
             >
-              <Send className="h-4 w-4" />
+              {isTyping ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
           <p className="text-xs text-gray-500 mt-2 hidden sm:block">
@@ -883,13 +887,9 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             <div className="flex justify-start">
               <div className="bg-gray-100 text-gray-900 rounded-lg p-3 max-w-[80%]">
                 <div className="flex items-center space-x-2">
-                  <Bot className="h-4 w-4" />
-                  <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                  </div>
-                  <span className="text-xs text-gray-500">Creating content...</span>
+                  <Bot className="h-4 w-4 flex-shrink-0" />
+                  <RefreshCw className="h-4 w-4 text-gray-400 animate-spin" />
+                  <span className="text-xs text-gray-500">Generating response...</span>
                 </div>
               </div>
             </div>
@@ -914,7 +914,11 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             size="sm"
             className="bg-blue-600 hover:bg-blue-700"
           >
-            <Send className="h-4 w-4" />
+            {isTyping ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
         <p className="text-xs text-gray-500 mt-2 hidden sm:block">
