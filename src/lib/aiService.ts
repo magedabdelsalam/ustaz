@@ -515,7 +515,7 @@ Requirements:
       
       // Generate dynamic fallback plan if AI fails
       logger.debug('⚠️ Generating dynamic fallback plan for subject:', subject)
-      return await this.generateDynamicFallbackPlan(subject)
+      return this.generateUnifiedFallback<LessonPlan>('create_learning_plan', { subject }, 'lesson-plan', `Failed to create learning plan for ${subject}. Would you like to try again?`)
     }
   }
 
@@ -922,322 +922,83 @@ Requirements:
       return false
     }
   }
+
   private createPlaceholderContent(contentType: string): LessonContent {
     return {
       type: "placeholder",
-      data: {
-        message: "Unable to load content. Please retry.",
-        retryType: contentType
-      }
+      data: this.createRetryPrompt('generate_content', { contentType }, 'Unable to load content. Please try again.')
     }
   }
 
-
-
-  private generateFallbackResponse(action: string, data: unknown): string {
-    // Try to generate AI fallback response first
-    try {
-      // Create a simple prompt for fallback responses
-      const prompt = this.createFallbackResponsePrompt(action)
-      
-      // Attempt quick AI generation with reduced complexity
-      chatCompletion({
-        messages: [
-          {
-            role: "system",
-            content: "You are a direct tutor. Give brief, clear responses (1 sentence max). Be specific to the action."
-          },
-          {
-            role: "user", 
-            content: prompt
-          }
-        ],
-        temperature: 0.2,
-        max_tokens: 50
-      }).then(response => {
-        const content = response.choices[0].message.content
-        if (content && content.length > 0) {
-          return content.trim()
-        }
-      }).catch(() => {
-        // Silent fail to ultimate fallback
-      })
-    } catch {
-      // Silent fail to ultimate fallback
+  // Unified retry prompt generator - replaces multiple fallback methods
+  private createRetryPrompt(originalAction: string, originalData: unknown, message?: string): {
+    type: 'retry_prompt'
+    message: string
+    action: 'retry'
+    originalAction: string
+    originalData: unknown
+  } {
+    return {
+      type: 'retry_prompt',
+      message: message || 'Unable to process request. Please try again.',
+      action: 'retry',
+      originalAction,
+      originalData
     }
-
-    // Ultimate simple fallbacks only if AI completely fails
-    return this.getUltimateFallbackResponse(action, data)
   }
 
-  private createFallbackResponsePrompt(action: string): string {
-    switch (action) {
-      // Answer submission actions
-      case 'answer_submitted':
-        return "Student submitted an answer. Give brief feedback (1 sentence max)."
-
-      case 'fill_blank_submitted':
-        return "Student completed a fill-in-the-blank exercise. Give brief feedback (1 sentence max)."
-
-      case 'drag_drop_submitted':
-        return "Student completed a drag and drop exercise. Give brief feedback (1 sentence max)."
-
-      case 'quiz_submitted':
-        return "Student completed a quiz. Give brief feedback (1 sentence max)."
-
-      case 'highlights_checked':
-        return "Student completed a text highlighting exercise. Give brief feedback (1 sentence max)."
-
-      // Help and explanation requests
-      case 'explain_more':
-        return "Student wants more explanation. Briefly acknowledge (1 sentence max)."
-
-      case 'question_requested':
-        return "Student wants to ask a question. Brief acknowledgment (1 sentence max)."
-
-      case 'detail_expanded':
-        return "Student expanded a detail section. Brief acknowledgment (1 sentence max)."
-
-      case 'concept_expanded':
-        return "Student wants deeper explanation of a concept. Brief acknowledgment (1 sentence max)."
-
-      case 'examples_requested':
-        return "Student wants more examples. Brief acknowledgment (1 sentence max)."
-
-      // Next content requests
-      case 'next_question':
-        return "Student wants another question. Give brief acknowledgment (1 sentence max)."
-
-      case 'next_exercise':
-        return "Student wants another exercise. Give brief acknowledgment (1 sentence max)."
-
-      case 'next_problem':
-        return "Student wants another problem. Give brief acknowledgment (1 sentence max)."
-
-      // Reset actions from various components
-      case 'reset_question':
-      case 'fill_blank_reset':
-      case 'drag_drop_reset':
-      case 'solver_reset':
-      case 'quiz_reset':
-      case 'graph_reset':
-        return "Student reset an exercise. Acknowledge the reset (1 sentence max)."
-
-      // Quiz progression
-      case 'quiz_started':
-        return "Student started a quiz. Brief acknowledgment (1 sentence max)."
-
-      // Ready for practice
-      case 'ready_for_next':
-      case 'ready_for_practice':
-        return "Student is ready to practice. Brief acknowledgment (1 sentence max)."
-
-      // Graph interaction
-      case 'graph_control_changed':
-        return "Student adjusted graph controls. Brief acknowledgment (1 sentence max)."
-
-      // Progress tracking actions (from ChatPane)
-      case 'needs_more_practice':
-        return "Student needs more practice. Give direct feedback about next steps (1 sentence max)."
+  // Unified fallback generator - handles both string responses and structured fallbacks
+  private generateUnifiedFallback<T>(
+    action: string, 
+    data: unknown, 
+    fallbackType: 'response' | 'lesson-plan' | 'content',
+    message?: string
+  ): T {
+    const retryPrompt = this.createRetryPrompt(action, data, message || 'AI service temporarily unavailable. Would you like to try again?')
+    
+    switch (fallbackType) {
+      case 'response':
+        return JSON.stringify(retryPrompt) as T
         
-      case 'continue_practicing':
-        return "Student is practicing but not ready to advance. Give brief guidance (1 sentence max)."
-
-      case 'contextual_content_request':
-        return "Student asked a question. Briefly acknowledge and mention creating content (1 sentence max)."
+      case 'lesson-plan':
+        const subject = typeof data === 'object' && data && 'subject' in data 
+          ? (data as { subject: string }).subject 
+          : 'Unknown Subject'
+        return {
+          subject,
+          lessons: [{
+            id: 'retry-lesson',
+            title: 'Content Generation Failed',
+            description: 'Unable to generate lesson plan. Please try again.',
+            completed: false,
+            content: {
+              type: 'placeholder',
+              data: retryPrompt
+            },
+            concepts: [{
+              id: 'retry-concept',
+              name: 'Retry Required',
+              description: JSON.stringify(this.createRetryPrompt('generate_concepts', { subject }, `Unable to generate concepts for "${subject}". Please try again.`)),
+              difficulty: 'beginner',
+              estimatedPracticeItems: 0
+            }],
+            currentConceptIndex: 0
+          }],
+          currentLessonIndex: 0
+        } as T
+        
+      case 'content':
+        return {
+          type: 'placeholder',
+          data: retryPrompt
+        } as T
         
       default:
-        return `Student performed action "${action}". Give a brief, direct response (1 sentence max).`
+        return JSON.stringify(retryPrompt) as T
     }
   }
 
-  private getUltimateFallbackResponse(action: string, data: unknown): string {
-    // Minimal, generic responses only when AI is completely unavailable
-    switch (action) {
-      // Practice and progression
-      case 'needs_more_practice':
-      case 'continue_practicing':
-        return "Keep practicing - you're making progress!"
-        
-      case 'ready_for_practice':
-      case 'ready_for_next':
-        return "Great! Let's continue."
-        
-      // Help and explanation requests
-      case 'concept_expanded':
-      case 'examples_requested':
-      case 'explain_more':
-      case 'question_requested':
-      case 'detail_expanded':
-      case 'contextual_content_request':
-        return "I'll help you understand this better."
 
-      // Answer submissions
-      case 'answer_submitted':
-      case 'fill_blank_submitted':
-      case 'drag_drop_submitted':
-      case 'quiz_submitted':
-        if (data && typeof data === 'object' && 'correct' in data) {
-          return data.correct ? "Correct! Well done." : "Not quite - keep trying!"
-        }
-        return "Thanks for your response!"
-
-      // Reset actions
-      case 'reset_question':
-      case 'fill_blank_reset':
-      case 'drag_drop_reset':
-      case 'solver_reset':
-      case 'quiz_reset':
-      case 'graph_reset':
-        return "Reset complete. Try again!"
-
-      // Next content requests
-      case 'next_question':
-      case 'next_exercise':
-      case 'next_problem':
-        return "Ready for more practice!"
-
-      // Other interactions
-      case 'quiz_started':
-        return "Good luck on your quiz!"
-
-      case 'highlights_checked':
-        return "Good work analyzing the text!"
-
-      case 'graph_control_changed':
-        return "Great exploration!"
-        
-      default:
-        return "Keep exploring!"
-    }
-  }
-
-  // Generate dynamic fallback plan using AI
-  private async generateDynamicFallbackPlan(subject: string): Promise<LessonPlan> {
-    try {
-      const response = await chatCompletion({
-        messages: [
-          {
-            role: "system",
-            content: `You are an expert tutor creating a simple but effective learning plan as a fallback. Keep it practical and engaging.`
-          },
-          {
-            role: "user",
-            content: `Create a simple 6-lesson learning plan for "${subject}" that covers the most essential concepts.
-
-Return JSON:
-{
-  "subject": "${subject}",
-  "lessons": [
-    {
-      "id": "lesson-1",
-      "title": "Engaging title for essential concept",
-      "description": "What students will learn",
-      "completed": false,
-      "concepts": [
-        {
-          "id": "concept-1-1",
-          "name": "Specific concept name",
-          "description": "What this concept covers",
-          "difficulty": "beginner|intermediate|advanced",
-          "estimatedPracticeItems": 3
-        }
-      ]
-    }
-  ]
-}
-
-Focus on:
-- Most fundamental concepts students need to know
-- Practical, real-world applications
-- Clear progression from basic to more advanced
-- Engaging, specific lesson titles (not generic)
-- 3-4 concepts per lesson`
-          }
-        ],
-        temperature: 0.4,
-        max_tokens: 1000
-      })
-
-      const content = response.choices[0].message.content
-      if (!content) throw new Error('No fallback plan content received')
-
-      const cleanedContent = this.cleanJsonResponse(content)
-      const parsedData = JSON.parse(cleanedContent)
-
-      if (!parsedData.lessons || !Array.isArray(parsedData.lessons)) {
-        throw new Error('Invalid fallback plan structure')
-      }
-
-      return {
-        subject: parsedData.subject || subject,
-        lessons: parsedData.lessons.map((lesson: { id?: string; title?: string; description?: string; concepts?: Array<{
-          id?: string;
-          name?: string;
-          description?: string;
-          difficulty?: string;
-          estimatedPracticeItems?: number;
-        }> }, index: number) => ({
-          id: lesson.id || `lesson-${index + 1}`,
-          title: lesson.title || `Essential ${subject} Concepts ${index + 1}`,
-          description: lesson.description || `Learn fundamental concepts of ${subject}`,
-          completed: false,
-          content: { type: 'concept-card', data: {} },
-          concepts: lesson.concepts?.map((concept: {
-            id?: string;
-            name?: string;
-            description?: string;
-            difficulty?: string;
-            estimatedPracticeItems?: number;
-          }, conceptIndex: number) => ({
-            id: concept.id || `concept-${index + 1}-${conceptIndex + 1}`,
-            name: concept.name || `Concept ${conceptIndex + 1}`,
-            description: concept.description || 'Learn this important concept.',
-            difficulty: concept.difficulty || 'beginner',
-            estimatedPracticeItems: concept.estimatedPracticeItems || 3
-          })) || this.generateFallbackConcepts(lesson.title || `Lesson ${index + 1}`, index),
-          currentConceptIndex: 0
-        })),
-        currentLessonIndex: 0
-      }
-    } catch (error) {
-      logger.error('Failed to generate dynamic fallback plan:', error)
-      // Ultimate fallback with minimal structure
-      return {
-        subject,
-        lessons: [
-          {
-            id: 'lesson-1',
-            title: `Introduction to ${subject}`,
-            description: `Learn the fundamentals of ${subject}`,
-            content: { type: 'concept-card', data: {} },
-            completed: false,
-            concepts: this.generateFallbackConcepts(`Introduction to ${subject}`, 0),
-            currentConceptIndex: 0
-          },
-          {
-            id: 'lesson-2', 
-            title: `Core Concepts in ${subject}`,
-            description: `Understand key principles`,
-            content: { type: 'multiple-choice', data: {} },
-            completed: false,
-            concepts: this.generateFallbackConcepts(`Core Concepts in ${subject}`, 1),
-            currentConceptIndex: 0
-          },
-          {
-            id: 'lesson-3',
-            title: `Practice with ${subject}`,
-            description: `Apply what you've learned`,
-            content: { type: 'step-solver', data: {} },
-            completed: false,
-            concepts: this.generateFallbackConcepts(`Practice with ${subject}`, 2),
-            currentConceptIndex: 0
-          }
-        ],
-        currentLessonIndex: 0
-      }
-    }
-  }
 
   // Generate lesson content for a specific lesson
   async generateLessonContent(
@@ -1336,8 +1097,7 @@ Focus on:
       
     } catch (error) {
       logger.error('Failed to generate tutor response:', error)
-      // Fall back to generated fallback response
-      return this.generateFallbackResponse(action, data)
+      return this.generateUnifiedFallback<string>(action, data, 'response')
     }
   }
 
@@ -1371,11 +1131,7 @@ Focus on:
       
     } catch (error) {
       logger.error('Failed to generate direct educational response:', error)
-      // Fallback to a helpful generic response
-      if (subjectName) {
-        return `Let me help you with ${subjectName}. I'll create some interactive content to explore this topic together.`
-      }
-      return `That's a great question! Let me create some interactive content to help you explore this topic.`
+      return JSON.stringify(this.createRetryPrompt('generate_educational_response', { question, subjectName, context }, 'Unable to generate response to your question. Please try again.'))
     }
   }
 
@@ -1734,12 +1490,7 @@ Include the concept name as the title and category in the data.`
       
     } catch (error) {
       logger.error('Failed to generate welcome message:', error)
-      // Fallback to a basic template if AI fails
-      if (isReturningUser) {
-        return `Back to ${subjectName}. Current lesson: "${currentLesson.title}".`
-      } else {
-        return `Starting ${subjectName}. First lesson: "${currentLesson.title}".`
-      }
+      return JSON.stringify(this.createRetryPrompt('generate_welcome_message', { subjectName, currentLesson, progress, isReturningUser }, 'Unable to generate welcome message. Please try again.'))
     }
   }
 
@@ -1787,135 +1538,15 @@ Keep it under 2 sentences. Be clear and direct.`
     }
   }
 
-  // Generate fallback concepts for a lesson when AI generation fails
+  // Generate fallback concepts using unified retry approach
   private generateFallbackConcepts(lessonTitle: string, lessonIndex: number): ConceptInfo[] {
-    const titleLower = lessonTitle.toLowerCase()
-    
-    // Subject-specific concept patterns
-    if (titleLower.includes('user') && (titleLower.includes('design') || titleLower.includes('research'))) {
-      return [
-        {
-          id: `concept-${lessonIndex + 1}-1`,
-          name: 'User Research Methods',
-          description: 'Learn interview techniques, surveys, and observation methods',
-          difficulty: 'beginner',
-          estimatedPracticeItems: 3
-        },
-        {
-          id: `concept-${lessonIndex + 1}-2`,
-          name: 'User Persona Development',
-          description: 'Create detailed user personas based on research data',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 4
-        },
-        {
-          id: `concept-${lessonIndex + 1}-3`,
-          name: 'User Journey Mapping',
-          description: 'Map user interactions and touchpoints throughout their experience',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 3
-        }
-      ]
-    } else if (titleLower.includes('product') && titleLower.includes('design')) {
-      return [
-        {
-          id: `concept-${lessonIndex + 1}-1`,
-          name: 'Product Strategy',
-          description: 'Define product vision, goals, and success metrics',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 3
-        },
-        {
-          id: `concept-${lessonIndex + 1}-2`,
-          name: 'Feature Prioritization',
-          description: 'Methods for deciding which features to build first',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 4
-        },
-        {
-          id: `concept-${lessonIndex + 1}-3`,
-          name: 'Design Systems',
-          description: 'Create consistent, scalable design components and guidelines',
-          difficulty: 'advanced',
-          estimatedPracticeItems: 5
-        }
-      ]
-    } else if (titleLower.includes('prototype') || titleLower.includes('wireframe')) {
-      return [
-        {
-          id: `concept-${lessonIndex + 1}-1`,
-          name: 'Wireframe Creation',
-          description: 'Create low-fidelity layouts and structure designs',
-          difficulty: 'beginner',
-          estimatedPracticeItems: 3
-        },
-        {
-          id: `concept-${lessonIndex + 1}-2`,
-          name: 'Interactive Prototypes',
-          description: 'Build clickable, testable prototype experiences',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 4
-        },
-        {
-          id: `concept-${lessonIndex + 1}-3`,
-          name: 'Prototype Testing',
-          description: 'Test prototypes with users and iterate based on feedback',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 3
-        }
-      ]
-    } else if (titleLower.includes('test') || titleLower.includes('usability')) {
-      return [
-        {
-          id: `concept-${lessonIndex + 1}-1`,
-          name: 'Usability Testing Methods',
-          description: 'Learn different approaches to testing user interactions',
-          difficulty: 'beginner',
-          estimatedPracticeItems: 3
-        },
-        {
-          id: `concept-${lessonIndex + 1}-2`,
-          name: 'Test Planning and Setup',
-          description: 'Design effective usability testing sessions',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 4
-        },
-        {
-          id: `concept-${lessonIndex + 1}-3`,
-          name: 'Results Analysis',
-          description: 'Analyze testing data and extract actionable insights',
-          difficulty: 'intermediate',
-          estimatedPracticeItems: 3
-        }
-      ]
-    }
-    
-    // Generic fallback concepts based on lesson position
-    const genericConcepts = [
-      {
-        id: `concept-${lessonIndex + 1}-1`,
-        name: `Core Principles`,
-        description: `Understand the fundamental principles of this topic`,
-        difficulty: 'beginner' as const,
-        estimatedPracticeItems: 3
-      },
-      {
-        id: `concept-${lessonIndex + 1}-2`,
-        name: `Practical Methods`,
-        description: `Learn hands-on techniques and methods`,
-        difficulty: 'intermediate' as const,
-        estimatedPracticeItems: 4
-      },
-      {
-        id: `concept-${lessonIndex + 1}-3`,
-        name: `Real-World Applications`,
-        description: `Apply concepts to practical scenarios and case studies`,
-        difficulty: 'intermediate' as const,
-        estimatedPracticeItems: 3
-      }
-    ]
-    
-    return genericConcepts
+    return [{
+      id: `retry-concept-${lessonIndex + 1}`,
+      name: 'Content Generation Failed',
+      description: JSON.stringify(this.createRetryPrompt('generate_concepts', { lessonTitle, lessonIndex }, `Unable to generate concepts for "${lessonTitle}". Please try again.`)),
+      difficulty: 'beginner',
+      estimatedPracticeItems: 0
+    }]
   }
 }
 

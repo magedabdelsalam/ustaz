@@ -262,26 +262,39 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         }
       } catch (error) {
         console.error('Failed to generate AI welcome message for new plan:', error)
-        // Fallback to enhanced template
-        const planMessage = `🎉 Exciting! I've created a personalized learning plan for ${subjectName}:\n\n` +
-          lessonPlan.lessons.map((lesson: Lesson, i: number) => `${i + 1}. ${lesson.title}`).join('\n') +
-          `\n\nReady to start your ${subjectName} journey? Let's begin with "${lessonPlan.lessons[0].title}"! 🚀`
-
-        const aiResponse: Message = {
+        // Use retry prompt instead of template fallback
+        const retryResponse: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: planMessage,
+          content: JSON.stringify({
+            type: 'retry_prompt',
+            message: `Failed to generate welcome message for ${subjectName}. Would you like to try again?`,
+            action: 'retry',
+            originalAction: 'generate_welcome_message',
+            originalData: {
+              subjectName,
+              currentLesson: {
+                title: lessonPlan.lessons[0]?.title || 'Getting Started',
+                index: 0
+              },
+              progress: {
+                correctAnswers: progress?.correctAnswers || 0,
+                totalAttempts: progress?.totalAttempts || 0
+              },
+              isReturningUser: false
+            }
+          }),
           timestamp: new Date(),
-          hasGeneratedContent: true
+          hasGeneratedContent: false
         }
-        setMessages(prev => [...prev, aiResponse])
+        setMessages(prev => [...prev, retryResponse])
         
-        // Save AI response (should have subject by now, but handle pending just in case)
+        // Save retry response
         if (subjectForPlan) {
-          await saveMessageToPersistence(aiResponse)
+          await saveMessageToPersistence(retryResponse)
         } else {
-          console.log('⏳ Adding AI response to pending queue')
-          setPendingMessages(prev => [...prev, aiResponse])
+          console.log('⏳ Adding retry response to pending queue')
+          setPendingMessages(prev => [...prev, retryResponse])
         }
       }
 
@@ -1132,14 +1145,21 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
           await saveMessageToPersistence(interactionResponse)
         }
       } else {
-        // Fallback response when lesson plan or progress is not available
-        const fallbackResponse: Message = {
-          id: `fallback-${Date.now()}`,
+        // Use retry prompt when lesson plan or progress is not available
+        const retryResponse: Message = {
+          id: `retry-${Date.now()}`,
           role: 'assistant',
-          content: "I'm still setting up your learning plan. Please try again in a moment!",
+          content: JSON.stringify({
+            type: 'retry_prompt',
+            message: 'Learning plan not ready yet. Please try again in a moment.',
+            action: 'retry',
+            originalAction: action,
+            originalData: data
+          }),
           timestamp: new Date()
         }
-        setMessages(prev => [...prev, fallbackResponse])
+        setMessages(prev => [...prev, retryResponse])
+        await saveMessageToPersistence(retryResponse)
       }
     }
   }
@@ -1148,6 +1168,113 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   useImperativeHandle(ref, () => ({
     handleContentInteraction
   }))
+
+  // Handle retry for chat messages
+  const handleChatRetry = useCallback(async (originalAction: string, originalData: unknown) => {
+    console.log('🔄 Retrying chat action:', originalAction, originalData)
+    
+    if (!selectedSubject) {
+      console.error('❌ Cannot retry: no subject selected')
+      return
+    }
+
+    setIsTyping(true)
+    
+    try {
+      switch (originalAction) {
+        case 'generate_welcome_message': {
+          const data = originalData as { subjectName: string; currentLesson: { title: string; index: number }; progress: { correctAnswers: number; totalAttempts: number }; isReturningUser: boolean }
+          const response = await aiTutor.generateWelcomeMessage(
+            data.subjectName,
+            data.currentLesson,
+            data.progress,
+            data.isReturningUser
+          )
+          
+          const retryMessage: Message = {
+            id: `welcome-retry-${Date.now()}`,
+            role: 'assistant',
+            content: response,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, retryMessage])
+          await saveMessageToPersistence(retryMessage)
+          break
+        }
+        
+        case 'generate_educational_response': {
+          const data = originalData as { question: string; subjectName?: string; context?: { currentLesson?: string; difficulty?: string } }
+          const response = await aiTutor.generateDirectEducationalResponse(
+            data.question,
+            data.subjectName,
+            data.context
+          )
+          
+          const retryMessage: Message = {
+            id: `educational-retry-${Date.now()}`,
+            role: 'assistant',
+            content: response,
+            timestamp: new Date(),
+            hasGeneratedContent: true
+          }
+          setMessages(prev => [...prev, retryMessage])
+          await saveMessageToPersistence(retryMessage)
+          break
+        }
+        
+        case 'create_learning_plan': {
+          const data = originalData as { subject: string }
+          await createLessonPlan(data.subject, selectedSubject)
+          break
+        }
+        
+        default: {
+          // Try to regenerate tutor response for other actions
+          if (currentLessonPlan && currentProgress) {
+            const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+            if (currentLesson) {
+              const response = await aiTutor.generateTutorResponse(
+                selectedSubject.name,
+                originalAction,
+                originalData,
+                { lesson: currentLesson, progress: currentProgress }
+              )
+
+              const retryMessage: Message = {
+                id: `tutor-retry-${Date.now()}`,
+                role: 'assistant',
+                content: response,
+                timestamp: new Date()
+              }
+              setMessages(prev => [...prev, retryMessage])
+              await saveMessageToPersistence(retryMessage)
+            }
+          }
+          break
+        }
+      }
+    } catch (error) {
+      console.error('❌ Retry failed:', error)
+      // Use retry prompt for retry failures too
+      const errorMessage: Message = {
+        id: `retry-error-${Date.now()}`,
+        role: 'assistant',
+        content: JSON.stringify({
+          type: 'retry_prompt',
+          message: 'Retry failed. Please try again.',
+          action: 'retry',
+          originalAction: originalAction,
+          originalData: originalData
+        }),
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+      await saveMessageToPersistence(errorMessage)
+    } finally {
+      setIsTyping(false)
+    }
+  }, [selectedSubject, currentLessonPlan, currentProgress, createLessonPlan, saveMessageToPersistence])
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1219,16 +1346,22 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
           await saveMessageToPersistence(responseMessage)
         }
       } else {
-        // Fallback if no lesson plan available yet
-        const responseMessage: Message = {
-          id: `contextual-${Date.now()}`,
+        // Use retry prompt when lesson plan or progress is not available
+        const retryResponse: Message = {
+          id: `contextual-retry-${Date.now()}`,
           role: 'assistant',
-          content: `Let me help you with that! I'll create some interactive content to explain this.`,
+          content: JSON.stringify({
+            type: 'retry_prompt',
+            message: 'Learning plan not ready yet. Please try again in a moment.',
+            action: 'retry',
+            originalAction: 'contextual_content_request',
+            originalData: { subject, userMessage, suggestedComponent, confidence, reasoning }
+          }),
           timestamp: new Date(),
-          hasGeneratedContent: true
+          hasGeneratedContent: false
         }
-        setMessages(prev => [...prev, responseMessage])
-        await saveMessageToPersistence(responseMessage)
+        setMessages(prev => [...prev, retryResponse])
+        await saveMessageToPersistence(retryResponse)
       }
 
       // Only generate ONE interactive content component - but NOT if lesson plan creation is in progress
@@ -1374,6 +1507,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         isLoading={isLoadingMessages}
         pendingCount={pendingMessages.length}
         scrollRef={scrollAreaRef}
+        onRetryMessage={handleChatRetry}
         lessonInfo={
           currentLessonPlan
             ? {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ErrorProvider, ErrorBoundary } from '@/components/ErrorProvider';
 
 export const metadata: Metadata = {
   title: "Ustaz",
@@ -20,7 +21,11 @@ export default function RootLayout({
           fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
         }}
       >
-        {children}
+        <ErrorBoundary>
+          <ErrorProvider>
+            {children}
+          </ErrorProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

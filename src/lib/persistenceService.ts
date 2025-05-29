@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { ComponentType } from '@/components/interactive'
+import { errorHandler, RetryOptions } from '@/lib/errorHandler'
 
 // Types for persistence
 export interface PersistedMessage {
@@ -18,7 +19,7 @@ export interface PersistedContentItem {
   user_id: string
   subject_id: string
   type: ComponentType
-  data: unknown
+  data: Record<string, unknown>
   title: string
   order_index: number
   timestamp: string
@@ -30,26 +31,26 @@ export interface PersistedSubject {
   user_id: string
   name: string
   keywords: string[]
-  lesson_plan?: {
-    subject: string
-    lessons: Array<{
-      id: string
-      title: string
-      description: string
-      completed: boolean
-    }>
-    currentLessonIndex: number
-  }
-  learning_progress?: {
-    correctAnswers: number
-    totalAttempts: number
-    needsReview: boolean
-    readyForNext: boolean
-    currentLessonIndex?: number
-    totalLessons?: number
-  }
+  lesson_plan?: Record<string, unknown>
+  learning_progress?: Record<string, unknown>
   last_active: string
   created_at?: string
+}
+
+export interface LearningProgress {
+  correctAnswers: number
+  totalAttempts: number
+  needsReview: boolean
+  readyForNext: boolean
+  currentLessonIndex?: number
+  completedLessons?: number[]
+  streakCount?: number
+}
+
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxAttempts: 3,
+  baseDelay: 1000,
+  maxDelay: 5000
 }
 
 export class PersistenceService {
@@ -57,304 +58,350 @@ export class PersistenceService {
   // ===== MESSAGE PERSISTENCE =====
   
   async saveMessage(message: PersistedMessage): Promise<void> {
-    try {
-      console.log('🔗 Attempting to save message to Supabase...', message.content.substring(0, 30))
-      console.log('👤 Saving with user_id:', message.user_id)
-      console.log('📚 Saving with subject_id:', message.subject_id)
-      
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert([{
-          id: message.id,
-          user_id: message.user_id,
-          subject_id: message.subject_id,
-          role: message.role,
-          content: message.content,
-          timestamp: message.timestamp,
-          has_generated_content: message.has_generated_content || false
-        }])
-      
-      if (error) {
-        console.error('❌ Supabase error saving message:', error)
-        throw error
-      }
-      console.log('✅ Message saved to Supabase successfully')
-    } catch (error) {
-      console.error('❌ Failed to save message to Supabase:', error)
-    }
+    await errorHandler.withRetry(
+      async () => {
+        console.log('🔗 Attempting to save message to Supabase...', message.content.substring(0, 30))
+        console.log('👤 Saving with user_id:', message.user_id)
+        console.log('📚 Saving with subject_id:', message.subject_id)
+        
+        const { error } = await supabase
+          .from('chat_messages')
+          .insert([{
+            id: message.id,
+            user_id: message.user_id,
+            subject_id: message.subject_id,
+            role: message.role,
+            content: message.content,
+            timestamp: message.timestamp,
+            has_generated_content: message.has_generated_content || false
+          }])
+        
+        if (error) {
+          console.error('❌ Supabase error saving message:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        console.log('✅ Message saved to Supabase successfully')
+      },
+      'save_message',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async getMessagesBySubject(userId: string, subjectId: string): Promise<PersistedMessage[]> {
-    try {
-      console.log('🔍 Querying messages from Supabase for subject:', subjectId)
-      console.log('👤 Loading with user_id:', userId)
-      console.log('📚 Loading with subject_id:', subjectId)
-      
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('subject_id', subjectId)
-        .order('timestamp', { ascending: true })
-      
-      if (error) {
-        console.error('❌ Supabase error loading messages:', error)
-        return []
-      }
-      
-      console.log('📥 Supabase returned messages:', data?.length || 0)
-      if (data && data.length > 0) {
-        console.log('📋 Sample message user_ids from DB:', data.slice(0, 3).map(m => m.user_id))
-      }
-      return data || []
-    } catch (error) {
-      console.error('❌ Failed to load messages from Supabase:', error)
-      return []
-    }
+    return await errorHandler.withRetry(
+      async () => {
+        console.log('🔍 Querying messages from Supabase for subject:', subjectId)
+        console.log('👤 Loading with user_id:', userId)
+        console.log('📚 Loading with subject_id:', subjectId)
+        
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('subject_id', subjectId)
+          .order('timestamp', { ascending: true })
+        
+        if (error) {
+          console.error('❌ Supabase error loading messages:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        console.log('📥 Supabase returned messages:', data?.length || 0)
+        if (data && data.length > 0) {
+          console.log('📋 Sample message user_ids from DB:', data.slice(0, 3).map(m => m.user_id))
+        }
+        return data || []
+      },
+      'load_messages',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async deleteMessagesBySubject(userId: string, subjectId: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('user_id', userId)
-        .eq('subject_id', subjectId)
-      
-      if (error) {
-        console.error('Error deleting messages:', error)
-        throw error
-      }
-    } catch (error) {
-      console.error('Failed to delete messages:', error)
-    }
+    await errorHandler.withRetry(
+      async () => {
+        const { error } = await supabase
+          .from('chat_messages')
+          .delete()
+          .eq('user_id', userId)
+          .eq('subject_id', subjectId)
+        
+        if (error) {
+          console.error('Error deleting messages:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+      },
+      'delete_messages',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async updateMessageSubject(messageId: string, userId: string, newSubjectId: string): Promise<void> {
-    try {
-      console.log('🔄 Moving message to new subject:', { messageId, userId, newSubjectId })
-      
-      const { error } = await supabase
-        .from('chat_messages')
-        .update({ subject_id: newSubjectId })
-        .eq('id', messageId)
-        .eq('user_id', userId)
-      
-      if (error) {
-        console.error('❌ Supabase error updating message subject:', error)
-        throw error
-      }
-      
-      console.log('✅ Message moved to new subject successfully')
-    } catch (error) {
-      console.error('❌ Failed to move message to new subject:', error)
-    }
+    await errorHandler.withRetry(
+      async () => {
+        console.log('🔄 Moving message to new subject:', { messageId, userId, newSubjectId })
+        
+        const { error } = await supabase
+          .from('chat_messages')
+          .update({ subject_id: newSubjectId })
+          .eq('id', messageId)
+          .eq('user_id', userId)
+        
+        if (error) {
+          console.error('❌ Supabase error updating message subject:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        console.log('✅ Message moved to new subject successfully')
+      },
+      'update_message',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   // ===== CONTENT FEED PERSISTENCE =====
   
   async saveContentItem(item: PersistedContentItem): Promise<void> {
-    try {
-      console.log('💾 Attempting to save content item:', {
-        id: item.id,
-        user_id: item.user_id,
-        subject_id: item.subject_id,
-        type: item.type,
-        title: item.title
-      })
-      
-      const { error } = await supabase
-        .from('content_feed')
-        .insert([{
+    await errorHandler.withRetry(
+      async () => {
+        console.log('💾 Attempting to save content item:', {
           id: item.id,
           user_id: item.user_id,
           subject_id: item.subject_id,
           type: item.type,
-          data: item.data,
-          title: item.title,
-          order_index: item.order_index,
-          timestamp: item.timestamp
-        }])
-      
-      if (error) {
-        console.error('❌ Supabase error saving content item:', error)
-        console.error('❌ Error details:', JSON.stringify(error, null, 2))
-        throw error
-      }
-      
-      console.log('✅ Content item saved successfully')
-    } catch (error) {
-      console.error('❌ Failed to save content item:', error)
-      console.error('❌ Caught error details:', JSON.stringify(error, null, 2))
-    }
+          title: item.title
+        })
+        
+        const { error } = await supabase
+          .from('content_feed')
+          .insert([{
+            id: item.id,
+            user_id: item.user_id,
+            subject_id: item.subject_id,
+            type: item.type,
+            data: item.data,
+            title: item.title,
+            order_index: item.order_index,
+            timestamp: item.timestamp
+          }])
+        
+        if (error) {
+          console.error('❌ Supabase error saving content item:', error)
+          console.error('❌ Error details:', JSON.stringify(error, null, 2))
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        console.log('✅ Content item saved successfully')
+      },
+      'save_content',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async getContentFeedBySubject(userId: string, subjectId: string): Promise<PersistedContentItem[]> {
-    try {
-      const { data, error } = await supabase
-        .from('content_feed')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('subject_id', subjectId)
-        .order('order_index', { ascending: true })
-      
-      if (error) {
-        console.error('Error loading content feed:', error)
-        return []
-      }
-      
-      return data || []
-    } catch (error) {
-      console.error('Failed to load content feed:', error)
-      return []
-    }
+    return await errorHandler.withRetry(
+      async () => {
+        const { data, error } = await supabase
+          .from('content_feed')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('subject_id', subjectId)
+          .order('order_index', { ascending: true })
+        
+        if (error) {
+          console.error('Error loading content feed:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        return data || []
+      },
+      'load_content',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async deleteContentFeedBySubject(userId: string, subjectId: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('content_feed')
-        .delete()
-        .eq('user_id', userId)
-        .eq('subject_id', subjectId)
-      
-      if (error) {
-        console.error('Error deleting content feed:', error)
-        throw error
-      }
-    } catch (error) {
-      console.error('Failed to delete content feed:', error)
-    }
+    await errorHandler.withRetry(
+      async () => {
+        const { error } = await supabase
+          .from('content_feed')
+          .delete()
+          .eq('user_id', userId)
+          .eq('subject_id', subjectId)
+        
+        if (error) {
+          console.error('Error deleting content feed:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+      },
+      'delete_content',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   // ===== SUBJECT PERSISTENCE =====
   
   async saveSubject(subject: PersistedSubject): Promise<void> {
-    try {
-      // Debug logging to see what we're trying to save
-      console.log('💾 DEBUG: Saving subject to DB:', {
-        id: subject.id,
-        name: subject.name,
-        hasLessonPlan: !!subject.lesson_plan,
-        hasLearningProgress: !!subject.learning_progress
-      })
-      
-      if (subject.lesson_plan) {
-        console.log('💾 DEBUG: Lesson plan details:', {
-          subject: subject.lesson_plan.subject,
-          lessonsCount: subject.lesson_plan.lessons?.length || 0,
-          currentLessonIndex: subject.lesson_plan.currentLessonIndex,
-          firstLessonTitle: subject.lesson_plan.lessons?.[0]?.title
-        })
-      }
-      
-      if (subject.learning_progress) {
-        console.log('💾 DEBUG: Learning progress details:', {
-          correctAnswers: subject.learning_progress.correctAnswers,
-          totalAttempts: subject.learning_progress.totalAttempts,
-          needsReview: subject.learning_progress.needsReview,
-          readyForNext: subject.learning_progress.readyForNext
-        })
-      }
-      
-      const { error } = await supabase
-        .from('subjects')
-        .upsert([{
+    await errorHandler.withRetry(
+      async () => {
+        // Debug logging to see what we're trying to save
+        console.log('💾 DEBUG: Saving subject to DB:', {
           id: subject.id,
-          user_id: subject.user_id,
           name: subject.name,
-          keywords: subject.keywords,
-          lesson_plan: subject.lesson_plan,
-          learning_progress: subject.learning_progress,
-          last_active: subject.last_active
-        }], {
-          onConflict: 'id'
+          hasLessonPlan: !!subject.lesson_plan,
+          hasLearningProgress: !!subject.learning_progress
         })
-      
-      if (error) {
-        console.error('❌ Error saving subject:', error)
-        throw error
-      }
-      
-      console.log('✅ DEBUG: Subject saved successfully to DB')
-    } catch (error) {
-      console.error('Failed to save subject:', error)
-    }
+        
+        if (subject.lesson_plan) {
+          // Type assertion for debugging - we know this structure for lesson plans
+          const lessonPlan = subject.lesson_plan as { 
+            subject?: string;
+            lessons?: Array<{ title?: string }>;
+            currentLessonIndex?: number;
+          }
+          console.log('💾 DEBUG: Lesson plan details:', {
+            subject: lessonPlan.subject,
+            lessonsCount: lessonPlan.lessons?.length || 0,
+            currentLessonIndex: lessonPlan.currentLessonIndex,
+            firstLessonTitle: lessonPlan.lessons?.[0]?.title
+          })
+        }
+        
+        if (subject.learning_progress) {
+          // Type assertion for debugging - we know this structure for learning progress
+          const learningProgress = subject.learning_progress as {
+            correctAnswers?: number;
+            totalAttempts?: number;
+            needsReview?: boolean;
+            readyForNext?: boolean;
+          }
+          console.log('💾 DEBUG: Learning progress details:', {
+            correctAnswers: learningProgress.correctAnswers,
+            totalAttempts: learningProgress.totalAttempts,
+            needsReview: learningProgress.needsReview,
+            readyForNext: learningProgress.readyForNext
+          })
+        }
+        
+        const { error } = await supabase
+          .from('subjects')
+          .upsert([{
+            id: subject.id,
+            user_id: subject.user_id,
+            name: subject.name,
+            keywords: subject.keywords,
+            lesson_plan: subject.lesson_plan,
+            learning_progress: subject.learning_progress,
+            last_active: subject.last_active
+          }], {
+            onConflict: 'id'
+          })
+        
+        if (error) {
+          console.error('❌ Error saving subject:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        console.log('✅ DEBUG: Subject saved successfully to DB')
+      },
+      'save_subject',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async getSubjectsByUser(userId: string): Promise<PersistedSubject[]> {
-    try {
-      console.log('📚 Loading subjects for user_id:', userId)
-      
-      const { data, error } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('user_id', userId)
-        .order('last_active', { ascending: false })
-      
-      if (error) {
-        console.error('Error loading subjects:', error)
-        return []
-      }
-      
-      console.log('📚 Found subjects:', data?.length || 0)
-      if (data && data.length > 0) {
-        console.log('📋 Subject names:', data.map(s => s.name))
-        console.log('📋 Sample subject user_ids:', data.slice(0, 3).map(s => s.user_id))
-      }
-      
-      return data || []
-    } catch (error) {
-      console.error('Failed to load subjects:', error)
-      return []
-    }
+    return await errorHandler.withRetry(
+      async () => {
+        console.log('📚 Loading subjects for user_id:', userId)
+        
+        const { data, error } = await supabase
+          .from('subjects')
+          .select('*')
+          .eq('user_id', userId)
+          .order('last_active', { ascending: false })
+        
+        if (error) {
+          console.error('Error loading subjects:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+        
+        console.log('📚 Found subjects:', data?.length || 0)
+        if (data && data.length > 0) {
+          console.log('📋 Subject names:', data.map(s => s.name))
+          console.log('📋 Sample subject user_ids:', data.slice(0, 3).map(s => s.user_id))
+        }
+        
+        return data || []
+      },
+      'load_subjects',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   async deleteSubject(userId: string, subjectId: string): Promise<void> {
-    try {
-      // Delete in order: content_feed, chat_messages, then subject
-      await this.deleteContentFeedBySubject(userId, subjectId)
-      await this.deleteMessagesBySubject(userId, subjectId)
-      
-      const { error } = await supabase
-        .from('subjects')
-        .delete()
-        .eq('user_id', userId)
-        .eq('id', subjectId)
-      
-      if (error) {
-        console.error('Error deleting subject:', error)
-        throw error
-      }
-    } catch (error) {
-      console.error('Failed to delete subject:', error)
-    }
+    await errorHandler.withRetry(
+      async () => {
+        // Delete in order: content_feed, chat_messages, then subject
+        await this.deleteContentFeedBySubject(userId, subjectId)
+        await this.deleteMessagesBySubject(userId, subjectId)
+        
+        const { error } = await supabase
+          .from('subjects')
+          .delete()
+          .eq('user_id', userId)
+          .eq('id', subjectId)
+        
+        if (error) {
+          console.error('Error deleting subject:', error)
+          throw new Error(`Database error: ${error.message}`)
+        }
+      },
+      'delete_subject',
+      DEFAULT_RETRY_OPTIONS
+    )
   }
 
   // ===== UTILITY METHODS =====
   
   async clearAllUserData(userId: string): Promise<void> {
+    await errorHandler.withRetry(
+      async () => {
+        // Delete all content feed items
+        await supabase
+          .from('content_feed')
+          .delete()
+          .eq('user_id', userId)
+        
+        // Delete all chat messages
+        await supabase
+          .from('chat_messages')
+          .delete()
+          .eq('user_id', userId)
+        
+        // Delete all subjects
+        await supabase
+          .from('subjects')
+          .delete()
+          .eq('user_id', userId)
+      },
+      'clear_user_data',
+      DEFAULT_RETRY_OPTIONS
+    )
+  }
+
+  // ===== CONNECTION HEALTH CHECK =====
+  
+  async testConnection(): Promise<boolean> {
     try {
-      // Delete all content feed items
-      await supabase
-        .from('content_feed')
-        .delete()
-        .eq('user_id', userId)
-      
-      // Delete all chat messages
-      await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('user_id', userId)
-      
-      // Delete all subjects
-      await supabase
+      const { error } = await supabase
         .from('subjects')
-        .delete()
-        .eq('user_id', userId)
+        .select('id')
+        .limit(1)
       
+      return !error
     } catch (error) {
-      console.error('Failed to clear user data:', error)
+      console.error('Connection test failed:', error)
+      return false
     }
   }
 }

@@ -356,7 +356,7 @@ export function ContentPane({
                 user_id: user.id,
                 subject_id: selectedSubject.id,
                 type: newContent.type,
-                data: newContent.data,
+                data: newContent.data as Record<string, unknown>,
                 title: newContent.title,
                 order_index: updatedFeed.length - 1,
                 timestamp: newContent.timestamp.toISOString()

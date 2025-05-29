@@ -7,9 +7,13 @@ import { HistoryPane } from '@/components/HistoryPane'
 import { ContentPane } from '@/components/ContentPane'
 import { ChatPane, ChatPaneRef } from '@/components/ChatPane'
 import { Button } from '@/components/ui/button'
+import { useError } from '@/components/ErrorProvider'
+import { useSupabaseOperations } from '@/hooks/useSupabaseOperations'
 
 export function Dashboard() {
   const { user } = useAuth()
+  const { showSuccess } = useError()
+  const { testConnection } = useSupabaseOperations()
   const { 
     subjects, 
     currentSubject, 
@@ -21,6 +25,11 @@ export function Dashboard() {
   } = useSubjects()
   const chatRef = useRef<ChatPaneRef>(null)
   const lastUserMessageRef = useRef<{ id: string; content: string; previousSubjectId: string | null } | null>(null)
+
+  // Test connection on mount
+  useEffect(() => {
+    testConnection()
+  }, [testConnection])
 
   // Listen for progress updates from ChatPane
   useEffect(() => {
@@ -96,6 +105,9 @@ export function Dashboard() {
           try {
             const newSubject = await createSubject(analysis.subjectName)
             console.log('✅ New subject created successfully:', newSubject.name)
+            
+            // Show success message
+            showSuccess(`Created new subject: ${newSubject.name}`)
             
             // Notify ChatPane about the new subject for lesson plan creation
             const newSubjectEvent = new CustomEvent('newSubjectCreated', {
@@ -216,91 +228,94 @@ export function Dashboard() {
   }
 
   return (
-    <div className="h-screen flex bg-gray-50">
-      {/* History Pane - Responsive width */}
-      <div className="w-full md:w-80 lg:w-72 xl:w-80 2xl:w-96 bg-white border-r border-gray-200 flex-shrink-0 
-                      md:block hidden">
-        <HistoryPane 
-          subjects={subjects}
-          selectedSubject={currentSubject}
-          user={user}
-          onSubjectSelect={selectSubject}
-          onSubjectDelete={deleteSubject}
-        />
-      </div>
-      
-      {/* Mobile History Toggle - Show on mobile */}
-      <div className="md:hidden fixed top-4 left-4 z-50">
-        <Button
-          variant="outline"
-          size="sm"
-          className="bg-white shadow-lg"
-          onClick={() => {
-            const historyPane = document.getElementById('mobile-history-pane')
-            if (historyPane) {
-              historyPane.classList.toggle('hidden')
-            }
-          }}
-        >
-          📚 Subjects
-        </Button>
-      </div>
-
-      {/* Mobile History Pane - Overlay */}
-      <div 
-        id="mobile-history-pane"
-        className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50 hidden"
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            e.currentTarget.classList.add('hidden')
-          }
-        }}
-      >
-        <div className="absolute left-0 top-0 h-full w-80 bg-white shadow-xl">
-          <div className="h-full overflow-hidden">
-            <HistoryPane 
-              subjects={subjects}
-              selectedSubject={currentSubject}
-              user={user}
-              showCloseButton={true}
-              onClose={() => {
-                const historyPane = document.getElementById('mobile-history-pane')
-                if (historyPane) {
-                  historyPane.classList.add('hidden')
-                }
-              }}
-              onSubjectSelect={(subject) => {
-                selectSubject(subject)
-                // Close mobile menu after selection
-                const historyPane = document.getElementById('mobile-history-pane')
-                if (historyPane) {
-                  historyPane.classList.add('hidden')
-                }
-              }}
-              onSubjectDelete={deleteSubject}
-            />
-          </div>
-        </div>
-      </div>
-      
-      {/* Main Content Area - Responsive layout */}
-      <div className="flex-1 flex flex-col lg:flex-row min-w-0">
-        {/* Content Pane - Responsive sizing */}
-        <div className="flex-1 lg:flex-[2] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0">
-          <ContentPane 
+    <div className="h-screen flex flex-col bg-gray-50">
+      {/* Main Dashboard Content */}
+      <div className="flex-1 flex bg-gray-50">
+        {/* History Pane - Responsive width */}
+        <div className="w-full md:w-80 lg:w-72 xl:w-80 2xl:w-96 bg-white border-r border-gray-200 flex-shrink-0 
+                        md:block hidden">
+          <HistoryPane 
+            subjects={subjects}
             selectedSubject={currentSubject}
-            onContentInteraction={handleContentInteraction}
+            user={user}
+            onSubjectSelect={selectSubject}
+            onSubjectDelete={deleteSubject}
           />
         </div>
         
-        {/* Chat Pane - Responsive sizing */}
-        <div className="w-full lg:w-80 xl:w-96 2xl:w-[480px] lg:flex-[1] xl:flex-[1] 2xl:flex-[1]
-                        bg-white border-l border-gray-200 lg:border-t-0 border-t flex-shrink-0">
-          <ChatPane 
-            ref={chatRef}
-            selectedSubject={currentSubject}
-            onNewMessage={handleNewMessage}
-          />
+        {/* Mobile History Toggle - Show on mobile */}
+        <div className="md:hidden fixed top-4 left-4 z-50">
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-white shadow-lg"
+            onClick={() => {
+              const historyPane = document.getElementById('mobile-history-pane')
+              if (historyPane) {
+                historyPane.classList.toggle('hidden')
+              }
+            }}
+          >
+            📚 <span className="ml-1">Subjects</span>
+          </Button>
+        </div>
+
+        {/* Mobile History Pane - Overlay */}
+        <div 
+          id="mobile-history-pane"
+          className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50 hidden"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              e.currentTarget.classList.add('hidden')
+            }
+          }}
+        >
+          <div className="absolute left-0 top-0 h-full w-80 bg-white shadow-xl">
+            <div className="h-full overflow-hidden">
+              <HistoryPane 
+                subjects={subjects}
+                selectedSubject={currentSubject}
+                user={user}
+                showCloseButton={true}
+                onClose={() => {
+                  const historyPane = document.getElementById('mobile-history-pane')
+                  if (historyPane) {
+                    historyPane.classList.add('hidden')
+                  }
+                }}
+                onSubjectSelect={(subject) => {
+                  selectSubject(subject)
+                  // Close mobile menu after selection
+                  const historyPane = document.getElementById('mobile-history-pane')
+                  if (historyPane) {
+                    historyPane.classList.add('hidden')
+                  }
+                }}
+                onSubjectDelete={deleteSubject}
+              />
+            </div>
+          </div>
+        </div>
+        
+        {/* Main Content Area - Responsive layout */}
+        <div className="flex-1 flex flex-col lg:flex-row min-w-0">
+          {/* Content Pane - Responsive sizing */}
+          <div className="flex-1 lg:flex-[2] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0">
+            <ContentPane 
+              selectedSubject={currentSubject}
+              onContentInteraction={handleContentInteraction}
+            />
+          </div>
+          
+          {/* Chat Pane - Responsive sizing */}
+          <div className="w-full lg:w-80 xl:w-96 2xl:w-[480px] lg:flex-[1] xl:flex-[1] 2xl:flex-[1]
+                          bg-white border-l border-gray-200 lg:border-t-0 border-t flex-shrink-0">
+            <ChatPane 
+              ref={chatRef}
+              selectedSubject={currentSubject}
+              onNewMessage={handleNewMessage}
+            />
+          </div>
         </div>
       </div>
     </div>

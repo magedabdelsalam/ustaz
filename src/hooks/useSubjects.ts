@@ -55,10 +55,15 @@ export function useSubjects() {
   // Helper functions first (so they can be used in other callbacks)
   const calculateProgressFromData = useCallback((persistedSubject: PersistedSubject): number => {
     if (persistedSubject.learning_progress) {
-      const progress = persistedSubject.learning_progress
+      const progress = persistedSubject.learning_progress as {
+        correctAnswers?: number;
+        totalAttempts?: number;
+        currentLessonIndex?: number;
+        totalLessons?: number;
+      }
       
       // Handle the correct LearningProgress structure
-      if (progress.correctAnswers !== undefined && progress.totalAttempts !== undefined) {
+      if (typeof progress.correctAnswers === 'number' && typeof progress.totalAttempts === 'number') {
         // Calculate based on answer accuracy and lesson progression
         const accuracy = progress.totalAttempts > 0 ? progress.correctAnswers / progress.totalAttempts : 0
         const baseProgress = Math.round(accuracy * 70) // 70% weight on accuracy
@@ -91,16 +96,20 @@ export function useSubjects() {
   }) => {
     setSubjects(prev => prev.map(subject => {
       if (subject.id === subjectId) {
+        const mockPersistedSubject: PersistedSubject = {
+          id: subject.id,
+          user_id: 'temp', // This is just for progress calculation
+          name: subject.name,
+          keywords: subject.topicKeywords,
+          learning_progress: learningProgress,
+          created_at: subject.startedAt.toISOString(),
+          last_active: new Date().toISOString()
+        }
+        
         const updatedSubject = {
           ...subject,
           learningProgress,
-          progress: calculateProgressFromData({
-            id: subject.id,
-            name: subject.name,
-            learning_progress: learningProgress,
-            created_at: subject.startedAt.toISOString(),
-            last_active: new Date().toISOString()
-          } as PersistedSubject)
+          progress: calculateProgressFromData(mockPersistedSubject)
         }
         return updatedSubject
       }
@@ -127,11 +136,13 @@ export function useSubjects() {
         console.log(`🔍 Has lesson_plan:`, !!ps.lesson_plan)
         console.log(`🔍 Has learning_progress:`, !!ps.learning_progress)
         if (ps.lesson_plan) {
-          console.log(`🔍 Lesson plan lessons:`, ps.lesson_plan.lessons?.length || 'undefined')
-          console.log(`🔍 Current lesson index:`, ps.lesson_plan.currentLessonIndex)
+          const lessonPlan = ps.lesson_plan as { lessons?: Array<unknown>; currentLessonIndex?: number }
+          console.log(`🔍 Lesson plan lessons:`, lessonPlan.lessons?.length || 'undefined')
+          console.log(`🔍 Current lesson index:`, lessonPlan.currentLessonIndex)
         }
         if (ps.learning_progress) {
-          console.log(`🔍 Progress: ${ps.learning_progress.correctAnswers}/${ps.learning_progress.totalAttempts}`)
+          const progress = ps.learning_progress as { correctAnswers?: number; totalAttempts?: number }
+          console.log(`🔍 Progress: ${progress.correctAnswers}/${progress.totalAttempts}`)
         }
       })
       
@@ -144,8 +155,8 @@ export function useSubjects() {
         startedAt: new Date(ps.created_at || ps.last_active),
         topicKeywords: ps.keywords || [],
         messageCount: 1,
-        lessonPlan: ps.lesson_plan,
-        learningProgress: ps.learning_progress,
+        lessonPlan: ps.lesson_plan as Subject['lessonPlan'],
+        learningProgress: ps.learning_progress as Subject['learningProgress'],
         lastActive: new Date(ps.last_active)
       }))
       
