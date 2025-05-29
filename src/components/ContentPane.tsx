@@ -23,7 +23,8 @@ import {
   GraphVisualizer,
   FormulaExplorer,
   TextHighlighter,
-  Explainer
+  Explainer,
+  Placeholder
 } from '@/components/interactive'
 
 interface InteractiveComponentProps {
@@ -420,6 +421,8 @@ export function ContentPane({
         return <TextHighlighter {...props} />
       case 'explainer':
         return <Explainer {...props} />
+      case 'placeholder':
+        return <Placeholder {...props} />
       default:
         return (
           <Card>

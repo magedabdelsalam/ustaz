@@ -48,9 +48,13 @@ export const Explainer = dynamic(
   () => import('./Explainer').then((m) => m.Explainer),
   { ssr: false }
 )
+export const Placeholder = dynamic(
+  () => import('./Placeholder').then((m) => m.Placeholder),
+  { ssr: false }
+)
 
 // Component type definitions
-export type ComponentType = 
+export type ComponentType =
   | 'multiple-choice'
   | 'fill-blank'
   | 'drag-drop'
@@ -62,6 +66,7 @@ export type ComponentType =
   | 'graph-visualizer'
   | 'text-highlighter'
   | 'explainer'
+  | 'placeholder'
 
 // Shared interface for all interactive components
 export interface InteractiveComponentProps {
