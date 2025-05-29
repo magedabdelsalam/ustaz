@@ -17,11 +17,33 @@ export function buildPersistedSubject(
   subject: Subject,
   overrides?: {
     lessonPlan?: LessonPlan
-    progress?: LearningProgress
+    progress?: LearningProgress | ExtendedProgress
     lastActive?: Date
   }
 ): PersistedSubject {
-  const plan: LessonPlan | undefined = overrides?.lessonPlan ?? subject.lessonPlan
+  // Handle the lesson plan - prioritize override, then check if subject.lessonPlan is complete
+  let plan: LessonPlan | undefined = overrides?.lessonPlan
+  
+  if (!plan && subject.lessonPlan) {
+    // Try to convert subject.lessonPlan to a proper LessonPlan if it's a partial one
+    try {
+      plan = {
+        subject: subject.name,
+        lessons: subject.lessonPlan.lessons.map((lesson): Lesson => ({
+          id: lesson.id,
+          title: lesson.title,
+          description: lesson.description,
+          content: { type: 'concept-card', data: {} }, // Default content for partial lesson plans
+          completed: false
+        })),
+        currentLessonIndex: subject.lessonPlan.currentLessonIndex
+      }
+    } catch (error) {
+      console.warn('Failed to convert subject.lessonPlan to LessonPlan:', error)
+      plan = undefined
+    }
+  }
+  
   const progress: ExtendedProgress | undefined =
     overrides?.progress ?? (subject.learningProgress as ExtendedProgress | undefined)
 

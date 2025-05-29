@@ -718,14 +718,20 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         if (selectedSubject && user && newPlan && newProgress) {
           setTimeout(async () => {
             try {
+              // Create extended progress object with proper structure
+              const extendedProgress = {
+                correctAnswers: newProgress.correctAnswers,
+                totalAttempts: newProgress.totalAttempts,
+                needsReview: newProgress.needsReview,
+                readyForNext: newProgress.readyForNext,
+                currentLessonIndex: newPlan.currentLessonIndex,
+                totalLessons: newPlan.lessons.length,
+              }
+              
               await persistenceService.saveSubject(
                 buildPersistedSubject(user.id, selectedSubject, {
                   lessonPlan: newPlan,
-                  progress: {
-                    ...newProgress,
-                    currentLessonIndex: newPlan.currentLessonIndex,
-                    totalLessons: newPlan.lessons.length,
-                  },
+                  progress: extendedProgress,
                   lastActive: new Date(),
                 })
               )
