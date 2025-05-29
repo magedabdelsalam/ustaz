@@ -97,41 +97,73 @@ export function useSubjectSession({
         // Check if we already have a welcome message for this session
         const hasWelcomeMessage = loadedMessages.some(msg => 
           msg.role === 'assistant' && 
-          msg.content.includes('Welcome back to') &&
-          msg.content.includes(selectedSubject.name)
+          (msg.content.toLowerCase().includes('welcome back') ||
+           msg.content.toLowerCase().includes('welcome to') ||
+           msg.id.startsWith('welcome-back-') ||
+           msg.id.startsWith('fallback-welcome-'))
         )
         
         // Show welcome back message only if we don't already have one
         if (!hasWelcomeMessage) {
-          const welcomeBackMessage: Message = {
-            id: `welcome-back-${Date.now()}`,
-            role: 'assistant',
-            content: `Welcome back to ${selectedSubject.name}! You're currently on lesson ${restoredPlan.currentLessonIndex + 1}: "${restoredPlan.lessons[restoredPlan.currentLessonIndex]?.title}". Your progress: ${restoredProgress.correctAnswers}/${restoredProgress.totalAttempts} correct answers. Let's continue!`,
-            timestamp: new Date()
-          }
-          
-          // Add to loaded messages
-          const messagesWithWelcome = [...loadedMessages, welcomeBackMessage]
-          if (onMessagesLoaded) {
-            onMessagesLoaded(messagesWithWelcome)
-          }
-          
-          // Save welcome message asynchronously
-          setTimeout(async () => {
-            try {
-              await persistenceService.saveMessage({
-                id: welcomeBackMessage.id,
-                user_id: user.id,
-                subject_id: selectedSubject.id,
-                role: welcomeBackMessage.role,
-                content: welcomeBackMessage.content,
-                timestamp: welcomeBackMessage.timestamp.toISOString(),
-                has_generated_content: false
-              })
-            } catch (error) {
-              console.error('Failed to save welcome message:', error)
+          try {
+            // Generate intelligent welcome message using AI
+            const aiWelcomeContent = await aiTutor.generateWelcomeMessage(
+              selectedSubject.name,
+              {
+                title: restoredPlan.lessons[restoredPlan.currentLessonIndex]?.title || 'Current Lesson',
+                index: restoredPlan.currentLessonIndex
+              },
+              {
+                correctAnswers: restoredProgress.correctAnswers,
+                totalAttempts: restoredProgress.totalAttempts
+              },
+              true // isReturningUser
+            )
+            
+            const welcomeBackMessage: Message = {
+              id: `welcome-back-${Date.now()}`,
+              role: 'assistant',
+              content: aiWelcomeContent,
+              timestamp: new Date()
             }
-          }, 0)
+            
+            // Add to loaded messages
+            const messagesWithWelcome = [...loadedMessages, welcomeBackMessage]
+            if (onMessagesLoaded) {
+              onMessagesLoaded(messagesWithWelcome)
+            }
+            
+            // Save welcome message asynchronously
+            setTimeout(async () => {
+              try {
+                await persistenceService.saveMessage({
+                  id: welcomeBackMessage.id,
+                  user_id: user.id,
+                  subject_id: selectedSubject.id,
+                  role: welcomeBackMessage.role,
+                  content: welcomeBackMessage.content,
+                  timestamp: welcomeBackMessage.timestamp.toISOString(),
+                  has_generated_content: true // Mark as AI-generated content
+                })
+              } catch (error) {
+                console.error('Failed to save AI welcome message:', error)
+              }
+            }, 0)
+          } catch (error) {
+            console.error('Failed to generate AI welcome message:', error)
+            // Fallback to simple message if AI generation fails
+            const fallbackMessage: Message = {
+              id: `fallback-welcome-${Date.now()}`,
+              role: 'assistant',
+              content: `Welcome back to ${selectedSubject.name}! Ready to continue learning? 🌟`,
+              timestamp: new Date()
+            }
+            
+            const messagesWithFallback = [...loadedMessages, fallbackMessage]
+            if (onMessagesLoaded) {
+              onMessagesLoaded(messagesWithFallback)
+            }
+          }
         }
       } else {
         console.log('🆕 No existing lesson plan or persisted data')

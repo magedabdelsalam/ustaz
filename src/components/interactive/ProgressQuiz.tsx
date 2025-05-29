@@ -216,6 +216,14 @@ export const ProgressQuiz = memo(function ProgressQuiz({
     }
   }
 
+  const handleNewQuiz = () => {
+    onInteraction('next_question', {
+      componentId: id,
+      requestType: 'new_quiz',
+      previousResults: calculateResults()
+    })
+  }
+
   const handleReset = () => {
     setCurrentQuestionIndex(0)
     setAnswers({})
@@ -415,14 +423,17 @@ export const ProgressQuiz = memo(function ProgressQuiz({
         </CardHeader>
         <CardContent>
           {renderResults()}
-          {quizContent.allowRetry && (
-            <div className="mt-8">
+          <div className="mt-8 space-y-3">
+            <Button onClick={handleNewQuiz} className="w-full h-12 text-base font-medium">
+              New Quiz
+            </Button>
+            {quizContent.allowRetry && (
               <Button onClick={handleReset} variant="outline" className="w-full h-12 text-base font-medium">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Retake Quiz
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
     )

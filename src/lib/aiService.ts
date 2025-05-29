@@ -1063,22 +1063,22 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
     // Try to generate AI fallback response first
     try {
       // Create a simple prompt for fallback responses
-      const prompt = this.createFallbackResponsePrompt(action, data)
+      const prompt = this.createFallbackResponsePrompt(action)
       
       // Attempt quick AI generation with reduced complexity
       chatCompletion({
         messages: [
           {
             role: "system",
-            content: "You are a supportive tutor. Give brief, encouraging responses (1-2 sentences max). Be specific to the action."
+            content: "You are a direct tutor. Give brief, clear responses (1 sentence max). Be specific to the action."
           },
           {
             role: "user", 
             content: prompt
           }
         ],
-        temperature: 0.4,
-        max_tokens: 100
+        temperature: 0.2,
+        max_tokens: 50
       }).then(response => {
         const content = response.choices[0].message.content
         if (content && content.length > 0) {
@@ -1095,50 +1095,49 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
     return this.getUltimateFallbackResponse(action, data)
   }
 
-  private createFallbackResponsePrompt(action: string, data: unknown): string {
-    // Type guard for answer submission data
-    const isAnswerData = (d: unknown): d is { correct: boolean } => {
-      return typeof d === 'object' && d !== null && 'correct' in d
-    }
-
+  private createFallbackResponsePrompt(action: string): string {
     switch (action) {
-      // From ChatPane.tsx - tutor response actions
-      case 'needs_more_practice':
-        return "Student needs more practice with a concept. Give an encouraging response about the value of practice (1-2 sentences max)."
-        
-      case 'continue_practicing':
-        return "Student is making progress but needs to continue practicing. Give encouraging feedback about their progress (1-2 sentences)."
-        
-      case 'ready_for_practice':
-        return "Student is ready to practice. Give an enthusiastic response about starting practice activities (1-2 sentences)."
-        
-      case 'contextual_content_request':
-        return "Student asked a question and you're creating interactive content. Acknowledge their question and explain what you'll create (1-2 sentences)."
-
-      // From ConceptCard.tsx
-      case 'concept_expanded':
-        return "Student wants a deeper explanation. Acknowledge their request and explain you'll provide more detail (1-2 sentences)."
-        
-      case 'examples_requested':
-        return "Student wants more examples. Acknowledge their request and explain you'll provide practical examples (1-2 sentences)."
-        
-      case 'ready_for_next':
-        return "Student is ready to move forward. Give an encouraging response about their progress (1-2 sentences)."
-
-      // From MultipleChoice.tsx, FillInTheBlank.tsx, DragAndDrop.tsx, StepByStepSolver.tsx
+      // Answer submission actions
       case 'answer_submitted':
-        if (isAnswerData(data)) {
-          return data.correct 
-            ? "Student got the answer correct. Give brief praise and encouragement (1-2 sentences)."
-            : "Student got the answer wrong. Give brief encouragement to keep trying (1-2 sentences)."
-        }
-        return "Student submitted an answer. Give a brief encouraging response about their attempt (1-2 sentences)."
+        return "Student submitted an answer. Give brief feedback (1 sentence max)."
 
       case 'fill_blank_submitted':
-        return "Student completed a fill-in-the-blank exercise. Give encouraging feedback on their completion (1-2 sentences)."
+        return "Student completed a fill-in-the-blank exercise. Give brief feedback (1 sentence max)."
 
       case 'drag_drop_submitted':
-        return "Student completed a drag and drop exercise. Give encouraging feedback on their matching attempt (1-2 sentences)."
+        return "Student completed a drag and drop exercise. Give brief feedback (1 sentence max)."
+
+      case 'quiz_submitted':
+        return "Student completed a quiz. Give brief feedback (1 sentence max)."
+
+      case 'highlights_checked':
+        return "Student completed a text highlighting exercise. Give brief feedback (1 sentence max)."
+
+      // Help and explanation requests
+      case 'explain_more':
+        return "Student wants more explanation. Briefly acknowledge (1 sentence max)."
+
+      case 'question_requested':
+        return "Student wants to ask a question. Brief acknowledgment (1 sentence max)."
+
+      case 'detail_expanded':
+        return "Student expanded a detail section. Brief acknowledgment (1 sentence max)."
+
+      case 'concept_expanded':
+        return "Student wants deeper explanation of a concept. Brief acknowledgment (1 sentence max)."
+
+      case 'examples_requested':
+        return "Student wants more examples. Brief acknowledgment (1 sentence max)."
+
+      // Next content requests
+      case 'next_question':
+        return "Student wants another question. Give brief acknowledgment (1 sentence max)."
+
+      case 'next_exercise':
+        return "Student wants another exercise. Give brief acknowledgment (1 sentence max)."
+
+      case 'next_problem':
+        return "Student wants another problem. Give brief acknowledgment (1 sentence max)."
 
       // Reset actions from various components
       case 'reset_question':
@@ -1147,50 +1146,37 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
       case 'solver_reset':
       case 'quiz_reset':
       case 'graph_reset':
-        return "Student reset an exercise. Acknowledge the reset and encourage them to try again (1-2 sentences)."
+        return "Student reset an exercise. Acknowledge the reset (1 sentence max)."
 
-      // Request more content actions
-      case 'explain_more':
-        return "Student wants more explanation about a topic. Acknowledge their request and explain you'll provide deeper insight (1-2 sentences)."
-
-      case 'next_question':
-      case 'next_exercise':
-      case 'next_problem':
-        return "Student wants to move to the next challenge. Give encouraging response about their readiness for more practice (1-2 sentences)."
-
-      // From Explainer.tsx
-      case 'question_requested':
-        return "Student wants to ask a question about the explanation. Encourage their curiosity and explain you'll help them understand (1-2 sentences)."
-
-      case 'detail_expanded':
-        return "Student expanded a detail section. Acknowledge their exploration and encourage deeper learning (1-2 sentences)."
-
-      // From ProgressQuiz.tsx
+      // Quiz progression
       case 'quiz_started':
-        return "Student started a quiz. Give encouraging words about their readiness to test their knowledge (1-2 sentences)."
+        return "Student started a quiz. Brief acknowledgment (1 sentence max)."
 
-      case 'quiz_submitted':
-        return "Student completed a quiz. Give encouraging feedback on their quiz completion (1-2 sentences)."
+      // Ready for practice
+      case 'ready_for_next':
+      case 'ready_for_practice':
+        return "Student is ready to practice. Brief acknowledgment (1 sentence max)."
 
-      // From TextHighlighter.tsx
-      case 'highlights_checked':
-        return "Student completed a text highlighting exercise. Give feedback on their text analysis work (1-2 sentences)."
-
-      // From GraphVisualizer.tsx
+      // Graph interaction
       case 'graph_control_changed':
-        return "Student adjusted graph controls. Encourage their exploration of data relationships (1-2 sentences)."
+        return "Student adjusted graph controls. Brief acknowledgment (1 sentence max)."
+
+      // Progress tracking actions (from ChatPane)
+      case 'needs_more_practice':
+        return "Student needs more practice. Give direct feedback about next steps (1 sentence max)."
+        
+      case 'continue_practicing':
+        return "Student is practicing but not ready to advance. Give brief guidance (1 sentence max)."
+
+      case 'contextual_content_request':
+        return "Student asked a question. Briefly acknowledge and mention creating content (1 sentence max)."
         
       default:
-        return `Student performed action "${action}". Give a brief, encouraging response that acknowledges their engagement (1-2 sentences).`
+        return `Student performed action "${action}". Give a brief, direct response (1 sentence max).`
     }
   }
 
   private getUltimateFallbackResponse(action: string, data: unknown): string {
-    // Type guard for answer submission data
-    const isAnswerData = (d: unknown): d is { correct: boolean } => {
-      return typeof d === 'object' && d !== null && 'correct' in d
-    }
-    
     // Minimal, generic responses only when AI is completely unavailable
     switch (action) {
       // Practice and progression
@@ -1216,7 +1202,7 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
       case 'fill_blank_submitted':
       case 'drag_drop_submitted':
       case 'quiz_submitted':
-        if (isAnswerData(data)) {
+        if (data && typeof data === 'object' && 'correct' in data) {
           return data.correct ? "Correct! Well done." : "Not quite - keep trying!"
         }
         return "Thanks for your response!"
@@ -1418,15 +1404,15 @@ Focus on:
             messages: [
               {
                 role: "system",
-                content: `You are an encouraging AI tutor. Give supportive, specific feedback that motivates students and guides their learning. Keep responses conversational and under 3 sentences.`
+                content: `You are a direct, helpful tutor. Give clear, concise feedback without excessive encouragement. Keep responses under 2 sentences and focus on next steps or specific guidance.`
               },
               {
                 role: "user",
                 content: responsePrompt
               }
             ],
-            temperature: 0.7,
-            max_tokens: 200
+            temperature: 0.3,
+            max_tokens: 100
           })
 
           const content = result.choices[0].message.content
@@ -1442,6 +1428,206 @@ Focus on:
       logger.error('Failed to generate tutor response:', error)
       // Fall back to generated fallback response
       return this.generateFallbackResponse(action, data)
+    }
+  }
+
+  // Generate direct educational responses for user questions
+  async generateDirectEducationalResponse(
+    question: string,
+    subjectName?: string,
+    context?: { currentLesson?: string; difficulty?: string }
+  ): Promise<string> {
+    try {
+      logger.debug(`📚 Generating direct educational response for question: ${question.substring(0, 50)}...`)
+      
+      const response = await this.cachedApiCall(
+        'direct-educational-response',
+        { question, subjectName, context },
+        async () => {
+          const educationalPrompt = this.createDirectEducationalPrompt(question, subjectName, context)
+          
+          const result = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert educator. Provide direct, specific answers to educational questions. Focus on giving practical, actionable information rather than generic responses. Be comprehensive but concise.`
+              },
+              {
+                role: "user",
+                content: educationalPrompt
+              }
+            ],
+            temperature: 0.4,
+            max_tokens: 400
+          })
+
+          const content = result.choices[0].message.content
+          if (!content) throw new Error('No educational response generated')
+          
+          return content.trim()
+        }
+      )
+      
+      return response as string
+      
+    } catch (error) {
+      logger.error('Failed to generate direct educational response:', error)
+      // Fallback to a helpful generic response
+      if (subjectName) {
+        return `Let me help you with ${subjectName}. I'll create some interactive content to explore this topic together.`
+      }
+      return `That's a great question! Let me create some interactive content to help you explore this topic.`
+    }
+  }
+
+  private createDirectEducationalPrompt(
+    question: string,
+    subjectName?: string,
+    context?: { currentLesson?: string; difficulty?: string }
+  ): string {
+    const baseContext = subjectName ? `The student is learning ${subjectName}` : 'General educational question'
+    const lessonContext = context?.currentLesson ? ` and is currently on the lesson: "${context.currentLesson}"` : ''
+    const difficultyContext = context?.difficulty ? ` at ${context.difficulty} level` : ''
+    
+    return `${baseContext}${lessonContext}${difficultyContext}.
+
+Question: "${question}"
+
+Provide a direct, specific, and helpful answer to this question. If it's asking for concepts or learning requirements:
+- List specific topics, skills, or concepts needed
+- Organize from fundamental to advanced
+- Include practical learning tips
+- Mention real-world applications where relevant
+
+If it's asking for explanations:
+- Give clear, direct explanations
+- Use examples where helpful
+- Connect to broader understanding
+
+Avoid generic responses like "great question" or "let me help you learn." Instead, dive directly into answering the question with specific, educational content.`
+  }
+
+  // Create prompts for tutor responses
+  private createTutorResponsePrompt(action: string, data: unknown, context: unknown, subjectName: string): string {
+    const baseContext = `You are tutoring a student in ${subjectName}.`
+    
+    // Type guards for different data structures
+    const isContextWithLesson = (c: unknown): c is { lesson?: { title?: string } } => {
+      return typeof c === 'object' && c !== null
+    }
+
+    switch (action) {
+      // From ChatPane.tsx - tutor response actions
+      case 'needs_more_practice':
+        return `Student working on ${subjectName} needs more practice. Give specific guidance on what to focus on (1-2 sentences max).`
+        
+      case 'continue_practicing':
+        return `Student is practicing ${subjectName} but not ready to advance. Give brief, specific guidance on improvement (1-2 sentences max).`
+        
+      case 'ready_for_practice':
+      case 'ready_for_next':
+        return `Student is ready to practice ${subjectName}. Give brief acknowledgment and mention creating practice content (1-2 sentences max).`
+
+      // Answer submission actions from components
+      case 'answer_submitted':
+        if (data && typeof data === 'object' && 'correct' in data) {
+          return data.correct 
+            ? `${baseContext} The student got an answer correct. Give brief confirmation and mention continuing (1-2 sentences max).`
+            : `${baseContext} The student got an answer wrong. Give brief feedback on trying again (1-2 sentences max).`
+        }
+        return `${baseContext} The student submitted an answer. Give brief acknowledgment (1-2 sentences max).`
+
+      case 'fill_blank_submitted':
+        if (data && typeof data === 'object' && 'isCorrect' in data) {
+          return data.isCorrect
+            ? `${baseContext} The student correctly filled in the blanks. Give brief confirmation (1-2 sentences max).`
+            : `${baseContext} The student's fill-in-the-blank attempt needs work. Give brief encouragement (1-2 sentences max).`
+        }
+        return `${baseContext} The student completed a fill-in-the-blank exercise. Give brief feedback (1-2 sentences max).`
+
+      case 'drag_drop_submitted':
+        if (data && typeof data === 'object' && 'isCorrect' in data) {
+          return data.isCorrect
+            ? `${baseContext} The student correctly arranged the drag-and-drop items. Give brief confirmation (1-2 sentences max).`
+            : `${baseContext} The student's drag-and-drop arrangement needs adjustment. Give brief guidance (1-2 sentences max).`
+        }
+        return `${baseContext} The student completed a drag-and-drop exercise. Give brief feedback (1-2 sentences max).`
+
+      case 'quiz_submitted':
+        if (data && typeof data === 'object' && 'score' in data) {
+          const score = data.score as number
+          if (score >= 80) {
+            return `${baseContext} The student scored ${score}% on the quiz. Give brief congratulations (1-2 sentences max).`
+          } else {
+            return `${baseContext} The student scored ${score}% on the quiz. Give brief encouragement to review and try again (1-2 sentences max).`
+          }
+        }
+        return `${baseContext} The student completed a quiz. Give brief feedback (1-2 sentences max).`
+
+      case 'highlights_checked':
+        if (data && typeof data === 'object' && 'correctHighlights' in data) {
+          const correctCount = data.correctHighlights as number
+          return `${baseContext} The student highlighted ${correctCount} key points correctly. Give brief feedback on their text analysis (1-2 sentences max).`
+        }
+        return `${baseContext} The student completed a text highlighting exercise. Give brief feedback on their analysis (1-2 sentences max).`
+
+      // Help and explanation requests
+      case 'concept_expanded':
+        return `${baseContext} The student wants a deeper explanation. Briefly acknowledge and mention providing more detail (1-2 sentences max).`
+        
+      case 'examples_requested':
+        return `${baseContext} The student wants more examples. Briefly acknowledge and mention providing examples (1-2 sentences max).`
+
+      case 'explain_more':
+        return `${baseContext} The student wants more explanation. Briefly acknowledge and mention providing additional details (1-2 sentences max).`
+
+      case 'question_requested':
+        return `${baseContext} The student wants to ask a question. Give brief acknowledgment and encourage them to ask (1-2 sentences max).`
+
+      case 'detail_expanded':
+        return `${baseContext} The student expanded a detail section for more information. Give brief acknowledgment (1-2 sentences max).`
+
+      // Next content requests
+      case 'next_question':
+        return `${baseContext} The student wants another question. Give brief acknowledgment about providing more practice (1-2 sentences max).`
+
+      case 'next_exercise':
+        return `${baseContext} The student wants another exercise. Give brief acknowledgment about providing more practice (1-2 sentences max).`
+
+      case 'next_problem':
+        return `${baseContext} The student wants another problem. Give brief acknowledgment about providing more practice (1-2 sentences max).`
+
+      // Reset actions - NOW FULLY SUPPORTED
+      case 'reset_question':
+      case 'fill_blank_reset':
+      case 'drag_drop_reset':
+      case 'solver_reset':
+      case 'quiz_reset':
+      case 'graph_reset':
+        return `${baseContext} The student reset their exercise. Give brief encouragement to try again (1 sentence max).`
+
+      // Quiz progression - NOW FULLY SUPPORTED
+      case 'quiz_started':
+        return `${baseContext} The student started a quiz. Give brief encouragement (1 sentence max).`
+
+      // Graph interaction - NOW FULLY SUPPORTED
+      case 'graph_control_changed':
+        if (data && typeof data === 'object' && 'parameter' in data) {
+          const parameter = data.parameter as string
+          return `${baseContext} The student adjusted the ${parameter} on the graph. Give brief acknowledgment of their exploration (1-2 sentences max).`
+        }
+        return `${baseContext} The student adjusted graph controls. Give brief acknowledgment of their exploration (1-2 sentences max).`
+
+      // Contextual content (from ChatPane)
+      case 'contextual_content_request':
+        if (isContextWithLesson(context)) {
+          const lessonTitle = context.lesson?.title || 'this topic'
+          return `${baseContext} The student asked about ${lessonTitle}. Briefly acknowledge and mention creating relevant content (1-2 sentences max).`
+        }
+        return `${baseContext} The student asked a question. Briefly acknowledge and mention creating relevant content (1-2 sentences max).`
+
+      default:
+        return `${baseContext} The student performed action "${action}". Give a brief, direct response (1-2 sentences max).`
     }
   }
 
@@ -1551,20 +1737,38 @@ Return JSON:
   "type": "explainer",
   "data": {
     "title": "${lesson.title}",
-    "content": "Clear, engaging explanation of the concept",
+    "overview": "Clear, engaging overview of the concept (1-2 sentences)",
     "sections": [
       {
-        "title": "Section 1",
-        "content": "Detailed explanation of this aspect"
+        "heading": "What is ${lesson.title}?",
+        "paragraphs": [
+          "First paragraph explaining the basic concept clearly.",
+          "Second paragraph building on the explanation with examples.",
+          "Third paragraph connecting to practical applications."
+        ]
+      },
+      {
+        "heading": "Key Components",
+        "paragraphs": [
+          "Paragraph explaining the main components or parts.",
+          "Paragraph showing how these components work together."
+        ]
+      },
+      {
+        "heading": "Real-World Applications",
+        "paragraphs": [
+          "Paragraph with concrete examples and applications.",
+          "Paragraph showing relevance to student's life or studies."
+        ]
       }
     ],
-    "examples": ["Example 1", "Example 2"],
-    "interactiveElements": ["Element that students can explore"],
-    "difficulty": "beginner|intermediate|advanced"
+    "conclusion": "Brief summary that reinforces key learning points",
+    "difficulty": "beginner",
+    "estimatedReadTime": 3
   }
 }
 
-Make it engaging and interactive.`
+Make it educational, well-structured, and engaging. Each section should have 2-4 meaningful paragraphs.`
 
       default:
         return `${baseContext}
@@ -1575,52 +1779,102 @@ Focus on student engagement and practical understanding.`
     }
   }
 
-  // Create prompts for tutor responses
-  private createTutorResponsePrompt(action: string, data: unknown, context: unknown, subjectName: string): string {
-    const baseContext = `You are tutoring a student in ${subjectName}.`
-    
-    // Type guards for different data structures
-    const isAnswerData = (d: unknown): d is { correct: boolean } => {
-      return typeof d === 'object' && d !== null && 'correct' in d
-    }
-    
-    const isContextWithLesson = (c: unknown): c is { lesson?: { title: string }; progress?: { correctAnswers: number; totalAttempts: number } } => {
-      return typeof c === 'object' && c !== null
-    }
+  async generateWelcomeMessage(
+    subjectName: string,
+    currentLesson: { title: string; index: number },
+    progress: { correctAnswers: number; totalAttempts: number },
+    isReturningUser: boolean = true
+  ): Promise<string> {
+    try {
+      logger.debug(`🎯 Generating ${isReturningUser ? 'welcome back' : 'welcome'} message for ${subjectName}`)
+      
+      const response = await this.cachedApiCall(
+        'welcome-message',
+        { subjectName, currentLesson, progress, isReturningUser },
+        async () => {
+          const welcomePrompt = this.createWelcomeMessagePrompt(
+            subjectName,
+            currentLesson,
+            progress,
+            isReturningUser
+          )
+          
+          const result = await chatCompletion({
+            messages: [
+              {
+                role: "system",
+                content: `You are a direct tutor. Create brief, informative welcome messages. Focus on current lesson and progress without excessive enthusiasm. Keep messages under 2 sentences.`
+              },
+              {
+                role: "user",
+                content: welcomePrompt
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 80
+          })
 
-    switch (action) {
-      case 'needs_more_practice':
-        return `${baseContext} The student needs more practice with a concept. Give encouraging feedback about the value of practice (2-3 sentences max).`
-        
-      case 'continue_practicing':
-        return `${baseContext} The student is making progress but needs to continue practicing. Give encouraging feedback about their progress (2-3 sentences max).`
-        
-      case 'ready_for_practice':
-        return `${baseContext} The student is ready to practice. Give an enthusiastic response about starting practice activities (2-3 sentences max).`
-
-      case 'answer_submitted':
-        if (isAnswerData(data)) {
-          return data.correct 
-            ? `${baseContext} The student got an answer correct. Give specific praise and encouragement to continue (2-3 sentences max).`
-            : `${baseContext} The student got an answer wrong. Give encouraging feedback to keep trying and learn from mistakes (2-3 sentences max).`
+          const content = result.choices[0].message.content
+          if (!content) throw new Error('No welcome message generated')
+          
+          return content.trim()
         }
-        return `${baseContext} The student submitted an answer. Give encouraging feedback about their attempt (2-3 sentences max).`
+      )
+      
+      return response as string
+      
+    } catch (error) {
+      logger.error('Failed to generate welcome message:', error)
+      // Fallback to a basic template if AI fails
+      if (isReturningUser) {
+        return `Back to ${subjectName}. Current lesson: "${currentLesson.title}".`
+      } else {
+        return `Starting ${subjectName}. First lesson: "${currentLesson.title}".`
+      }
+    }
+  }
 
-      case 'concept_expanded':
-        return `${baseContext} The student wants a deeper explanation. Acknowledge their curiosity and explain you'll provide more detail (2-3 sentences max).`
-        
-      case 'examples_requested':
-        return `${baseContext} The student wants more examples. Acknowledge their request and explain you'll provide practical examples (2-3 sentences max).`
+  private createWelcomeMessagePrompt(
+    subjectName: string,
+    currentLesson: { title: string; index: number },
+    progress: { correctAnswers: number; totalAttempts: number },
+    isReturningUser: boolean
+  ): string {
+    const accuracyRate = progress.totalAttempts > 0 
+      ? Math.round((progress.correctAnswers / progress.totalAttempts) * 100)
+      : 0
+    
+    const lessonNumber = currentLesson.index + 1
+    
+    if (isReturningUser) {
+      return `Create a brief welcome back message for a student returning to ${subjectName}.
 
-      case 'contextual_content_request':
-        if (isContextWithLesson(context)) {
-          const lessonTitle = context.lesson?.title || 'this topic'
-          return `${baseContext} The student asked a question about ${lessonTitle} and you're creating interactive content. Acknowledge their question and explain what you'll create (2-3 sentences max).`
-        }
-        return `${baseContext} The student asked a question and you're creating interactive content. Acknowledge their question and explain what you'll create (2-3 sentences max).`
+Context:
+- Subject: ${subjectName}
+- Current lesson: ${lessonNumber} - "${currentLesson.title}"
+- Progress: ${progress.correctAnswers}/${progress.totalAttempts} correct answers (${accuracyRate}% accuracy)
+- Student is returning to continue learning
 
-      default:
-        return `${baseContext} The student performed action "${action}". Give a brief, encouraging response that acknowledges their engagement and supports their learning (2-3 sentences max).`
+Create a direct message that:
+1. States they're back to the subject
+2. Mentions their current lesson
+3. Optionally notes their progress if relevant
+
+Keep it under 2 sentences. Be informative, not enthusiastic.`
+    } else {
+      return `Create a welcome message for a student starting ${subjectName}.
+
+Context:
+- Subject: ${subjectName}
+- Starting lesson: "${currentLesson.title}"
+- New student beginning learning
+
+Create a direct message that:
+1. States they're starting the subject
+2. Mentions the first lesson
+3. Is informative but brief
+
+Keep it under 2 sentences. Be clear and direct.`
     }
   }
 }

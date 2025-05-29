@@ -34,7 +34,10 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   const [pendingMessages, setPendingMessages] = useState<Message[]>([])
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const lessonPlanCreationAttempted = useRef<string | null>(null)
-  const lessonPlanCreationInProgress = useRef<boolean>(false)
+  const lessonPlanCreationInProgress = useRef(false)
+  const contentGenerationInProgress = useRef(false)
+  const [recentContentTypes, setRecentContentTypes] = useState<string[]>([])
+  const MAX_RECENT_TYPES = 3 // Track last 3 content types
 
   // Custom hooks for better separation of concerns
   const { scheduleRetry, clearRetry } = usePendingMessages({
@@ -232,25 +235,60 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         }
       }
 
-      const planMessage = `Great! I've created a learning plan for ${subjectName}:\n\n` +
-        lessonPlan.lessons.map((lesson: Lesson, i: number) => `${i + 1}. ${lesson.title}`).join('\n') +
-        `\n\nLet's start with lesson 1: "${lessonPlan.lessons[0].title}"`
+      // Generate intelligent welcome message for new learners
+      try {
+        const aiWelcomeContent = await aiTutor.generateWelcomeMessage(
+          subjectName,
+          {
+            title: lessonPlan.lessons[0]?.title || 'Getting Started',
+            index: 0
+          },
+          {
+            correctAnswers: progress?.correctAnswers || 0,
+            totalAttempts: progress?.totalAttempts || 0
+          },
+          false // isReturningUser = false for new lesson plans
+        )
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: planMessage,
-        timestamp: new Date(),
-        hasGeneratedContent: true
-      }
-      setMessages(prev => [...prev, aiResponse])
-      
-      // Save AI response (should have subject by now, but handle pending just in case)
-      if (subjectForPlan) {
-        await saveMessageToPersistence(aiResponse)
-      } else {
-        console.log('⏳ Adding AI response to pending queue')
-        setPendingMessages(prev => [...prev, aiResponse])
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: aiWelcomeContent,
+          timestamp: new Date(),
+          hasGeneratedContent: true
+        }
+        setMessages(prev => [...prev, aiResponse])
+        
+        // Save AI response
+        if (subjectForPlan) {
+          await saveMessageToPersistence(aiResponse)
+        } else {
+          console.log('⏳ Adding AI response to pending queue')
+          setPendingMessages(prev => [...prev, aiResponse])
+        }
+      } catch (error) {
+        console.error('Failed to generate AI welcome message for new plan:', error)
+        // Fallback to enhanced template
+        const planMessage = `🎉 Exciting! I've created a personalized learning plan for ${subjectName}:\n\n` +
+          lessonPlan.lessons.map((lesson: Lesson, i: number) => `${i + 1}. ${lesson.title}`).join('\n') +
+          `\n\nReady to start your ${subjectName} journey? Let's begin with "${lessonPlan.lessons[0].title}"! 🚀`
+
+        const aiResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: planMessage,
+          timestamp: new Date(),
+          hasGeneratedContent: true
+        }
+        setMessages(prev => [...prev, aiResponse])
+        
+        // Save AI response (should have subject by now, but handle pending just in case)
+        if (subjectForPlan) {
+          await saveMessageToPersistence(aiResponse)
+        } else {
+          console.log('⏳ Adding AI response to pending queue')
+          setPendingMessages(prev => [...prev, aiResponse])
+        }
       }
 
       // Generate content for first lesson - pass the correct subject ID
@@ -262,6 +300,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       // Reset progress tracking
       lessonPlanCreationInProgress.current = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject, user, saveMessageToPersistence])
 
   // Check if lesson plan creation should be triggered (moved from useEffect to direct logic)
@@ -306,6 +345,23 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       currentInput.toLowerCase().includes(keyword.toLowerCase())
     )
 
+    // Check if this is a direct educational question
+    const directQuestionPatterns = [
+      /what concepts? (?:do i need|should i (?:know|learn|understand))/i,
+      /what (?:do i need to (?:know|learn|understand)|concepts? (?:are )?(?:needed|required))/i,
+      /how do i (?:get good at|master|learn)/i,
+      /what (?:are the )?(?:fundamentals?|basics?|foundations?) of/i,
+      /explain (?:what|how|why)/i,
+      /(?:what is|define|tell me about)/i,
+      /how (?:does|do) .+ work/i,
+      /why (?:is|are|does|do)/i,
+      /list the .+ (?:concepts?|topics?|skills?)/i
+    ]
+    
+    const isDirectEducationalQuestion = directQuestionPatterns.some(pattern => 
+      pattern.test(currentInput)
+    )
+
     // If user wants to continue and we have a current lesson plan, generate content directly
     if (isRequestingContinue && currentLessonPlan && selectedSubject) {
       console.log('🎯 User wants to continue lesson - generating content directly')
@@ -322,6 +378,42 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       await generateCurrentLessonContent()
       setIsTyping(false)
       return
+    }
+
+    // Handle direct educational questions with specific AI responses
+    if (isDirectEducationalQuestion && selectedSubject) {
+      console.log('🎓 Detected direct educational question - generating explainer component')
+      
+      // Save user message to persistence
+      await saveMessageToPersistence(userMessage)
+      
+      try {
+        // Generate brief acknowledgment response instead of long educational content
+        const briefResponse = `I'll create an interactive explanation to help you understand the key ${selectedSubject.name} concepts you need to master.`
+
+        const aiResponse: Message = {
+          id: `educational-${Date.now()}`,
+          role: 'assistant',
+          content: briefResponse,
+          timestamp: new Date(),
+          hasGeneratedContent: true // Mark as generating content
+        }
+        
+        setMessages(prev => [...prev, aiResponse])
+        await saveMessageToPersistence(aiResponse)
+        
+        // Generate explainer component with the educational content
+        if (currentLessonPlan) {
+          console.log('📚 Generating explainer component for educational question')
+          await generateCurrentLessonContent('explainer')
+        }
+        
+        setIsTyping(false)
+        return
+      } catch (error) {
+        console.error('❌ Error generating educational response:', error)
+        // Fall through to normal handling
+      }
     }
 
     // Original message handling for other cases
@@ -385,6 +477,57 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   }
 
   const generateLessonContent = useCallback(async (lessonPlan: LessonPlan, progress: LearningProgress | null, subjectName: string, subjectId?: string, userAction?: string) => {
+    // Helper function to get diverse content type (moved inside to avoid dependency issues)
+    const getDiverseContentType = (requestedAction: string, recentTypes: string[]): 'quiz' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' => {
+      // Define available content types based on the action
+      let availableTypes: ('quiz' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice')[] = []
+      
+      if (requestedAction === 'next_question') {
+        // For question requests, prioritize quiz-like content but allow variety
+        availableTypes = ['multiple-choice', 'quiz', 'fill-blank', 'concept-card', 'explainer']
+      } else if (requestedAction === 'next_exercise') {
+        // For exercise requests, prioritize interactive practice content with strong variety
+        availableTypes = ['step-solver', 'drag-drop', 'text-highlighter', 'quiz', 'multiple-choice', 'concept-card', 'fill-blank']
+      } else if (requestedAction === 'next_problem') {
+        // For problem requests, provide varied problem-solving content
+        availableTypes = ['step-solver', 'quiz', 'multiple-choice', 'fill-blank', 'concept-card', 'explainer']
+      } else {
+        // Default variety for other requests
+        availableTypes = ['quiz', 'multiple-choice', 'step-solver', 'concept-card', 'explainer', 'fill-blank']
+      }
+      
+      // Filter out recently used types to ensure variety (be more strict)
+      const diverseTypes = availableTypes.filter(type => !recentTypes.includes(type))
+      
+      // If we've used all types recently, pick from the least recently used
+      let typesToChooseFrom: typeof availableTypes
+      if (diverseTypes.length > 0) {
+        typesToChooseFrom = diverseTypes
+      } else {
+        // Reset but avoid the most recent type if possible
+        const mostRecentType = recentTypes[0]
+        typesToChooseFrom = availableTypes.filter(type => type !== mostRecentType)
+        if (typesToChooseFrom.length === 0) {
+          typesToChooseFrom = availableTypes
+        }
+      }
+      
+      // Select a random type from available diverse options
+      const selectedType = typesToChooseFrom[Math.floor(Math.random() * typesToChooseFrom.length)]
+      
+      console.log('🎯 Content diversity logic:', {
+        requestedAction,
+        recentTypes,
+        availableTypes,
+        diverseTypes,
+        typesToChooseFrom,
+        selectedType,
+        diversityScore: `${diverseTypes.length}/${availableTypes.length} types available`
+      })
+      
+      return selectedType
+    }
+
     try {
       const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
       console.log('📖 Generating content for lesson:', currentLesson.title)
@@ -394,7 +537,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.log('📊 Content variety for this lesson:', varietyStats)
       
       // Determine content type based on user action and progress
-      let contentType: 'quiz' | 'explanation' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' = 'explanation'
+      let contentType: 'quiz' | 'practice' | 'fill-blank' | 'explainer' | 'concept-card' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'multiple-choice' = 'explainer'
       
       if (userAction === 'practice') {
         // User specifically wants to practice - prioritize interactive components
@@ -402,24 +545,24 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         contentType = practiceTypes[Math.floor(Math.random() * practiceTypes.length)]
         console.log('🎯 User wants practice, selected:', contentType)
       } else if (userAction === 'next_question') {
-        // User wants another multiple choice question
-        contentType = 'quiz'
-        console.log('🎯 User wants next question, selected:', contentType)
+        // User wants another question - use diversity system
+        contentType = getDiverseContentType('next_question', recentContentTypes)
+        console.log('🎯 User wants next question, selected with diversity:', contentType)
       } else if (userAction === 'next_exercise') {
-        // User wants another fill-in-the-blank exercise
-        contentType = 'fill-blank'
-        console.log('🎯 User wants next exercise, selected:', contentType)
+        // User wants another exercise - use diversity system
+        contentType = getDiverseContentType('next_exercise', recentContentTypes)
+        console.log('🎯 User wants next exercise, selected with diversity:', contentType)
       } else if (userAction === 'next_problem') {
-        // User wants another step-by-step problem
-        contentType = 'practice'
-        console.log('🎯 User wants next problem, selected:', contentType)
+        // User wants another problem - use diversity system
+        contentType = getDiverseContentType('next_problem', recentContentTypes)
+        console.log('🎯 User wants next problem, selected with diversity:', contentType)
       } else if (userAction === 'examples_requested') {
         // User wants more examples - give them explanations with examples
-        contentType = 'explanation'
+        contentType = 'explainer'
         console.log('🎯 User wants examples, selected:', contentType)
       } else if (userAction === 'concept_expanded') {
         // User wants deeper explanation - give them explanations
-        contentType = 'explanation'
+        contentType = 'explainer'
         console.log('🎯 User wants deeper explanation, selected:', contentType)
       } else if (userAction === 'explainer' || userAction === 'concept-card' || userAction === 'step-solver' || 
                  userAction === 'interactive-example' || userAction === 'text-highlighter' || 
@@ -431,10 +574,10 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       } else {
         // Default behavior based on progress
         if (progress && progress.totalAttempts === 0) {
-          contentType = 'explanation' // Start with explanation
+          contentType = 'explainer' // Start with explanation
         } else if (progress && progress.totalAttempts >= 1) {
           // Mix of practice and explanation after first attempt
-          const contentTypes = ['quiz', 'fill-blank', 'practice', 'explanation'] as const
+          const contentTypes = ['quiz', 'fill-blank', 'practice', 'explainer'] as const
           contentType = contentTypes[Math.floor(Math.random() * contentTypes.length)]
         }
         console.log('🎯 Default behavior, selected:', contentType)
@@ -446,7 +589,25 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         contentType
       )
       
-      console.log('✅ Generated lesson content:', lessonContent)
+      console.log('✅ Generated lesson content:', { 
+        requestedType: contentType, 
+        actualType: lessonContent.type, 
+        typeMatch: contentType === lessonContent.type 
+      })
+
+      // Update recent content types tracker for diversity using the actual generated type
+      const actualContentType = lessonContent.type || contentType
+      setRecentContentTypes(prev => {
+        const updated = [actualContentType, ...prev].slice(0, MAX_RECENT_TYPES)
+        console.log('📊 Updated recent content types:', {
+          added: actualContentType,
+          previous: prev,
+          updated: updated,
+          diversityLevel: `${updated.length}/${MAX_RECENT_TYPES} slots filled`
+        })
+        return updated
+      })
+      console.log('📊 Tracked content type for diversity:', actualContentType)
 
       // Use the provided subjectId or fall back to selectedSubject
       const targetSubjectId = subjectId || selectedSubject?.id
@@ -471,15 +632,37 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       console.error('❌ Error generating lesson content:', error)
       setIsTyping(false)
     }
-  }, [selectedSubject, setIsTyping])
+  }, [selectedSubject, setIsTyping, recentContentTypes])
 
   const generateCurrentLessonContent = useCallback(async (userAction?: string) => {
     if (!currentLessonPlan || !selectedSubject) {
-      console.log('❌ Cannot generate content: missing lesson plan or subject')
+      console.log('❌ Cannot generate content - missing lesson plan or subject')
       return
     }
 
-    await generateLessonContent(currentLessonPlan, currentProgress, selectedSubject.name, selectedSubject.id, userAction)
+    // Prevent duplicate content generation
+    if (contentGenerationInProgress.current) {
+      console.log('⏸️ Content generation already in progress - skipping')
+      return
+    }
+
+    contentGenerationInProgress.current = true
+    console.log('🎬 Starting content generation with action:', userAction)
+
+    try {
+      await generateLessonContent(
+        currentLessonPlan,
+        currentProgress,
+        selectedSubject.name,
+        selectedSubject.id,
+        userAction
+      )
+    } catch (error) {
+      console.error('❌ Error in generateCurrentLessonContent:', error)
+    } finally {
+      contentGenerationInProgress.current = false
+      console.log('🏁 Content generation completed')
+    }
   }, [currentLessonPlan, selectedSubject, currentProgress, generateLessonContent])
 
   const handleNextInteractiveContent = async (action: string, lessonPlan: LessonPlan, progress: LearningProgress | null) => {
@@ -906,13 +1089,13 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         reasoning
       })
 
-      // Generate AI response acknowledging the question
+      // Generate AI response that directly answers the user's question
       if (currentLessonPlan && currentProgress) {
         const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
         if (currentLesson) {
           const aiResponse = await aiTutor.generateTutorResponse(
             selectedSubject!.name,
-            'contextual_content_request',
+            'direct_question_answer',
             { 
               userMessage: userMessage,
               suggestedComponent: suggestedComponent,
@@ -946,12 +1129,12 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         await saveMessageToPersistence(responseMessage)
       }
 
-      // If we have a lesson plan, generate contextual content
-      if (currentLessonPlan && currentProgress) {
-        console.log('📚 Generating contextual content with suggested component:', suggestedComponent)
+      // Only generate ONE interactive content component - but NOT if lesson plan creation is in progress
+      if (currentLessonPlan && currentProgress && !lessonPlanCreationInProgress.current) {
+        console.log('📚 Generating single contextual content with suggested component:', suggestedComponent)
         
         // Map suggested component to content action for generateLessonContent
-        let contentAction = 'explanation' // default
+        let contentAction: 'explainer' | 'concept-card' | 'multiple-choice' | 'fill-blank' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' = 'explainer'
         switch (suggestedComponent) {
           case 'explainer':
             contentAction = 'explainer'
@@ -987,11 +1170,14 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             contentAction = 'explainer'
         }
         
+        // Generate exactly ONE piece of content
         await generateCurrentLessonContent(contentAction)
       } else if (selectedSubject && !lessonPlanCreationInProgress.current) {
         // If no lesson plan exists, create one first
         console.log('📋 No lesson plan exists, creating one first for contextual content')
         await createLessonPlan(selectedSubject.name, selectedSubject)
+      } else if (lessonPlanCreationInProgress.current) {
+        console.log('⏸️ Lesson plan creation in progress, skipping content generation to avoid duplicates')
       }
     }
 
@@ -1024,13 +1210,13 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               onKeyPress={handleKeyPress}
               placeholder="What would you like to learn? (e.g., &apos;Explain photosynthesis&apos;, &apos;Quiz me on Shakespeare&apos;, &apos;Teach me Spanish&apos;)"
               disabled={isTyping}
-              className="flex-1 text-sm"
+              className="flex-1 p-6 px-4 text-lg"
             />
             <Button
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || isTyping}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700"
+              size="lg"
+              className="p-6 bg-blue-600 hover:bg-blue-700"
             >
               {isTyping ? (
                 <SpinnerIcon size="sm" />
@@ -1039,9 +1225,6 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               )}
             </Button>
           </div>
-          <p className="text-xs text-gray-500 mt-2 hidden sm:block">
-            Try: &quot;Explain concepts&quot;, &quot;Give me a quiz&quot;, &quot;Help me understand&quot;, &quot;Teach me step-by-step&quot;
-          </p>
         </div>
       </div>
     )

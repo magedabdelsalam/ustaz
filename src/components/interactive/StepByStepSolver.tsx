@@ -131,18 +131,8 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
       setCurrentStep(newStep)
       setCompletedSteps(prev => [...prev, currentStep])
       
-      // Only send feedback when the entire problem is completed
-      if (newStep === solverContent.steps.length) {
-        onInteraction('answer_submitted', {
-          componentId: id,
-          correct: true, // Step-by-step problems are always "correct" when completed
-          problem: solverContent.problem,
-          finalAnswer: solverContent.finalAnswer,
-          allStepsCompleted: true,
-          totalSteps: solverContent.steps.length
-        })
-      }
-      // No interaction for individual steps - just internal state update
+      // No feedback needed when completing the problem - just update state
+      // Removed onInteraction call that was triggering AI response
     }
   }
 

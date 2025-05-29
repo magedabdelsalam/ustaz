@@ -115,21 +115,28 @@ export const TextHighlighter = memo(function TextHighlighter({
 
   const handleReset = () => {
     setUserHighlights([])
+    setSelectedCategory(highlighterContent.categories[0]?.id || '')
     setShowResults(false)
-    setShowTargets(false)
+  }
+
+  const handleNewText = () => {
+    onInteraction('next_exercise', {
+      componentId: id,
+      requestType: 'new_highlighting',
+      previousScore: showResults ? calculateResults()?.score : 0
+    })
   }
 
   const handleCheckAnswers = () => {
+    const results = calculateResults()
     setShowResults(true)
     
-    if (highlighterContent.targets) {
-      const results = calculateResults()
-      onInteraction('highlights_checked', {
-        componentId: id,
-        userHighlights,
-        results
-      })
-    }
+    onInteraction('highlights_checked', {
+      componentId: id,
+      userHighlights,
+      results,
+      timestamp: Date.now()
+    })
   }
 
   const calculateResults = () => {
@@ -421,7 +428,20 @@ export const TextHighlighter = memo(function TextHighlighter({
         )}
 
         {/* Results */}
-        {showResults && renderResults()}
+        {showResults && (
+          <div className="space-y-4">
+            {renderResults()}
+            <div className="flex space-x-3 justify-center">
+              <Button onClick={handleNewText} className="flex-1 max-w-48">
+                New Text
+              </Button>
+              <Button onClick={handleReset} variant="outline" className="flex-1 max-w-48">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Explanation */}
         {highlighterContent.explanation && (

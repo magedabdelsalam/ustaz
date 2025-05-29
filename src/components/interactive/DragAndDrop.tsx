@@ -186,6 +186,17 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
     onInteraction('drag_drop_reset', { componentId: id })
   }
 
+  const handleNewExercise = () => {
+    onInteraction('next_exercise', {
+      componentId: id,
+      requestType: 'new_drag_drop',
+      previousScore: {
+        correct: Object.values(results).filter(Boolean).length,
+        total: dragContent.items.length
+      }
+    })
+  }
+
   const getUnassignedItems = () => {
     return dragContent.items.filter(item => !assignments[item.id])
   }
@@ -315,10 +326,15 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
               Check Answers
             </Button>
           ) : (
-            <Button onClick={handleReset} variant="outline" className="flex-1 text-sm font-medium h-11">
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Try Again
-            </Button>
+            <div className="flex space-x-3 w-full">
+              <Button onClick={handleNewExercise} className="flex-1 text-sm font-medium h-11">
+                New Exercise
+              </Button>
+              <Button onClick={handleReset} variant="outline" className="flex-1 text-sm font-medium h-11">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
           )}
         </div>
       </CardContent>

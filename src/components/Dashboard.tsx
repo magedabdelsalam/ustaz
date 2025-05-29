@@ -3,7 +3,6 @@
 import { useRef, useEffect } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'
-import { persistenceService } from '@/lib/persistenceService'
 import { HistoryPane } from '@/components/HistoryPane'
 import { ContentPane } from '@/components/ContentPane'
 import { ChatPane, ChatPaneRef } from '@/components/ChatPane'
@@ -63,13 +62,21 @@ export function Dashboard() {
 
   // Optimized message handler - no useEffect needed
   const handleNewMessage = async (message: string, isUserMessage: boolean = true) => {
-    if (!isUserMessage || !user) return
-
     try {
-      const analysis = await analyzeMessage(message)
-      console.log('📊 Message analysis result:', analysis)
+      console.log('🎯 Dashboard handling new message:', { message: message.substring(0, 50) + '...', isUserMessage })
+      
+      // Only process user messages for subject detection
+      if (!isUserMessage) {
+        console.log('⏸️ Skipping non-user message')
+        return
+      }
 
-      if (analysis.isNewSubject) {
+      // Analyze message for subject and component suggestions
+      const analysis = await analyzeMessage(message)
+      console.log('📊 Message analysis:', analysis)
+
+      // Handle subject detection based on analysis result structure
+      if (analysis.isNewSubject && analysis.subjectName) {
         // Check if subject already exists
         const existingSubject = subjects.find(s => 
           s.name.toLowerCase() === analysis.subjectName.toLowerCase()
@@ -79,20 +86,11 @@ export function Dashboard() {
           console.log('📖 Switching to existing subject:', existingSubject.name)
           selectSubject(existingSubject)
           
-          // Move the triggering message to this subject if it was saved to a different subject
-          if (lastUserMessageRef.current && lastUserMessageRef.current.previousSubjectId && 
-              lastUserMessageRef.current.previousSubjectId !== existingSubject.id) {
-            console.log('🔄 Moving triggering message to existing subject:', lastUserMessageRef.current.id)
-            try {
-              await persistenceService.updateMessageSubject(
-                lastUserMessageRef.current.id,
-                user.id,
-                existingSubject.id
-              )
-            } catch (error) {
-              console.error('❌ Failed to move message to existing subject:', error)
-            }
-          }
+          // Emit subject selected event
+          const subjectEvent = new CustomEvent('subjectSelected', {
+            detail: { subject: existingSubject }
+          })
+          window.dispatchEvent(subjectEvent)
         } else {
           console.log('📚 Creating new subject:', analysis.subjectName)
           try {
@@ -107,24 +105,11 @@ export function Dashboard() {
               }
             })
             window.dispatchEvent(newSubjectEvent)
-            
-            // Move the triggering message to the new subject
-            if (lastUserMessageRef.current && lastUserMessageRef.current.previousSubjectId) {
-              console.log('🔄 Moving triggering message to new subject:', lastUserMessageRef.current.id)
-              try {
-                await persistenceService.updateMessageSubject(
-                  lastUserMessageRef.current.id,
-                  user.id,
-                  newSubject.id
-                )
-              } catch (error) {
-                console.error('❌ Failed to move message to new subject:', error)
-              }
-            }
           } catch (error) {
             console.error('❌ Failed to create subject:', error)
           }
         }
+        
       } else if (currentSubject) {
         // Continue with current subject - generate appropriate interactive component
         console.log('📝 Continuing with current subject:', currentSubject.name)

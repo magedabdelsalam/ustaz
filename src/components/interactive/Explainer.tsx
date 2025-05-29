@@ -3,8 +3,9 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { memo, useState } from 'react'
-import { FileText, MessageCircle, BookOpen, ArrowRight, ChevronDown, Eye, Loader2 } from 'lucide-react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { memo, useState, useMemo } from 'react'
+import { FileText, MessageCircle, BookOpen, ArrowRight, Eye, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
 
 interface ExplainerContent {
@@ -27,20 +28,84 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     nextTopic: false
   })
 
+  // Validate and sanitize content
+  const sanitizedContent = useMemo(() => {
+    const defaultContent: ExplainerContent = {
+      title: explainerContent?.title || 'Learning Topic',
+      overview: explainerContent?.overview || 'Exploring this important concept in detail.',
+      sections: [],
+      conclusion: explainerContent?.conclusion,
+      difficulty: explainerContent?.difficulty || 'beginner',
+      estimatedReadTime: explainerContent?.estimatedReadTime
+    }
+
+    // Handle sections - convert old format or ensure proper structure
+    if (explainerContent?.sections && Array.isArray(explainerContent.sections)) {
+      defaultContent.sections = explainerContent.sections.map((section, index) => {
+        // Handle old format where section has "title" and "content"
+        if (section && typeof section === 'object') {
+          const oldSection = section as { title?: string; content?: string; heading?: string; paragraphs?: string[] }
+          
+          if (oldSection.heading && oldSection.paragraphs && Array.isArray(oldSection.paragraphs)) {
+            // New format - use as is
+            return {
+              heading: oldSection.heading,
+              paragraphs: oldSection.paragraphs.filter(p => p && typeof p === 'string')
+            }
+          } else if (oldSection.title || oldSection.content) {
+            // Old format - convert
+            return {
+              heading: oldSection.title || `Section ${index + 1}`,
+              paragraphs: oldSection.content ? [oldSection.content] : [`Content for section ${index + 1}`]
+            }
+          }
+        }
+        
+        // Fallback for invalid sections
+        return {
+          heading: `Section ${index + 1}`,
+          paragraphs: [`This section covers important aspects of ${defaultContent.title}.`]
+        }
+      })
+    }
+
+    // If no valid sections, create default ones
+    if (defaultContent.sections.length === 0) {
+      defaultContent.sections = [
+        {
+          heading: `Understanding ${defaultContent.title}`,
+          paragraphs: [
+            `This topic is an important part of your learning journey.`,
+            `Let's explore the key concepts and their practical applications.`
+          ]
+        },
+        {
+          heading: 'Key Points',
+          paragraphs: [
+            `There are several important aspects to understand about this topic.`,
+            `Each point builds on the previous one to create a complete picture.`
+          ]
+        }
+      ]
+    }
+
+    return defaultContent
+  }, [explainerContent])
+
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
     // Priority 1: Use title if it's specific and meaningful
-    if (explainerContent.title && 
-        explainerContent.title !== 'Explanation' && 
-        explainerContent.title !== 'Learn about' &&
-        !explainerContent.title.includes('Introduction to') &&
-        !explainerContent.title.includes('Overview of')) {
-      return explainerContent.title
+    if (sanitizedContent.title && 
+        sanitizedContent.title !== 'Explanation' && 
+        sanitizedContent.title !== 'Learn about' &&
+        !sanitizedContent.title.includes('Introduction to') &&
+        !sanitizedContent.title.includes('Overview of')) {
+      return sanitizedContent.title
     }
 
     // Priority 2: Check for specific educational keywords and create contextual titles
-    const overviewLower = explainerContent.overview.toLowerCase()
-    const allSectionsText = explainerContent.sections
+    const overviewLower = sanitizedContent.overview.toLowerCase()
+    const allSectionsText = sanitizedContent.sections
       .map(section => `${section.heading} ${section.paragraphs.join(' ')}`)
       .join(' ')
       .toLowerCase()
@@ -82,8 +147,8 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     }
 
     // Priority 4: Extract key topic from first section heading
-    if (explainerContent.sections.length > 0) {
-      const firstHeading = explainerContent.sections[0].heading
+    if (sanitizedContent.sections.length > 0) {
+      const firstHeading = sanitizedContent.sections[0].heading
       const meaningfulWords = firstHeading.split(' ')
         .filter(word => {
           const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
@@ -100,7 +165,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     }
 
     // Priority 5: Default fallback based on difficulty
-    switch (explainerContent.difficulty) {
+    switch (sanitizedContent.difficulty) {
       case 'beginner':
         return 'Basic Topic Explanation'
       case 'intermediate':
@@ -108,7 +173,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
       case 'advanced':
         return 'Advanced Topic Analysis'
       default:
-        return explainerContent.title || 'Topic Explanation'
+        return sanitizedContent.title || 'Topic Explanation'
     }
   }
 
@@ -117,7 +182,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     try {
       onInteraction('question_requested', {
         componentId: id,
-        topic: explainerContent.title,
+        topic: sanitizedContent.title,
         requestType: 'clarification'
       })
     } finally {
@@ -133,7 +198,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     try {
       onInteraction('detail_expanded', {
         componentId: id,
-        topic: explainerContent.title,
+        topic: sanitizedContent.title,
         needsMoreDetail: true
       })
     } finally {
@@ -148,7 +213,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     try {
       onInteraction('ready_for_next', {
         componentId: id,
-        topic: explainerContent.title,
+        topic: sanitizedContent.title,
         action: 'continue'
       })
     } finally {
@@ -168,15 +233,26 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
   }
 
   const estimateReadTime = (): number => {
-    if (explainerContent.estimatedReadTime) {
-      return explainerContent.estimatedReadTime
+    if (sanitizedContent.estimatedReadTime) {
+      return sanitizedContent.estimatedReadTime
     }
     
     // Calculate based on content length (average 200 words per minute)
-    const totalWords = explainerContent.overview.split(' ').length +
-      explainerContent.sections.reduce((acc, section) => 
-        acc + section.paragraphs.join(' ').split(' ').length, 0) +
-      (explainerContent.conclusion?.split(' ').length || 0)
+    // Add null/undefined checks to prevent split errors
+    const overviewWords = sanitizedContent.overview ? sanitizedContent.overview.split(' ').length : 0
+    const sectionsWords = sanitizedContent.sections ? sanitizedContent.sections.reduce((acc, section) => {
+      if (!section || !section.paragraphs || !Array.isArray(section.paragraphs)) {
+        return acc
+      }
+      return acc + section.paragraphs
+        .filter(paragraph => paragraph && typeof paragraph === 'string')
+        .join(' ')
+        .split(' ')
+        .length
+    }, 0) : 0
+    const conclusionWords = sanitizedContent.conclusion ? sanitizedContent.conclusion.split(' ').length : 0
+    
+    const totalWords = overviewWords + sectionsWords + conclusionWords
     
     return Math.max(1, Math.ceil(totalWords / 200))
   }
@@ -194,45 +270,58 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
               <Eye className="h-3 w-3 mr-1" />
               {estimateReadTime()} min read
             </Badge>
-            <Badge className={getDifficultyColor(explainerContent.difficulty)}>
-              <span className="text-xs font-semibold capitalize tracking-wide">{explainerContent.difficulty}</span>
+            <Badge className={getDifficultyColor(sanitizedContent.difficulty)}>
+              <span className="text-xs font-semibold capitalize tracking-wide">{sanitizedContent.difficulty}</span>
             </Badge>
           </div>
         </div>
-        <p className="text-gray-700 text-base leading-relaxed mt-2">{explainerContent.overview}</p>
+        <p className="text-gray-700 text-base leading-relaxed mt-2">{sanitizedContent.overview || 'No overview available'}</p>
       </CardHeader>
       
-      <CardContent className="space-y-6">
-        {/* Content Sections */}
-        <div className="space-y-6">
-          {explainerContent.sections.map((section, sectionIndex) => (
-            <div key={sectionIndex} className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-              <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-                <ChevronDown className="h-5 w-5 mr-2 text-indigo-600" />
-                {section.heading}
-              </h3>
-              <div className="space-y-4">
-                {section.paragraphs.map((paragraph, paragraphIndex) => (
-                  <p 
-                    key={paragraphIndex} 
-                    className="text-gray-800 text-base leading-relaxed"
-                  >
-                    {paragraph}
-                  </p>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+      <CardContent className="space-y-4">
+        {/* Content Sections - Now collapsible using ShadCN Accordion */}
+        {sanitizedContent.sections && Array.isArray(sanitizedContent.sections) && sanitizedContent.sections.length > 0 ? (
+          <Accordion type="multiple" className="w-full space-y-2">
+            {sanitizedContent.sections.map((section, sectionIndex) => (
+              <AccordionItem 
+                key={sectionIndex} 
+                value={`section-${sectionIndex}`}
+                className="bg-gray-50 rounded-lg border border-gray-200 px-5"
+              >
+                <AccordionTrigger className="text-lg font-bold text-gray-900 hover:no-underline hover:text-indigo-600 transition-colors py-4">
+                  {section?.heading || 'Section'}
+                </AccordionTrigger>
+                <AccordionContent className="space-y-4 pb-5">
+                  {section?.paragraphs && Array.isArray(section.paragraphs) ? section.paragraphs
+                    .filter(paragraph => paragraph && typeof paragraph === 'string')
+                    .map((paragraph, paragraphIndex) => (
+                    <p 
+                      key={paragraphIndex} 
+                      className="text-gray-800 text-base leading-relaxed"
+                    >
+                      {paragraph}
+                    </p>
+                  )) : (
+                    <p className="text-gray-600 italic">No content available for this section</p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : (
+          <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+            <p className="text-gray-600 italic">No sections available</p>
+          </div>
+        )}
 
         {/* Conclusion */}
-        {explainerContent.conclusion && (
+        {sanitizedContent.conclusion && (
           <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200">
             <h4 className="text-base font-bold text-indigo-900 mb-3 flex items-center">
               <BookOpen className="h-5 w-5 mr-2" />
               Summary:
             </h4>
-            <p className="text-indigo-800 text-base leading-relaxed">{explainerContent.conclusion}</p>
+            <p className="text-indigo-800 text-base leading-relaxed">{sanitizedContent.conclusion}</p>
           </div>
         )}
 
@@ -283,4 +372,4 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
       </CardContent>
     </Card>
   )
-}) 
+})
