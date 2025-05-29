@@ -102,7 +102,7 @@ export interface Lesson {
 }
 
 export interface LessonContent {
-  type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank' | 'explainer' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer'
+  type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank' | 'explainer' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'placeholder'
   data: unknown
 }
 
@@ -922,179 +922,17 @@ Requirements:
       return false
     }
   }
-
-  private createFallbackContent(lesson: Lesson, contentType: string): LessonContent {
-    // Generate dynamic fallback content using AI
-    return this.generateDynamicFallbackContent(lesson, contentType)
-  }
-
-  // Generate dynamic fallback content using AI when main content generation fails
-  private generateDynamicFallbackContent(lesson: Lesson, contentType: string): LessonContent {
-    try {
-      // Use a simplified AI call for fallback content
-      const fallbackPrompt = this.createFallbackPrompt(lesson, contentType)
-      
-      // Try to generate with AI, but with shorter timeout and simpler prompts
-      chatCompletion({
-        messages: [
-          {
-            role: "system",
-            content: "You are a tutor creating simple educational content. Keep responses concise and practical."
-          },
-          {
-            role: "user",
-            content: fallbackPrompt
-          }
-        ],
-        temperature: 0.5,
-        max_tokens: 800
-      }).then(response => {
-        const content = response.choices[0].message.content
-        if (content) {
-          try {
-            const cleanedContent = this.cleanJsonResponse(content)
-            return JSON.parse(cleanedContent)
-          } catch (error) {
-            logger.debug('Fallback AI parse failed, using template fallback:', error)
-          }
-        }
-      }).catch(error => {
-        logger.debug('Fallback AI generation failed:', error)
-      })
-    } catch (error) {
-      logger.debug('Dynamic fallback content generation failed:', error)
-    }
-
-    // Ultimate template fallback if AI is completely unavailable
-    return this.createTemplateFallback(lesson, contentType)
-  }
-
-  private createFallbackPrompt(lesson: Lesson, contentType: string): string {
-    switch (contentType) {
-      case 'quiz':
-      case 'multiple-choice':
-        return `Create a simple multiple choice question about "${lesson.title}".
-Return JSON: {"type": "multiple-choice", "data": {"question": "Simple question", "options": ["A", "B", "C", "D"], "correctAnswer": 0, "explanation": "Brief explanation"}}`
-
-      case 'fill-blank':
-        return `Create a fill-in-the-blank exercise about "${lesson.title}".
-Return JSON: {"type": "fill-blank", "data": {"question": "Complete this about ${lesson.title}", "template": "Text with ___ blanks ___", "answers": ["answer1", "answer2"], "hints": ["hint1", "hint2"], "explanation": "Why these answers work"}}`
-
-      case 'concept-card':
-        return `Create a concept card explaining "${lesson.title}".
-Return JSON: {"type": "concept-card", "data": {"title": "${lesson.title}", "summary": "One sentence summary", "details": "Brief explanation", "examples": ["example1", "example2"], "keyPoints": ["point1", "point2"], "difficulty": "beginner"}}`
-
-      case 'step-solver':
-        return `Create a step-by-step problem for "${lesson.title}".
-Return JSON: {"type": "step-solver", "data": {"problem": "Simple problem", "steps": [{"id": "1", "description": "Step", "calculation": "Work", "result": "Result", "explanation": "Why"}], "finalAnswer": "Answer", "difficulty": "beginner"}}`
-
-      default:
-        return `Create educational content about "${lesson.title}" in format "${contentType}".
-Return valid JSON with type "${contentType}" and appropriate data structure.`
-    }
-  }
-
-  private createTemplateFallback(lesson: Lesson, contentType: string): LessonContent {
-    const generateConceptDetails = (title: string, type: string) => {
-      // Default fallback with concept-like naming
-      const defaultConcepts = ['Key Principles', 'Core Methods', 'Best Practices', 'Practical Applications']
-      const randomDefault = defaultConcepts[Math.floor(Math.random() * defaultConcepts.length)]
-      return {
-        concept: randomDefault,
-        title: type === 'multiple-choice' ? `${randomDefault} Quiz` :
-               type === 'fill-blank' ? `${randomDefault} Exercise` :
-               type === 'step-solver' ? `${randomDefault} Problem` :
-               randomDefault
-      }
-    }
-    
-    const conceptDetails = generateConceptDetails(lesson.title, contentType)
-
-    if (contentType === 'quiz' || contentType === 'multiple-choice') {
-      return {
-        type: 'multiple-choice',
-        data: {
-          question: `What is an important aspect of ${conceptDetails.concept}?`,
-          options: ['Understanding the core principles', 'Memorizing all details', 'Skipping the planning phase', 'Avoiding user feedback'],
-          correctAnswer: 0,
-          explanation: `Understanding core principles is always better than just memorizing details when working with ${conceptDetails.concept}.`,
-          difficulty: 'beginner',
-          category: conceptDetails.concept,
-          title: conceptDetails.title
-        }
-      }
-    }
-    
-    if (contentType === 'fill-blank') {
-      return {
-        type: 'fill-blank',
-        data: {
-          question: `Complete this statement about ${conceptDetails.concept}`,
-          template: `The key to mastering ${conceptDetails.concept} is to ___ and then ___.`,
-          answers: ['practice regularly', 'apply the knowledge'],
-          hints: ['What should you do consistently?', 'What should you do with what you learn?'],
-          explanation: `Regular practice and knowledge application are fundamental to mastering ${conceptDetails.concept}.`,
-          category: conceptDetails.concept,
-          difficulty: 'beginner',
-          title: conceptDetails.title
-        }
-      }
-    }
-
-    if (contentType === 'step-solver') {
-      return {
-        type: 'step-solver',
-        data: {
-          problem: `Apply the principles of ${conceptDetails.concept} to solve this practice scenario`,
-          problemType: conceptDetails.concept,
-          steps: [
-            {
-              id: "1",
-              description: "Identify the key principles",
-              calculation: `Review what you know about ${conceptDetails.concept}`,
-              result: "Clear understanding of fundamentals",
-              explanation: "Starting with basics ensures solid foundation"
-            },
-            {
-              id: "2", 
-              description: "Apply the principles",
-              calculation: "Use your knowledge to work through the scenario",
-              result: `Solution using ${conceptDetails.concept} principles`,
-              explanation: "Practical application reinforces learning"
-            }
-          ],
-          finalAnswer: `Successful application of ${conceptDetails.concept} principles`,
-          difficulty: 'beginner',
-          learningObjective: `Practice applying ${conceptDetails.concept} in real scenarios`,
-          title: conceptDetails.title,
-          category: conceptDetails.concept
-        }
-      }
-    }
-    
-    // Default to concept card for any other content type
+  private createPlaceholderContent(contentType: string): LessonContent {
     return {
-      type: 'concept-card',
+      type: "placeholder",
       data: {
-        title: conceptDetails.concept,
-        summary: `${conceptDetails.concept} is an important topic that builds foundational understanding.`,
-        details: `This concept introduces key principles that will help you develop a deeper understanding of the subject. The material covers essential methods that connect to broader topics and practical applications.`,
-        examples: [
-          `Real-world applications of ${conceptDetails.concept}`,
-          `How this concept connects to other areas of study`,
-          `Practical situations where ${conceptDetails.concept} is useful`
-        ],
-        keyPoints: [
-          'Understanding the fundamental principles',
-          'Connecting concepts to practical applications',
-          'Building skills for advanced topics',
-          'Developing critical thinking abilities'
-        ],
-        difficulty: 'beginner',
-        category: lesson.title
+        message: "Unable to load content. Please retry.",
+        retryType: contentType
       }
     }
   }
+
+
 
   private generateFallbackResponse(action: string, data: unknown): string {
     // Try to generate AI fallback response first
@@ -1462,8 +1300,8 @@ Focus on:
       
     } catch (error) {
       logger.error('Failed to generate lesson content:', error)
-      // Fall back to dynamic content generation
-      return this.generateDynamicFallbackContent(lesson, contentType)
+      // Return placeholder content instead of generating a fallback
+      return this.createPlaceholderContent(contentType)
     }
   }
 

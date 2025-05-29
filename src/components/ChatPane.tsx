@@ -1044,6 +1044,9 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       
       // Generate practice content specifically
       await generateCurrentLessonContent('practice')
+    } else if (action === 'retry_content') {
+      const retryData = data as { retryType?: string } | null
+      await generateCurrentLessonContent(retryData?.retryType)
     } else if (action === 'next_exercise' || action === 'next_question' || action === 'next_problem') {
       // Handle all "Next" button interactions with proper lesson progression
       console.log('🎯 Next button clicked - calling handleNextInteractiveContent with:', {
