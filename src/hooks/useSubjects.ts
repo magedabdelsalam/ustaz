@@ -5,6 +5,7 @@ import { useAuth } from './useAuth'
 import { persistenceService, PersistedSubject } from '@/lib/persistenceService'
 import { chatCompletion } from '@/lib/openaiClient'
 import { logger } from '@/lib/logger'
+import { buildPersistedSubject } from '@/lib/subjectUtils'
 
 // Global cache for AI analysis - persists across hook calls
 const messageAnalysisCache = new Map<string, {
@@ -199,41 +200,9 @@ export function useSubjects() {
     // Background persistence
     try {
       // Only save if we have complete data to avoid type errors
-      if (newSubject.lessonPlan) {
-        const lessonPlanData = {
-          subject: newSubject.name,
-          lessons: newSubject.lessonPlan.lessons.map(lesson => ({
-            ...lesson,
-            completed: false
-          })),
-          currentLessonIndex: newSubject.lessonPlan.currentLessonIndex
-        }
-        
-        await persistenceService.saveSubject({
-          id: newSubject.id,
-          user_id: user.id,
-          name: newSubject.name,
-          keywords: newSubject.topicKeywords,
-          lesson_plan: lessonPlanData,
-          learning_progress: {
-            correctAnswers: newSubject.learningProgress?.correctAnswers || 0,
-            totalAttempts: newSubject.learningProgress?.totalAttempts || 0,
-            needsReview: newSubject.learningProgress?.needsReview || false,
-            readyForNext: newSubject.learningProgress?.readyForNext || false,
-            currentLessonIndex: newSubject.learningProgress?.currentLessonIndex,
-            totalLessons: newSubject.learningProgress?.totalLessons
-          },
-          last_active: newSubject.lastActive.toISOString()
-        })
-      } else {
-        await persistenceService.saveSubject({
-          id: newSubject.id,
-          user_id: user.id,
-          name: newSubject.name,
-          keywords: newSubject.topicKeywords,
-          last_active: newSubject.lastActive.toISOString()
-        })
-      }
+      await persistenceService.saveSubject(
+        buildPersistedSubject(user.id, newSubject)
+      )
     } catch (error) {
       console.error('Failed to save subject:', error)
       // Revert on failure
@@ -511,41 +480,9 @@ export function useSubjects() {
     })
 
     // Background persistence
-    if (subject.lessonPlan) {
-      const lessonPlanData = {
-        subject: subject.name,
-        lessons: subject.lessonPlan.lessons.map(lesson => ({
-          ...lesson,
-          completed: false
-        })),
-        currentLessonIndex: subject.lessonPlan.currentLessonIndex
-      }
-      
-      persistenceService.saveSubject({
-        id: subject.id,
-        user_id: user?.id || '',
-        name: subject.name,
-        keywords: subject.topicKeywords,
-        lesson_plan: lessonPlanData,
-        learning_progress: {
-          correctAnswers: subject.learningProgress?.correctAnswers || 0,
-          totalAttempts: subject.learningProgress?.totalAttempts || 0,
-          needsReview: subject.learningProgress?.needsReview || false,
-          readyForNext: subject.learningProgress?.readyForNext || false,
-          currentLessonIndex: subject.learningProgress?.currentLessonIndex,
-          totalLessons: subject.learningProgress?.totalLessons
-        },
-        last_active: new Date().toISOString()
-      }).catch(console.error)
-    } else {
-      persistenceService.saveSubject({
-        id: subject.id,
-        user_id: user?.id || '',
-        name: subject.name,
-        keywords: subject.topicKeywords,
-        last_active: new Date().toISOString()
-      }).catch(console.error)
-    }
+    persistenceService
+      .saveSubject(buildPersistedSubject(user?.id || '', subject, { lastActive: new Date() }))
+      .catch(console.error)
   }, [user?.id])
 
   // Delete subject functionality

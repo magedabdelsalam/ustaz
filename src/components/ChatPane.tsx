@@ -10,6 +10,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
+import { buildPersistedSubject } from '@/lib/subjectUtils'
 import { aiTutor, Lesson, LessonPlan, LearningProgress } from '@/lib/aiService'
 import { Message } from '@/types/chat'
 import { ChatMessageList } from './ChatMessageList'
@@ -207,27 +208,20 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             lastActive: new Date()
           }
 
-          await persistenceService.saveSubject({
-            id: subjectForPlan.id,
-            user_id: user.id,
-            name: subjectForPlan.name,
-            keywords: subjectForPlan.topicKeywords || [],
-            lesson_plan: {
-              subject: subjectName,
-              lessons: lessonPlan.lessons.map((lesson: Lesson) => ({
-                ...lesson,
-                completed: false
-              })),
-              currentLessonIndex: lessonPlan.currentLessonIndex
-            },
-            learning_progress: {
-              correctAnswers: progress.correctAnswers,
-              totalAttempts: progress.totalAttempts,
-              needsReview: progress.needsReview || false,
-              readyForNext: progress.readyForNext || false
-            },
-            last_active: updatedSubject.lastActive.toISOString()
-          })
+          await persistenceService.saveSubject(
+            buildPersistedSubject(user.id, updatedSubject, {
+              lessonPlan: {
+                subject: subjectName,
+                lessons: lessonPlan.lessons.map((lesson: Lesson) => ({
+                  ...lesson,
+                  completed: false,
+                })),
+                currentLessonIndex: lessonPlan.currentLessonIndex,
+              },
+              progress,
+              lastActive: updatedSubject.lastActive,
+            })
+          )
           
           console.log('✅ Lesson plan and progress saved to database')
         } catch (error) {
@@ -724,22 +718,23 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         if (selectedSubject && user && newPlan && newProgress) {
           setTimeout(async () => {
             try {
-              await persistenceService.saveSubject({
-                id: selectedSubject.id,
-                user_id: user.id,
-                name: selectedSubject.name,
-                keywords: selectedSubject.topicKeywords || [],
-                lesson_plan: newPlan,
-                learning_progress: {
-                  correctAnswers: newProgress.correctAnswers,
-                  totalAttempts: newProgress.totalAttempts,
-                  needsReview: newProgress.needsReview,
-                  readyForNext: newProgress.readyForNext,
-                  currentLessonIndex: newPlan.currentLessonIndex,
-                  totalLessons: newPlan.lessons.length
-                },
-                last_active: new Date().toISOString()
-              })
+              // Create extended progress object with proper structure
+              const extendedProgress = {
+                correctAnswers: newProgress.correctAnswers,
+                totalAttempts: newProgress.totalAttempts,
+                needsReview: newProgress.needsReview,
+                readyForNext: newProgress.readyForNext,
+                currentLessonIndex: newPlan.currentLessonIndex,
+                totalLessons: newPlan.lessons.length,
+              }
+              
+              await persistenceService.saveSubject(
+                buildPersistedSubject(user.id, selectedSubject, {
+                  lessonPlan: newPlan,
+                  progress: extendedProgress,
+                  lastActive: new Date(),
+                })
+              )
               console.log('💾 Lesson advancement saved to database - now on lesson:', newPlan.currentLessonIndex + 1)
             } catch (error) {
               console.error('❌ Failed to save lesson advancement to database:', error)
