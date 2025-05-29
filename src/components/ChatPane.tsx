@@ -11,7 +11,7 @@ import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
 import { buildPersistedSubject } from '@/lib/subjectUtils'
-import { aiTutor, Lesson, LessonPlan, LearningProgress } from '@/lib/aiService'
+import { aiTutor, Lesson, LessonPlan, LearningProgress, LessonContent } from '@/lib/aiService'
 import { Message } from '@/types/chat'
 import { ChatMessageList } from './ChatMessageList'
 
@@ -285,8 +285,9 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         }
       }
 
-      // Generate content for first lesson - pass the correct subject ID
-      await generateLessonContent(lessonPlan, progress, subjectName, subjectForPlan?.id)
+      // REMOVED: Automatic content generation on lesson plan creation
+      // Only generate content when user explicitly requests it via chat or interactions
+      // await generateLessonContent(lessonPlan, progress, subjectName, subjectForPlan?.id)
     } catch (error) {
       console.error('Error creating lesson plan:', error)
       setIsTyping(false)
@@ -294,7 +295,6 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       // Reset progress tracking
       lessonPlanCreationInProgress.current = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSubject, user, saveMessageToPersistence])
 
   // Check if lesson plan creation should be triggered (moved from useEffect to direct logic)
@@ -607,15 +607,119 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       const targetSubjectId = subjectId || selectedSubject?.id
       console.log('🎯 Using subject ID for content:', { provided: subjectId, selected: selectedSubject?.id, final: targetSubjectId })
 
+      // Extract concept-specific title from the generated content
+      const getConceptTitle = (content: LessonContent, currentLesson: Lesson): string => {
+        // Type guard for content data with specific properties
+        const hasTitle = (data: unknown): data is { title: string } => {
+          return typeof data === 'object' && data !== null && 'title' in data && typeof (data as { title: unknown }).title === 'string'
+        }
+        
+        const hasCategory = (data: unknown): data is { category: string } => {
+          return typeof data === 'object' && data !== null && 'category' in data && typeof (data as { category: unknown }).category === 'string'
+        }
+        
+        const hasProblemType = (data: unknown): data is { problemType: string } => {
+          return typeof data === 'object' && data !== null && 'problemType' in data && typeof (data as { problemType: unknown }).problemType === 'string'
+        }
+        
+        const hasQuestion = (data: unknown): data is { question: string } => {
+          return typeof data === 'object' && data !== null && 'question' in data && typeof (data as { question: unknown }).question === 'string'
+        }
+        
+        const hasTemplate = (data: unknown): data is { template: string } => {
+          return typeof data === 'object' && data !== null && 'template' in data && typeof (data as { template: unknown }).template === 'string'
+        }
+        
+        const hasProblem = (data: unknown): data is { problem: string } => {
+          return typeof data === 'object' && data !== null && 'problem' in data && typeof (data as { problem: unknown }).problem === 'string'
+        }
+        
+        // Priority 1: Use the current concept from the lesson structure
+        if (currentLesson.concepts && currentLesson.concepts.length > 0) {
+          const currentConceptIndex = currentLesson.currentConceptIndex || 0
+          const currentConcept = currentLesson.concepts[currentConceptIndex]
+          if (currentConcept) {
+            console.log('🎯 Using predefined concept:', currentConcept.name)
+            return currentConcept.name
+          }
+        }
+        
+        // Priority 2: Check if the content data has a specific title field
+        if (hasTitle(content.data) && content.data.title !== currentLesson.title) {
+          return content.data.title
+        }
+        
+        // Priority 3: Check if the content data has a specific category that's different from lesson title
+        if (hasCategory(content.data) && content.data.category !== currentLesson.title) {
+          return content.data.category
+        }
+        
+        // Priority 4: Check if the content data has a problemType that's different from lesson title
+        if (hasProblemType(content.data) && content.data.problemType !== currentLesson.title) {
+          return content.data.problemType
+        }
+        
+        // Priority 5: For quiz content, use the question context to create a concept title
+        if (content.type === 'multiple-choice' && hasQuestion(content.data)) {
+          const question = content.data.question.toLowerCase()
+          if (question.includes('user research')) return 'User Research Quiz'
+          if (question.includes('persona') || question.includes('user persona')) return 'User Persona Quiz'
+          if (question.includes('wireframe') || question.includes('wireframing')) return 'Wireframing Quiz'
+          if (question.includes('prototype') || question.includes('prototyping')) return 'Prototyping Quiz'
+          if (question.includes('usability test')) return 'Usability Testing Quiz'
+          if (question.includes('information architecture')) return 'Information Architecture Quiz'
+          if (question.includes('design system')) return 'Design Systems Quiz'
+          if (question.includes('accessibility')) return 'Accessibility Quiz'
+        }
+        
+        // Priority 6: For fill-blank content, extract from template or answers
+        if (content.type === 'fill-blank' && hasTemplate(content.data)) {
+          const template = content.data.template.toLowerCase()
+          if (template.includes('user journey')) return 'User Journey Exercise'
+          if (template.includes('persona')) return 'User Persona Exercise'
+          if (template.includes('wireframe')) return 'Wireframing Exercise'
+          if (template.includes('prototype')) return 'Prototyping Exercise'
+          if (template.includes('research')) return 'User Research Exercise'
+        }
+        
+        // Priority 7: For step-solver, use problem context
+        if (content.type === 'step-solver' && hasProblem(content.data)) {
+          const problem = content.data.problem.toLowerCase()
+          if (problem.includes('user interview')) return 'User Interview Problem'
+          if (problem.includes('persona')) return 'User Persona Problem'
+          if (problem.includes('wireframe')) return 'Wireframe Problem'
+          if (problem.includes('prototype')) return 'Prototyping Problem'
+          if (problem.includes('usability')) return 'Usability Testing Problem'
+        }
+        
+        // Fallback: Use content type with a generic concept indicator
+        const typeNames = {
+          'multiple-choice': 'Concept Quiz',
+          'fill-blank': 'Concept Exercise', 
+          'concept-card': 'Concept Overview',
+          'step-solver': 'Concept Problem',
+          'explainer': 'Concept Guide',
+          'interactive-example': 'Concept Example',
+          'text-highlighter': 'Concept Highlighter',
+          'drag-drop': 'Concept Matching',
+          'graph-visualizer': 'Concept Visualization',
+          'formula-explorer': 'Concept Formula'
+        }
+        return typeNames[content.type as keyof typeof typeNames] || 'Learning Activity'
+      }
+      
+      const conceptTitle = getConceptTitle(lessonContent, currentLesson)
+      console.log('🎯 Generated concept title:', conceptTitle, 'from content type:', lessonContent.type)
+
       // Send the interactive content to ContentPane via custom event
       const contentData = {
         id: `lesson-${currentLesson.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         type: lessonContent.type,
         data: lessonContent.data,
-        title: currentLesson.title,
+        title: conceptTitle, // Use concept-specific title instead of lesson title
         subjectId: targetSubjectId
       }
-      console.log('📤 Dispatching content event:', contentData)
+      console.log('📤 Dispatching content event with concept title:', contentData)
       
       // Dispatch custom event for ContentPane to listen to
       const event = new CustomEvent('contentGenerated', { detail: contentData })
@@ -1182,6 +1286,39 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     }
   }, [currentLessonPlan, currentProgress, selectedSubject, saveMessageToPersistence, generateCurrentLessonContent, createLessonPlan])
 
+  // Generate dynamic placeholder text based on context
+  const getPlaceholderText = (): string => {
+    if (!selectedSubject) {
+      return "What would you like to learn today?"
+    }
+
+    // If we have lesson plan and progress
+    if (currentLessonPlan && currentProgress) {
+      const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+      
+      // If lesson is completed
+      if (currentProgress.readyForNext) {
+        return `Great progress! Ask me anything about ${selectedSubject.name} or request the next lesson`
+      }
+      
+      // If in middle of lesson
+      if (currentLesson) {
+        return `Continue exploring ${currentLesson.title}...`
+      }
+    }
+    
+    // If we have lesson plan but no progress yet
+    if (currentLessonPlan) {
+      const currentLesson = currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]
+      if (currentLesson) {
+        return `Ready to start "${currentLesson.title}"?`
+      }
+    }
+    
+    // Default case with subject
+    return `Continue learning ${selectedSubject.name}...`
+  }
+
   if (!selectedSubject) {
     return (
       <div className="flex flex-col h-full">
@@ -1203,7 +1340,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="What would you like to learn? (e.g., &apos;Explain photosynthesis&apos;, &apos;Quiz me on Shakespeare&apos;, &apos;Teach me Spanish&apos;)"
+              placeholder={getPlaceholderText()}
               disabled={isTyping}
               className="flex-1 p-6 px-4 text-lg"
             />
@@ -1260,7 +1397,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={`Continue learning ${selectedSubject.name}...`}
+            placeholder={getPlaceholderText()}
             disabled={isTyping}
             className="flex-1 p-6 px-4 text-lg"
           />

@@ -94,59 +94,15 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
 
   // Generate a meaningful title based on content
   const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use title if it's specific and meaningful
+    // Priority 1: Use provided title if it's meaningful (not generic)
     if (sanitizedContent.title && 
-        sanitizedContent.title !== 'Explanation' && 
-        sanitizedContent.title !== 'Learn about' &&
-        !sanitizedContent.title.includes('Introduction to') &&
-        !sanitizedContent.title.includes('Overview of')) {
+        sanitizedContent.title.trim().length > 3 &&
+        !['content', 'lesson', 'topic', 'explanation', 'overview'].some(generic => 
+          sanitizedContent.title.toLowerCase().includes(generic))) {
       return sanitizedContent.title
     }
 
-    // Priority 2: Check for specific educational keywords and create contextual titles
-    const overviewLower = sanitizedContent.overview.toLowerCase()
-    const allSectionsText = sanitizedContent.sections
-      .map(section => `${section.heading} ${section.paragraphs.join(' ')}`)
-      .join(' ')
-      .toLowerCase()
-    const allText = `${overviewLower} ${allSectionsText}`
-    
-    const topicKeywords = [
-      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Explanation' },
-      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Explanation' },
-      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Analysis' },
-      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'Historical Overview' },
-      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Explanation' },
-      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Explanation' },
-      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Explanation' },
-      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Overview' },
-      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Guide' },
-      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Guide' },
-      { words: ['economy', 'economics', 'market', 'finance'], title: 'Economics Explanation' },
-      { words: ['democracy', 'government', 'politics', 'law'], title: 'Civics Overview' }
-    ]
-
-    for (const topic of topicKeywords) {
-      if (topic.words.some(keyword => allText.includes(keyword))) {
-        return topic.title
-      }
-    }
-
-    // Priority 3: Subject-specific patterns based on content
-    if (allText.includes('math') || allText.includes('calculation') || allText.includes('solve') || /\d+/.test(allText)) {
-      return 'Math Explanation'
-    }
-    if (allText.includes('science') || allText.includes('experiment') || allText.includes('hypothesis')) {
-      return 'Science Overview'
-    }
-    if (allText.includes('history') || allText.includes('historical') || allText.includes('century')) {
-      return 'Historical Overview'
-    }
-    if (allText.includes('language') || allText.includes('grammar') || allText.includes('writing')) {
-      return 'Language Guide'
-    }
-
-    // Priority 4: Extract key topic from first section heading
+    // Priority 2: Extract key topic from first section heading
     if (sanitizedContent.sections.length > 0) {
       const firstHeading = sanitizedContent.sections[0].heading
       const meaningfulWords = firstHeading.split(' ')
@@ -164,7 +120,41 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
       }
     }
 
-    // Priority 5: Default fallback based on difficulty
+    // Priority 3: Extract from overview content
+    if (sanitizedContent.overview) {
+      const overviewWords = sanitizedContent.overview.split(' ')
+        .filter(word => {
+          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+          return cleanWord.length > 4 && 
+                 !['this', 'that', 'these', 'those', 'will', 'learn', 'about', 'understanding', 'explanation', 'overview'].includes(cleanWord)
+        })
+        .map(word => word.replace(/[^\w]/g, ''))
+        .filter(word => word.length > 0)
+
+      if (overviewWords.length > 0) {
+        const keyTopic = overviewWords[0]
+        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Guide`
+      }
+    }
+
+    // Priority 4: Extract from conclusion
+    if (sanitizedContent.conclusion) {
+      const conclusionWords = sanitizedContent.conclusion.split(' ')
+        .filter(word => {
+          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
+          return cleanWord.length > 4 && 
+                 !['conclusion', 'summary', 'therefore', 'finally', 'overall'].includes(cleanWord)
+        })
+        .map(word => word.replace(/[^\w]/g, ''))
+        .filter(word => word.length > 0)
+
+      if (conclusionWords.length > 0) {
+        const keyTopic = conclusionWords[0]
+        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Summary`
+      }
+    }
+
+    // Final fallback based on difficulty
     switch (sanitizedContent.difficulty) {
       case 'beginner':
         return 'Basic Topic Explanation'

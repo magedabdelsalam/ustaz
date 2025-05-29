@@ -34,7 +34,9 @@ export function buildPersistedSubject(
           title: lesson.title,
           description: lesson.description,
           content: { type: 'concept-card', data: {} }, // Default content for partial lesson plans
-          completed: false
+          completed: false,
+          concepts: [], // Add empty concepts array for now
+          currentConceptIndex: 0
         })),
         currentLessonIndex: subject.lessonPlan.currentLessonIndex
       }

@@ -371,10 +371,10 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
               </Button>
               <Button 
                 onClick={handleNextProblem}
-                className="flex items-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
+                className="bg-green-600 hover:bg-green-700 text-base font-medium h-11"
               >
                 <Target className="h-4 w-4 mr-2" />
-                Next Problem
+                {solverContent.category ? `Next ${solverContent.category} Problem` : 'Next Problem'}
               </Button>
               <Button 
                 onClick={handleReset} 

@@ -83,12 +83,22 @@ export interface LessonPlan {
   currentLessonIndex: number
 }
 
+export interface ConceptInfo {
+  id: string
+  name: string
+  description: string
+  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  estimatedPracticeItems: number
+}
+
 export interface Lesson {
   id: string
   title: string
   description: string
   content: LessonContent
   completed: boolean
+  concepts: ConceptInfo[]
+  currentConceptIndex?: number
 }
 
 export interface LessonContent {
@@ -338,10 +348,53 @@ class AITutorService {
             try {
               logger.debug(`🔄 Attempt ${attempt}/${maxRetries} for lesson plan generation`)
               
-              const planPrompt = `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons.\n\nSubject Analysis:\n- Complexity: ${complexity}\n- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}\n- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}\n\nReturn JSON:\n{\n  "subject": "${subject}",\n  "lessons": [\n    {\n      "id": "lesson-1",\n      "title": "Descriptive, engaging lesson title",\n      "description": "What students will learn and why it matters",\n      "completed": false\n    }\n  ]\n}\n\nRequirements:\n- Each lesson should build naturally on previous ones\n- Titles should be specific and engaging, not generic\n- Descriptions should explain practical value\n- Progress from foundational to advanced concepts\n- Include real-world applications where relevant`
+              const planPrompt = `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons, including specific concepts for each lesson.
+
+Subject Analysis:
+- Complexity: ${complexity}
+- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}
+- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}
+
+Return JSON:
+{
+  "subject": "${subject}",
+  "lessons": [
+    {
+      "id": "lesson-1",
+      "title": "Descriptive, engaging lesson title",
+      "description": "What students will learn and why it matters",
+      "completed": false,
+      "concepts": [
+        {
+          "id": "concept-1-1",
+          "name": "Specific concept name (e.g., 'User Research Methods', 'Market Analysis Techniques')",
+          "description": "What this concept covers and why it's important",
+          "difficulty": "beginner|intermediate|advanced",
+          "estimatedPracticeItems": 3
+        },
+        {
+          "id": "concept-1-2", 
+          "name": "Another specific concept in this lesson",
+          "description": "Clear description of this concept",
+          "difficulty": "beginner|intermediate|advanced",
+          "estimatedPracticeItems": 4
+        }
+      ]
+    }
+  ]
+}
+
+Requirements:
+- Each lesson should have 3-5 specific, well-defined concepts
+- Concepts should be practical and teachable through interactive exercises
+- Each lesson should build naturally on previous ones
+- Concept names should be specific, not generic (e.g., "User Persona Creation" not "Learning about Users")
+- Concepts should progress logically within each lesson
+- Include estimated practice items (2-5) needed to master each concept
+- Vary difficulty appropriately within and across lessons`
 
               const content = await this.sendPrompt(
-                `You are an expert curriculum designer creating a comprehensive learning plan. Create exactly ${expectedLessons} progressive lessons that build upon each other logically.`,
+                `You are an expert curriculum designer creating a comprehensive learning plan with structured concepts. Create exactly ${expectedLessons} progressive lessons with specific, practical concepts.`,
                 planPrompt,
                 0.3,
                 maxTokens
@@ -360,6 +413,15 @@ class AITutorService {
               // Ensure we have a reasonable number of lessons
               if (parsedData.lessons.length < 3) {
                 throw new Error(`Too few lessons generated: ${parsedData.lessons.length}`)
+              }
+              
+              // Validate that lessons have concepts
+              for (let i = 0; i < parsedData.lessons.length; i++) {
+                const lesson = parsedData.lessons[i]
+                if (!lesson.concepts || !Array.isArray(lesson.concepts) || lesson.concepts.length === 0) {
+                  // Generate fallback concepts for this lesson if missing
+                  lesson.concepts = this.generateFallbackConcepts(lesson.title || `Lesson ${i + 1}`, i)
+                }
               }
               
               logger.debug(`✅ Successfully generated lesson plan with ${parsedData.lessons.length} lessons on attempt ${attempt}`)
@@ -393,6 +455,13 @@ class AITutorService {
           id?: string
           title?: string
           description?: string
+          concepts?: Array<{
+            id?: string
+            name?: string
+            description?: string
+            difficulty?: string
+            estimatedPracticeItems?: number
+          }>
         }>
       }
       
@@ -413,7 +482,15 @@ class AITutorService {
           title: lesson.title || `Lesson ${index + 1}`,
           description: lesson.description || 'Learn the fundamentals of this topic.',
           completed: false,
-          content: { type: 'concept-card', data: {} } // Will be generated when accessed
+          content: { type: 'concept-card', data: {} }, // Will be generated when accessed
+          concepts: lesson.concepts?.map((concept, conceptIndex) => ({
+            id: concept.id || `concept-${index + 1}-${conceptIndex + 1}`,
+            name: concept.name || `Concept ${conceptIndex + 1}`,
+            description: concept.description || 'Learn this important concept.',
+            difficulty: (concept.difficulty as 'beginner' | 'intermediate' | 'advanced') || 'beginner',
+            estimatedPracticeItems: concept.estimatedPracticeItems || 3
+          })) || this.generateFallbackConcepts(lesson.title || `Lesson ${index + 1}`, index),
+          currentConceptIndex: 0
         })),
         currentLessonIndex: 0
       }
@@ -918,15 +995,32 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
   }
 
   private createTemplateFallback(lesson: Lesson, contentType: string): LessonContent {
+    const generateConceptDetails = (title: string, type: string) => {
+      // Default fallback with concept-like naming
+      const defaultConcepts = ['Key Principles', 'Core Methods', 'Best Practices', 'Practical Applications']
+      const randomDefault = defaultConcepts[Math.floor(Math.random() * defaultConcepts.length)]
+      return {
+        concept: randomDefault,
+        title: type === 'multiple-choice' ? `${randomDefault} Quiz` :
+               type === 'fill-blank' ? `${randomDefault} Exercise` :
+               type === 'step-solver' ? `${randomDefault} Problem` :
+               randomDefault
+      }
+    }
+    
+    const conceptDetails = generateConceptDetails(lesson.title, contentType)
+
     if (contentType === 'quiz' || contentType === 'multiple-choice') {
       return {
         type: 'multiple-choice',
         data: {
-          question: `What is an important aspect of ${lesson.title}?`,
-          options: ['Understanding the concept', 'Memorizing facts', 'Skipping practice', 'Avoiding questions'],
+          question: `What is an important aspect of ${conceptDetails.concept}?`,
+          options: ['Understanding the core principles', 'Memorizing all details', 'Skipping the planning phase', 'Avoiding user feedback'],
           correctAnswer: 0,
-          explanation: 'Understanding concepts is always better than just memorizing facts.',
-          difficulty: 'beginner'
+          explanation: `Understanding core principles is always better than just memorizing details when working with ${conceptDetails.concept}.`,
+          difficulty: 'beginner',
+          category: conceptDetails.concept,
+          title: conceptDetails.title
         }
       }
     }
@@ -935,13 +1029,14 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
       return {
         type: 'fill-blank',
         data: {
-          question: `Complete this statement about ${lesson.title}`,
-          template: `The key to understanding ${lesson.title} is to ___ and then ___.`,
-          answers: ['practice regularly', 'apply the concepts'],
+          question: `Complete this statement about ${conceptDetails.concept}`,
+          template: `The key to mastering ${conceptDetails.concept} is to ___ and then ___.`,
+          answers: ['practice regularly', 'apply the knowledge'],
           hints: ['What should you do consistently?', 'What should you do with what you learn?'],
-          explanation: 'Regular practice and applying concepts are fundamental to mastering any subject.',
-          category: lesson.title,
-          difficulty: 'beginner'
+          explanation: `Regular practice and knowledge application are fundamental to mastering ${conceptDetails.concept}.`,
+          category: conceptDetails.concept,
+          difficulty: 'beginner',
+          title: conceptDetails.title
         }
       }
     }
@@ -950,27 +1045,29 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
       return {
         type: 'step-solver',
         data: {
-          problem: `Apply the principles of ${lesson.title} to solve this practice problem`,
-          problemType: lesson.title,
+          problem: `Apply the principles of ${conceptDetails.concept} to solve this practice scenario`,
+          problemType: conceptDetails.concept,
           steps: [
             {
               id: "1",
-              description: "Identify the key concepts",
-              calculation: "Review what you know about " + lesson.title,
+              description: "Identify the key principles",
+              calculation: `Review what you know about ${conceptDetails.concept}`,
               result: "Clear understanding of fundamentals",
               explanation: "Starting with basics ensures solid foundation"
             },
             {
               id: "2", 
-              description: "Apply the concepts",
-              calculation: "Use your knowledge to work through the problem",
-              result: "Solution using " + lesson.title + " principles",
+              description: "Apply the principles",
+              calculation: "Use your knowledge to work through the scenario",
+              result: `Solution using ${conceptDetails.concept} principles`,
               explanation: "Practical application reinforces learning"
             }
           ],
-          finalAnswer: `Successful application of ${lesson.title} concepts`,
+          finalAnswer: `Successful application of ${conceptDetails.concept} principles`,
           difficulty: 'beginner',
-          learningObjective: `Practice applying ${lesson.title} in real scenarios`
+          learningObjective: `Practice applying ${conceptDetails.concept} in real scenarios`,
+          title: conceptDetails.title,
+          category: conceptDetails.concept
         }
       }
     }
@@ -979,13 +1076,13 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
     return {
       type: 'concept-card',
       data: {
-        title: lesson.title,
-        summary: `${lesson.title} is an important topic that builds foundational understanding.`,
-        details: `This lesson introduces key concepts that will help you develop a deeper understanding of the subject. The material covers essential principles that connect to broader topics and practical applications.`,
+        title: conceptDetails.concept,
+        summary: `${conceptDetails.concept} is an important topic that builds foundational understanding.`,
+        details: `This concept introduces key principles that will help you develop a deeper understanding of the subject. The material covers essential methods that connect to broader topics and practical applications.`,
         examples: [
-          'Real-world applications of these concepts',
-          'How this topic connects to other areas of study',
-          'Practical situations where this knowledge is useful'
+          `Real-world applications of ${conceptDetails.concept}`,
+          `How this concept connects to other areas of study`,
+          `Practical situations where ${conceptDetails.concept} is useful`
         ],
         keyPoints: [
           'Understanding the fundamental principles',
@@ -993,7 +1090,8 @@ Return valid JSON with type "${contentType}" and appropriate data structure.`
           'Building skills for advanced topics',
           'Developing critical thinking abilities'
         ],
-        difficulty: 'beginner'
+        difficulty: 'beginner',
+        category: lesson.title
       }
     }
   }
@@ -1197,7 +1295,16 @@ Return JSON:
       "id": "lesson-1",
       "title": "Engaging title for essential concept",
       "description": "What students will learn",
-      "completed": false
+      "completed": false,
+      "concepts": [
+        {
+          "id": "concept-1-1",
+          "name": "Specific concept name",
+          "description": "What this concept covers",
+          "difficulty": "beginner|intermediate|advanced",
+          "estimatedPracticeItems": 3
+        }
+      ]
     }
   ]
 }
@@ -1206,7 +1313,8 @@ Focus on:
 - Most fundamental concepts students need to know
 - Practical, real-world applications
 - Clear progression from basic to more advanced
-- Engaging, specific lesson titles (not generic)`
+- Engaging, specific lesson titles (not generic)
+- 3-4 concepts per lesson`
           }
         ],
         temperature: 0.4,
@@ -1225,12 +1333,32 @@ Focus on:
 
       return {
         subject: parsedData.subject || subject,
-        lessons: parsedData.lessons.map((lesson: { id?: string; title?: string; description?: string }, index: number) => ({
+        lessons: parsedData.lessons.map((lesson: { id?: string; title?: string; description?: string; concepts?: Array<{
+          id?: string;
+          name?: string;
+          description?: string;
+          difficulty?: string;
+          estimatedPracticeItems?: number;
+        }> }, index: number) => ({
           id: lesson.id || `lesson-${index + 1}`,
           title: lesson.title || `Essential ${subject} Concepts ${index + 1}`,
           description: lesson.description || `Learn fundamental concepts of ${subject}`,
           completed: false,
-          content: { type: 'concept-card', data: {} }
+          content: { type: 'concept-card', data: {} },
+          concepts: lesson.concepts?.map((concept: {
+            id?: string;
+            name?: string;
+            description?: string;
+            difficulty?: string;
+            estimatedPracticeItems?: number;
+          }, conceptIndex: number) => ({
+            id: concept.id || `concept-${index + 1}-${conceptIndex + 1}`,
+            name: concept.name || `Concept ${conceptIndex + 1}`,
+            description: concept.description || 'Learn this important concept.',
+            difficulty: concept.difficulty || 'beginner',
+            estimatedPracticeItems: concept.estimatedPracticeItems || 3
+          })) || this.generateFallbackConcepts(lesson.title || `Lesson ${index + 1}`, index),
+          currentConceptIndex: 0
         })),
         currentLessonIndex: 0
       }
@@ -1245,21 +1373,27 @@ Focus on:
             title: `Introduction to ${subject}`,
             description: `Learn the fundamentals of ${subject}`,
             content: { type: 'concept-card', data: {} },
-            completed: false
+            completed: false,
+            concepts: this.generateFallbackConcepts(`Introduction to ${subject}`, 0),
+            currentConceptIndex: 0
           },
           {
             id: 'lesson-2', 
             title: `Core Concepts in ${subject}`,
             description: `Understand key principles`,
             content: { type: 'multiple-choice', data: {} },
-            completed: false
+            completed: false,
+            concepts: this.generateFallbackConcepts(`Core Concepts in ${subject}`, 1),
+            currentConceptIndex: 0
           },
           {
             id: 'lesson-3',
             title: `Practice with ${subject}`,
             description: `Apply what you've learned`,
             content: { type: 'step-solver', data: {} },
-            completed: false
+            completed: false,
+            concepts: this.generateFallbackConcepts(`Practice with ${subject}`, 2),
+            currentConceptIndex: 0
           }
         ],
         currentLessonIndex: 0
@@ -1276,14 +1410,24 @@ Focus on:
     try {
       logger.debug(`🎨 Generating ${contentType} content for lesson: ${lesson.title}`)
       
+      // Get the current concept for this lesson
+      const currentConceptIndex = lesson.currentConceptIndex || 0
+      const currentConcept = lesson.concepts && lesson.concepts.length > 0 
+        ? lesson.concepts[currentConceptIndex] 
+        : undefined
+      
+      if (currentConcept) {
+        logger.debug(`🎯 Focusing on concept: ${currentConcept.name} (${currentConcept.difficulty})`)
+      }
+      
       // Track content generation for variety
       this.trackGeneratedContent(subjectName, lesson.id, contentType, { data: { title: lesson.title } })
       
       const response = await this.cachedApiCall(
         'lesson-content',
-        { subjectName, lessonId: lesson.id, contentType, lessonTitle: lesson.title },
+        { subjectName, lessonId: lesson.id, contentType, lessonTitle: lesson.title, conceptName: currentConcept?.name },
         async () => {
-          const contentPrompt = this.createContentPrompt(lesson, contentType, subjectName)
+          const contentPrompt = this.createContentPrompt(lesson, contentType, subjectName, currentConcept)
           
           const result = await chatCompletion({
             messages: [
@@ -1549,84 +1693,90 @@ Avoid generic responses like "great question" or "let me help you learn." Instea
   }
 
   // Create content prompts for different lesson content types
-  private createContentPrompt(lesson: Lesson, contentType: string, subjectName: string): string {
+  private createContentPrompt(lesson: Lesson, contentType: string, subjectName: string, currentConcept?: ConceptInfo): string {
     const baseContext = `Subject: ${subjectName}\nLesson: ${lesson.title}\nDescription: ${lesson.description}`
+    const conceptContext = currentConcept 
+      ? `\nCurrent Concept: ${currentConcept.name}\nConcept Description: ${currentConcept.description}\nDifficulty: ${currentConcept.difficulty}`
+      : ''
     
     switch (contentType) {
       case 'quiz':
       case 'multiple-choice':
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create a multiple-choice question that tests understanding of this lesson.
+Create a multiple-choice question that tests understanding of the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' within this lesson'}.
 
 Return JSON:
 {
   "type": "multiple-choice",
   "data": {
-    "question": "Clear, specific question about the lesson topic",
+    "question": "Clear, specific question about ${currentConcept?.name || 'a particular concept in the lesson'}",
     "options": ["Option A", "Option B", "Option C", "Option D"],
     "correctAnswer": 0,
-    "explanation": "Why this answer is correct and others are wrong",
-    "difficulty": "beginner|intermediate|advanced",
-    "category": "${lesson.title}"
+    "explanation": "Explanation of the key concepts and reasoning behind the correct answer",
+    "difficulty": "${currentConcept?.difficulty || 'beginner'}",
+    "category": "${currentConcept?.name || 'Concept'}",
+    "title": "${currentConcept?.name ? `${currentConcept.name} Quiz` : 'Concept Quiz'}"
   }
 }
 
-Make the question practical and test real understanding, not just memorization.`
+Focus specifically on ${currentConcept?.name || 'the concept'} and make the question test understanding of this specific concept.`
 
       case 'fill-blank':
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create a fill-in-the-blank exercise for this lesson.
+Create a fill-in-the-blank exercise for the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' within this lesson'}.
 
 Return JSON:
 {
   "type": "fill-blank",
   "data": {
-    "question": "Complete this statement about ${lesson.title}",
-    "template": "Text with ___ blanks ___ to fill in ___",
+    "question": "Complete this statement about ${currentConcept?.name || 'the concept'}",
+    "template": "Text with ___ blanks ___ about ${currentConcept?.name || 'the concept'} ___",
     "answers": ["answer1", "answer2", "answer3"],
     "hints": ["Hint for blank 1", "Hint for blank 2", "Hint for blank 3"],
-    "explanation": "Why these answers are correct",
-    "category": "${lesson.title}",
-    "difficulty": "beginner|intermediate|advanced"
+    "explanation": "Explanation of why these specific terms are important for understanding ${currentConcept?.name || 'the concept'}",
+    "category": "${currentConcept?.name || 'Concept'}",
+    "difficulty": "${currentConcept?.difficulty || 'beginner'}",
+    "title": "${currentConcept?.name ? `${currentConcept.name} Exercise` : 'Concept Exercise'}"
   }
 }
 
-Create meaningful blanks that test key concepts.`
+Focus specifically on ${currentConcept?.name || 'the concept'} and create blanks that test key aspects of this concept.`
 
       case 'concept-card':
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create a concept card that explains the key ideas in this lesson.
+Create a concept card that explains the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' within this lesson'}.
 
 Return JSON:
 {
   "type": "concept-card",
   "data": {
-    "title": "${lesson.title}",
-    "summary": "One clear sentence explaining the main concept",
-    "details": "2-3 sentences with deeper explanation",
-    "examples": ["Real-world example 1", "Real-world example 2"],
-    "keyPoints": ["Key point 1", "Key point 2", "Key point 3"],
-    "difficulty": "beginner|intermediate|advanced"
+    "title": "${currentConcept?.name || 'Key Concept'}",
+    "summary": "One clear sentence explaining ${currentConcept?.name || 'this concept'}",
+    "details": "2-3 sentences with deeper explanation of ${currentConcept?.name || 'this concept'}",
+    "examples": ["Real-world example 1 of ${currentConcept?.name || 'this concept'}", "Real-world example 2 of ${currentConcept?.name || 'this concept'}"],
+    "keyPoints": ["Key point 1 about ${currentConcept?.name || 'this concept'}", "Key point 2 about ${currentConcept?.name || 'this concept'}", "Key point 3 about ${currentConcept?.name || 'this concept'}"],
+    "difficulty": "${currentConcept?.difficulty || 'beginner'}",
+    "category": "${lesson.title}"
   }
 }
 
-Focus on clarity and practical understanding.`
+Focus specifically on explaining ${currentConcept?.name || 'the concept'} clearly and thoroughly.`
 
       case 'step-solver':
       case 'practice':
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create a step-by-step problem that applies the lesson concepts.
+Create a step-by-step problem that applies the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' from this lesson'}.
 
 Return JSON:
 {
   "type": "step-solver",
   "data": {
-    "problem": "A practical problem that uses ${lesson.title} concepts",
-    "problemType": "${lesson.title}",
+    "problem": "A practical problem that uses ${currentConcept?.name || 'the concept'}",
+    "problemType": "${currentConcept?.name || 'Concept Application'}",
     "steps": [
       {
         "id": "1",
@@ -1637,62 +1787,66 @@ Return JSON:
       }
     ],
     "finalAnswer": "The complete solution",
-    "difficulty": "beginner|intermediate|advanced",
-    "learningObjective": "What students learn from solving this"
+    "difficulty": "${currentConcept?.difficulty || 'beginner'}",
+    "learningObjective": "What students learn about ${currentConcept?.name || 'the concept'}",
+    "title": "${currentConcept?.name ? `${currentConcept.name} Problem` : 'Concept Problem'}",
+    "category": "${currentConcept?.name || 'Concept'}"
   }
 }
 
-Create a meaningful problem that builds understanding.`
+Focus on applying ${currentConcept?.name || 'the concept'} specifically in a practical scenario.`
 
       case 'explainer':
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create an interactive explanation for this lesson.
+Create an interactive explanation for the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' within this lesson'}.
 
 Return JSON:
 {
   "type": "explainer",
   "data": {
-    "title": "${lesson.title}",
-    "overview": "Clear, engaging overview of the concept (1-2 sentences)",
+    "title": "${currentConcept?.name || 'Key Concept'}",
+    "overview": "Clear, engaging overview of ${currentConcept?.name || 'this concept'} (1-2 sentences)",
     "sections": [
       {
-        "heading": "What is ${lesson.title}?",
+        "heading": "What is ${currentConcept?.name || 'this concept'}?",
         "paragraphs": [
-          "First paragraph explaining the basic concept clearly.",
+          "First paragraph explaining ${currentConcept?.name || 'this concept'} clearly.",
           "Second paragraph building on the explanation with examples.",
           "Third paragraph connecting to practical applications."
         ]
       },
       {
-        "heading": "Key Components",
+        "heading": "Key Components of ${currentConcept?.name || 'this concept'}",
         "paragraphs": [
           "Paragraph explaining the main components or parts.",
           "Paragraph showing how these components work together."
         ]
       },
       {
-        "heading": "Real-World Applications",
+        "heading": "Applying ${currentConcept?.name || 'this concept'} in Practice",
         "paragraphs": [
           "Paragraph with concrete examples and applications.",
           "Paragraph showing relevance to student's life or studies."
         ]
       }
     ],
-    "conclusion": "Brief summary that reinforces key learning points",
-    "difficulty": "beginner",
-    "estimatedReadTime": 3
+    "conclusion": "Brief summary that reinforces key learning points about ${currentConcept?.name || 'this concept'}",
+    "difficulty": "${currentConcept?.difficulty || 'beginner'}",
+    "estimatedReadTime": 3,
+    "category": "${lesson.title}"
   }
 }
 
-Make it educational, well-structured, and engaging. Each section should have 2-4 meaningful paragraphs.`
+Focus specifically on explaining ${currentConcept?.name || 'the concept'} and all content should focus on that concept.`
 
       default:
-        return `${baseContext}
+        return `${baseContext}${conceptContext}
 
-Create educational content of type "${contentType}" for this lesson.
+Create educational content of type "${contentType}" for the specific concept${currentConcept ? ` "${currentConcept.name}"` : ' within this lesson'}.
 Return valid JSON with type "${contentType}" and appropriate data structure.
-Focus on student engagement and practical understanding.`
+Focus specifically on ${currentConcept?.name || 'the concept'}.
+Include the concept name as the title and category in the data.`
     }
   }
 
@@ -1793,6 +1947,137 @@ Create a direct message that:
 
 Keep it under 2 sentences. Be clear and direct.`
     }
+  }
+
+  // Generate fallback concepts for a lesson when AI generation fails
+  private generateFallbackConcepts(lessonTitle: string, lessonIndex: number): ConceptInfo[] {
+    const titleLower = lessonTitle.toLowerCase()
+    
+    // Subject-specific concept patterns
+    if (titleLower.includes('user') && (titleLower.includes('design') || titleLower.includes('research'))) {
+      return [
+        {
+          id: `concept-${lessonIndex + 1}-1`,
+          name: 'User Research Methods',
+          description: 'Learn interview techniques, surveys, and observation methods',
+          difficulty: 'beginner',
+          estimatedPracticeItems: 3
+        },
+        {
+          id: `concept-${lessonIndex + 1}-2`,
+          name: 'User Persona Development',
+          description: 'Create detailed user personas based on research data',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 4
+        },
+        {
+          id: `concept-${lessonIndex + 1}-3`,
+          name: 'User Journey Mapping',
+          description: 'Map user interactions and touchpoints throughout their experience',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 3
+        }
+      ]
+    } else if (titleLower.includes('product') && titleLower.includes('design')) {
+      return [
+        {
+          id: `concept-${lessonIndex + 1}-1`,
+          name: 'Product Strategy',
+          description: 'Define product vision, goals, and success metrics',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 3
+        },
+        {
+          id: `concept-${lessonIndex + 1}-2`,
+          name: 'Feature Prioritization',
+          description: 'Methods for deciding which features to build first',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 4
+        },
+        {
+          id: `concept-${lessonIndex + 1}-3`,
+          name: 'Design Systems',
+          description: 'Create consistent, scalable design components and guidelines',
+          difficulty: 'advanced',
+          estimatedPracticeItems: 5
+        }
+      ]
+    } else if (titleLower.includes('prototype') || titleLower.includes('wireframe')) {
+      return [
+        {
+          id: `concept-${lessonIndex + 1}-1`,
+          name: 'Wireframe Creation',
+          description: 'Create low-fidelity layouts and structure designs',
+          difficulty: 'beginner',
+          estimatedPracticeItems: 3
+        },
+        {
+          id: `concept-${lessonIndex + 1}-2`,
+          name: 'Interactive Prototypes',
+          description: 'Build clickable, testable prototype experiences',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 4
+        },
+        {
+          id: `concept-${lessonIndex + 1}-3`,
+          name: 'Prototype Testing',
+          description: 'Test prototypes with users and iterate based on feedback',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 3
+        }
+      ]
+    } else if (titleLower.includes('test') || titleLower.includes('usability')) {
+      return [
+        {
+          id: `concept-${lessonIndex + 1}-1`,
+          name: 'Usability Testing Methods',
+          description: 'Learn different approaches to testing user interactions',
+          difficulty: 'beginner',
+          estimatedPracticeItems: 3
+        },
+        {
+          id: `concept-${lessonIndex + 1}-2`,
+          name: 'Test Planning and Setup',
+          description: 'Design effective usability testing sessions',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 4
+        },
+        {
+          id: `concept-${lessonIndex + 1}-3`,
+          name: 'Results Analysis',
+          description: 'Analyze testing data and extract actionable insights',
+          difficulty: 'intermediate',
+          estimatedPracticeItems: 3
+        }
+      ]
+    }
+    
+    // Generic fallback concepts based on lesson position
+    const genericConcepts = [
+      {
+        id: `concept-${lessonIndex + 1}-1`,
+        name: `Core Principles`,
+        description: `Understand the fundamental principles of this topic`,
+        difficulty: 'beginner' as const,
+        estimatedPracticeItems: 3
+      },
+      {
+        id: `concept-${lessonIndex + 1}-2`,
+        name: `Practical Methods`,
+        description: `Learn hands-on techniques and methods`,
+        difficulty: 'intermediate' as const,
+        estimatedPracticeItems: 4
+      },
+      {
+        id: `concept-${lessonIndex + 1}-3`,
+        name: `Real-World Applications`,
+        description: `Apply concepts to practical scenarios and case studies`,
+        difficulty: 'intermediate' as const,
+        estimatedPracticeItems: 3
+      }
+    ]
+    
+    return genericConcepts
   }
 }
 

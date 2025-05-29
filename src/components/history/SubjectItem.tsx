@@ -55,7 +55,7 @@ export const SubjectItem = memo(function SubjectItem({
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2 flex-1 min-w-0">
-                <span className="text-sm font-medium truncate">{subject.name}</span>
+                <span className="text-sm font-medium truncate capitalize">{subject.name}</span>
                 {isRecentlyActive(subject.lastActive) && (
                   <div
                     className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"

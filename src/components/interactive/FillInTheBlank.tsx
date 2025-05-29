@@ -331,7 +331,13 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                               : 'bg-red-50 border-red-400 text-red-800'
                             : 'bg-white border-indigo-300 focus:border-indigo-500'
                         }`}
-                        placeholder={`Blank ${index + 1}`}
+                        placeholder={
+                          fillContent.hints && fillContent.hints[index] 
+                            ? `Hint: ${fillContent.hints[index].substring(0, 20)}...`
+                            : fillContent.category
+                            ? `Enter ${fillContent.category.toLowerCase()} term`
+                            : `Fill blank ${index + 1}`
+                        }
                       />
                       <span className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                         {index + 1}
@@ -409,14 +415,24 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                 accuracy >= 60 ? 'text-yellow-800' : 
                 'text-red-800'
               }`}>
-                {accuracy >= 80 ? '🎉 Excellent!' : 
-                 accuracy >= 60 ? '👍 Good effort!' : 
-                 '💪 Keep trying!'}
+                {accuracy >= 80 ? 
+                  `🎉 ${fillContent.category ? `${fillContent.category} ` : ''}Mastered!` : 
+                 accuracy >= 60 ? 
+                  `👍 ${fillContent.category ? `${fillContent.category} ` : ''}Progress!` : 
+                  `💪 ${fillContent.category ? `${fillContent.category} ` : ''}Keep Trying!`
+                }
               </h4>
             </div>
             <div className="bg-white p-4 rounded-md border shadow-sm">
               <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
-              <p className="text-gray-700 text-base leading-relaxed">{fillContent.explanation}</p>
+              <p className="text-gray-700 text-base leading-relaxed">
+                {accuracy >= 80 
+                  ? `Outstanding work${fillContent.category ? ` on ${fillContent.category.toLowerCase()}` : ''}! ${fillContent.explanation}` 
+                  : accuracy >= 60 
+                  ? `Good progress${fillContent.category ? ` with ${fillContent.category.toLowerCase()}` : ''}! You got ${score} out of ${totalScore} correct. ${fillContent.explanation}` 
+                  : `You got ${score} out of ${totalScore} correct${fillContent.category ? ` for ${fillContent.category.toLowerCase()}` : ''}. Try reviewing the material again. ${fillContent.explanation.replace(/^(These answers are correct|Why these answers are correct)/, 'The correct answers are important')}`
+                }
+              </p>
             </div>
           </div>
         )}
@@ -476,7 +492,8 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                 ) : (
                   <Target className="h-4 w-4 mr-2" />
                 )}
-                {buttonLoadingStates.nextExercise ? 'Processing...' : 'Next Exercise'}
+                {buttonLoadingStates.nextExercise ? 'Processing...' : 
+                 fillContent.category ? `Next ${fillContent.category} Exercise` : 'Next Exercise'}
               </Button>
             </>
           )}

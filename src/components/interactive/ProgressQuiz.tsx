@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { CheckCircle, XCircle, ArrowRight, ArrowLeft, RotateCcw, Trophy, Clock } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
@@ -26,11 +27,13 @@ interface QuizContent {
 interface QuizQuestion {
   id: string
   question: string
-  type: 'multiple-choice' | 'true-false' | 'fill-blank'
+  type: 'multiple-choice' | 'true-false' | 'fill-blank' | 'text_input'
   options?: string[]
   correctAnswer: string | number
   explanation?: string
   points?: number
+  placeholder?: string
+  category?: string
 }
 
 export const ProgressQuiz = memo(function ProgressQuiz({ 
@@ -298,6 +301,22 @@ export const ProgressQuiz = memo(function ProgressQuiz({
           </div>
         )
 
+      case 'text_input':
+        return (
+          <div className="space-y-3">
+            <h4 className="text-base font-semibold text-gray-800 mb-3">Type your answer:</h4>
+            <Input
+              value={userAnswer || ''}
+              onChange={(e) => handleAnswerChange(e.target.value)}
+              placeholder={
+                currentQuestion.placeholder ||
+                `Enter your answer for this ${currentQuestion.category || 'question'}...`
+              }
+              className="text-lg p-4"
+            />
+          </div>
+        )
+
       default:
         return null
     }
@@ -318,8 +337,11 @@ export const ProgressQuiz = memo(function ProgressQuiz({
               <XCircle className="h-10 w-10 text-red-600" />
             )}
           </div>
-          <h3 className="text-2xl font-bold mb-3 text-gray-900">
-            {results.passed ? 'Congratulations!' : 'Keep Practicing!'}
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">
+            {results.passed ? 
+              `🎉 ${quizContent.category ? `${quizContent.category} ` : ''}Quiz Completed!` : 
+              `📚 ${quizContent.category ? `${quizContent.category} ` : ''}Practice More!`
+            }
           </h3>
           <p className="text-gray-700 text-lg leading-relaxed mb-6">
             You scored {results.correctAnswers} out of {results.totalQuestions} questions correctly
@@ -405,7 +427,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
         </CardHeader>
         <CardContent>
           <Button onClick={handleStartQuiz} className="w-full h-12 text-base font-medium">
-            Start Quiz
+            {quizContent.category ? `Start ${quizContent.category} Quiz` : 'Start Quiz'}
           </Button>
         </CardContent>
       </Card>

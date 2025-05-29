@@ -73,7 +73,9 @@ export function useSubjectSession({
             title: lesson.title,
             description: lesson.description,
             completed: false,
-            content: { type: 'concept-card', data: {} }
+            content: { type: 'concept-card', data: {} },
+            concepts: [],
+            currentConceptIndex: 0
           }))
         }
         const restoredProgress = {
