@@ -253,6 +253,29 @@ class AITutorService {
     }
   }
 
+  // Standardized helper for sending prompts to OpenAI
+  private async sendPrompt(
+    system: string,
+    user: string,
+    temperature: number,
+    maxTokens: number
+  ): Promise<string> {
+    const result = await chatCompletion({
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ],
+      temperature,
+      max_tokens: maxTokens
+    })
+
+    const content = result.choices[0]?.message.content
+    if (!content) {
+      throw new Error('No content returned from AI')
+    }
+    return content.trim()
+  }
+
   async createLearningPlan(subject: string): Promise<LessonPlan> {
     try {
       logger.debug('🤖 AI Service creating lesson plan for:', subject)
@@ -273,39 +296,15 @@ class AITutorService {
         'lesson-structure',
         { subject },
         async () => {
-          const response = await chatCompletion({
-            messages: [
-              {
-                role: "system",
-                content: `You are an expert curriculum designer. Analyze the subject "${subject}" and determine the optimal learning structure.`
-              },
-              {
-                role: "user", 
-                content: `Analyze "${subject}" and return JSON with:
-{
-  "recommendedLessons": number (6-15 based on complexity),
-  "complexity": "beginner|intermediate|advanced",
-  "focusAreas": ["area1", "area2", "area3"],
-  "learningObjectives": ["objective1", "objective2"],
-  "estimatedHoursPerLesson": number (0.5-3),
-  "prerequisites": ["prereq1", "prereq2"] or [],
-  "reasoning": "Why this structure works for this subject"
-}
+          const prompt = `Analyze "${subject}" and return JSON with:\n{\n  "recommendedLessons": number (6-15 based on complexity),\n  "complexity": "beginner|intermediate|advanced",\n  "focusAreas": ["area1", "area2", "area3"],\n  "learningObjectives": ["objective1", "objective2"],\n  "estimatedHoursPerLesson": number (0.5-3),\n  "prerequisites": ["prereq1", "prereq2"] or [],\n  "reasoning": "Why this structure works for this subject"\n}\n\nConsider:\n- Subject complexity and depth\n- Typical learning progression\n- Practical vs theoretical balance\n- Student engagement factors`
 
-Consider:
-- Subject complexity and depth
-- Typical learning progression
-- Practical vs theoretical balance
-- Student engagement factors`
-              }
-            ],
-            temperature: 0.4,
-            max_tokens: 800
-          })
+          const content = await this.sendPrompt(
+            `You are an expert curriculum designer. Analyze the subject "${subject}" and determine the optimal learning structure.`,
+            prompt,
+            0.4,
+            800
+          )
 
-          const content = response.choices[0].message.content
-          if (!content) throw new Error('No structure analysis received')
-          
           const cleanedContent = this.cleanJsonResponse(content)
           return JSON.parse(cleanedContent)
         }
@@ -339,47 +338,14 @@ Consider:
             try {
               logger.debug(`🔄 Attempt ${attempt}/${maxRetries} for lesson plan generation`)
               
-              const response = await chatCompletion({
-                messages: [
-                  {
-                    role: "system",
-                    content: `You are an expert curriculum designer creating a comprehensive learning plan. Create exactly ${expectedLessons} progressive lessons that build upon each other logically.`
-                  },
-                  {
-                    role: "user",
-                    content: `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons.
+              const planPrompt = `Create a learning plan for "${subject}" with exactly ${expectedLessons} lessons.\n\nSubject Analysis:\n- Complexity: ${complexity}\n- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}\n- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}\n\nReturn JSON:\n{\n  "subject": "${subject}",\n  "lessons": [\n    {\n      "id": "lesson-1",\n      "title": "Descriptive, engaging lesson title",\n      "description": "What students will learn and why it matters",\n      "completed": false\n    }\n  ]\n}\n\nRequirements:\n- Each lesson should build naturally on previous ones\n- Titles should be specific and engaging, not generic\n- Descriptions should explain practical value\n- Progress from foundational to advanced concepts\n- Include real-world applications where relevant`
 
-Subject Analysis:
-- Complexity: ${complexity}
-- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}
-- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}
-
-Return JSON:
-{
-  "subject": "${subject}",
-  "lessons": [
-    {
-      "id": "lesson-1",
-      "title": "Descriptive, engaging lesson title",
-      "description": "What students will learn and why it matters",
-      "completed": false
-    }
-  ]
-}
-
-Requirements:
-- Each lesson should build naturally on previous ones
-- Titles should be specific and engaging, not generic
-- Descriptions should explain practical value
-- Progress from foundational to advanced concepts
-- Include real-world applications where relevant`
-                  }
-                ],
-                temperature: 0.3,
-                max_tokens: maxTokens
-              })
-
-              const content = response.choices[0].message.content
+              const content = await this.sendPrompt(
+                `You are an expert curriculum designer creating a comprehensive learning plan. Create exactly ${expectedLessons} progressive lessons that build upon each other logically.`,
+                planPrompt,
+                0.3,
+                maxTokens
+              )
               if (!content) throw new Error('No content received from AI')
 
               const cleanedContent = this.cleanJsonResponse(content)
@@ -486,41 +452,14 @@ Requirements:
         'progress-criteria',
         { subject, complexity },
         async () => {
-          const response = await chatCompletion({
-            messages: [
-              {
-                role: "system",
-                content: `You are an expert in learning analytics. Determine optimal progress criteria for "${subject}".`
-              },
-              {
-                role: "user",
-                content: `Analyze "${subject}" (complexity: ${complexity}) and determine optimal learning progress criteria.
+          const prompt = `Analyze "${subject}" (complexity: ${complexity}) and determine optimal learning progress criteria.\n\nReturn JSON:\n{\n  "minCorrectAnswers": number (2-5),\n  "minTotalAttempts": number (3-6),\n  "minAccuracy": number (0.6-0.8),\n  "adaptiveFactors": {\n    "difficultyAdjustment": number (0.8-1.2),\n    "engagementWeight": number (0.1-0.3),\n    "retentionFactor": number (0.7-0.9)\n  },\n  "reasoning": "Why these criteria work for this subject"\n}\n\nConsider:\n- Subject difficulty and abstract nature\n- Typical learning curves\n- Importance of accuracy vs exploration\n- Student motivation factors`
 
-Return JSON:
-{
-  "minCorrectAnswers": number (2-5),
-  "minTotalAttempts": number (3-6), 
-  "minAccuracy": number (0.6-0.8),
-  "adaptiveFactors": {
-    "difficultyAdjustment": number (0.8-1.2),
-    "engagementWeight": number (0.1-0.3),
-    "retentionFactor": number (0.7-0.9)
-  },
-  "reasoning": "Why these criteria work for this subject"
-}
-
-Consider:
-- Subject difficulty and abstract nature
-- Typical learning curves
-- Importance of accuracy vs exploration
-- Student motivation factors`
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 400
-          })
-
-          const content = response.choices[0].message.content
+          const content = await this.sendPrompt(
+            `You are an expert in learning analytics. Determine optimal progress criteria for "${subject}".`,
+            prompt,
+            0.3,
+            400
+          )
           if (!content) throw new Error('No criteria received')
           
           const cleanedContent = this.cleanJsonResponse(content)
@@ -1400,25 +1339,14 @@ Focus on:
         async () => {
           const responsePrompt = this.createTutorResponsePrompt(action, data, context, subjectName)
           
-          const result = await chatCompletion({
-            messages: [
-              {
-                role: "system",
-                content: `You are a direct, helpful tutor. Give clear, concise feedback without excessive encouragement. Keep responses under 2 sentences and focus on next steps or specific guidance.`
-              },
-              {
-                role: "user",
-                content: responsePrompt
-              }
-            ],
-            temperature: 0.3,
-            max_tokens: 100
-          })
+          const content = await this.sendPrompt(
+            `You are a direct, helpful tutor. Give clear, concise feedback without excessive encouragement. Keep responses under 2 sentences and focus on next steps or specific guidance.`,
+            responsePrompt,
+            0.3,
+            100
+          )
 
-          const content = result.choices[0].message.content
-          if (!content) throw new Error('No response generated')
-          
-          return content.trim()
+          return content
         }
       )
       
@@ -1446,25 +1374,14 @@ Focus on:
         async () => {
           const educationalPrompt = this.createDirectEducationalPrompt(question, subjectName, context)
           
-          const result = await chatCompletion({
-            messages: [
-              {
-                role: "system",
-                content: `You are an expert educator. Provide direct, specific answers to educational questions. Focus on giving practical, actionable information rather than generic responses. Be comprehensive but concise.`
-              },
-              {
-                role: "user",
-                content: educationalPrompt
-              }
-            ],
-            temperature: 0.4,
-            max_tokens: 400
-          })
+          const content = await this.sendPrompt(
+            `You are an expert educator. Provide direct, specific answers to educational questions. Focus on giving practical, actionable information rather than generic responses. Be comprehensive but concise.`,
+            educationalPrompt,
+            0.4,
+            400
+          )
 
-          const content = result.choices[0].message.content
-          if (!content) throw new Error('No educational response generated')
-          
-          return content.trim()
+          return content
         }
       )
       
