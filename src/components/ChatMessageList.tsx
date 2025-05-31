@@ -6,18 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
 import { Bot, User, Sparkles, AlertTriangle, RotateCcw } from 'lucide-react'
-import { Message } from '@/types/chat'
-
-interface LessonInfo {
-  current: number
-  total: number
-}
-
-interface ProgressInfo {
-  correct: number
-  total: number
-  ready: boolean
-}
+import { Message, LessonInfo, ProgressInfo } from '@/types'
 
 interface ChatRetryMessageProps {
   retryPrompt: {
@@ -100,8 +89,8 @@ export function ChatMessageList({
   }
 
   return (
-    <ScrollArea className="flex-1 p-6 overflow-y-auto" ref={scrollRef}>
-      <div className="space-y-4">
+    <ScrollArea className="h-full p-4 overflow-y-auto" ref={scrollRef}>
+      <div className="space-y-4 min-h-full flex flex-col">
         {isLoading && (
           <div className="flex justify-center py-8">
             <LoadingSpinner size="lg" text="Loading conversation..." />
@@ -125,8 +114,8 @@ export function ChatMessageList({
                 >
                   <div className="flex items-start space-x-2">
                     {message.role === 'assistant' && <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />}
-                    <div className="flex-1">
-                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className="flex-1 overflow-hidden">
+                      <p className="text-sm whitespace-pre-wrap overflow-hidden">{message.content}</p>
                       {message.hasGeneratedContent && (
                         <div className="flex items-center space-x-1 mt-2 pt-2 border-t border-opacity-20">
                           <Sparkles className="h-3 w-3" />
@@ -157,9 +146,12 @@ export function ChatMessageList({
           </div>
         )}
 
+        {/* Auto-expanding space to push status badges to bottom when there are few messages */}
+        <div className="flex-grow"></div>
+
         {lessonInfo && progressInfo && messages.length > 0 && (
-          <div className="sticky bottom-0 bg-gradient-to-t from-white to-transparent p-2">
-            <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
+          <div className="sticky bottom-0 bg-gradient-to-t from-white to-transparent pt-4 pb-2">
+            <div className="flex items-center justify-center space-x-2 text-xs text-gray-500 flex-wrap gap-2">
               <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
                 Lesson {lessonInfo.current}/{lessonInfo.total}
               </Badge>

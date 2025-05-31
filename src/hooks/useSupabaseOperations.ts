@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { PersistenceService, PersistedMessage, PersistedSubject, PersistedContentItem } from '@/lib/persistenceService'
+import { persistenceService } from '@/lib/persistenceService'
+import { PersistedMessage, PersistedSubject, PersistedContentItem } from '@/types'
 import { useAsyncOperation } from '@/components/ErrorProvider'
-
-const persistenceService = new PersistenceService()
 
 export function useSupabaseOperations() {
   const [isLoading, setIsLoading] = useState(false)

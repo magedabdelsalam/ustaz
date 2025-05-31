@@ -6,18 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff, PenTool, Loader2 } from 'lucide-react'
-import { InteractiveComponentProps } from './index'
-
-interface FillInTheBlankContent {
-  question: string
-  template: string // Text with ___ for blanks
-  answers: string[] // Correct answers for each blank
-  hints?: string[] // Optional hints for each blank
-  explanation: string
-  difficulty?: 'beginner' | 'intermediate' | 'advanced'
-  category?: string
-  acceptAlternatives?: boolean // Whether to accept close matches
-}
+import { InteractiveComponentProps, FillInTheBlankContent } from '@/types'
 
 export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [userAnswers, setUserAnswers] = useState<string[]>([])
@@ -427,10 +416,10 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
               <p className="text-gray-700 text-base leading-relaxed">
                 {accuracy >= 80 
-                  ? `Outstanding work${fillContent.category ? ` on ${fillContent.category.toLowerCase()}` : ''}! ${fillContent.explanation}` 
+                  ? `Outstanding work${fillContent.category ? ` on ${fillContent.category.toLowerCase()}` : ''}! ${fillContent.explanation || ''}` 
                   : accuracy >= 60 
-                  ? `Good progress${fillContent.category ? ` with ${fillContent.category.toLowerCase()}` : ''}! You got ${score} out of ${totalScore} correct. ${fillContent.explanation}` 
-                  : `You got ${score} out of ${totalScore} correct${fillContent.category ? ` for ${fillContent.category.toLowerCase()}` : ''}. Try reviewing the material again. ${fillContent.explanation.replace(/^(These answers are correct|Why these answers are correct)/, 'The correct answers are important')}`
+                  ? `Good progress${fillContent.category ? ` with ${fillContent.category.toLowerCase()}` : ''}! You got ${score} out of ${totalScore} correct. ${fillContent.explanation || ''}`
+                  : `You got ${score} out of ${totalScore} correct${fillContent.category ? ` for ${fillContent.category.toLowerCase()}` : ''}. Try reviewing the material again. ${fillContent.explanation ? fillContent.explanation.replace(/^(These answers are correct|Why these answers are correct)/, 'The correct answers are important') : 'Review the correct answers carefully.'}`
                 }
               </p>
             </div>

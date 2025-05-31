@@ -5,55 +5,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { BarChart3, LineChart, PieChart, Zap, RotateCcw } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
-
-interface GraphContent {
-  title: string
-  description: string
-  type: 'line' | 'bar' | 'pie' | 'scatter' | 'function'
-  data: DataPoint[] | FunctionConfig
-  xAxis: AxisConfig
-  yAxis: AxisConfig
-  interactive?: boolean
-  controls?: GraphControl[]
-  explanation?: string
-  category?: string
-}
-
-interface DataPoint {
-  x: number | string
-  y: number
-  label?: string
-  color?: string
-}
-
-interface FunctionConfig {
-  expression: string // e.g., "x^2 + 2*x + 1"
-  domain: [number, number]
-  resolution?: number
-}
-
-interface AxisConfig {
-  label: string
-  min?: number
-  max?: number
-  unit?: string
-}
-
-interface GraphControl {
-  id: string
-  label: string
-  type: 'slider' | 'toggle'
-  min?: number
-  max?: number
-  step?: number
-  defaultValue: number | boolean
-}
+import { 
+  InteractiveComponentProps, 
+  GraphContent, 
+  DataPoint, 
+  FunctionConfig 
+} from '@/types'
 
 export const GraphVisualizer = memo(function GraphVisualizer({ 
   onInteraction, 
@@ -264,7 +221,7 @@ export const GraphVisualizer = memo(function GraphVisualizer({
     }
 
     const funcConfig = graphContent.data as FunctionConfig
-    const [minX, maxX] = funcConfig.domain
+    const [minX, maxX] = funcConfig.domain || [-10, 10]
     const resolution = funcConfig.resolution || 100
     const step = (maxX - minX) / resolution
 

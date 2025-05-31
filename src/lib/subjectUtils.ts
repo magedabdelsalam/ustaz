@@ -1,6 +1,4 @@
-import { Subject } from '@/hooks/useSubjects'
-import { LessonPlan, LearningProgress, Lesson } from '@/lib/aiService'
-import { PersistedSubject } from '@/lib/persistenceService'
+import { LessonPlan, LearningProgress, Lesson, Subject, PersistedSubject } from '@/types'
 
 type ExtendedProgress = LearningProgress & {
   currentLessonIndex?: number

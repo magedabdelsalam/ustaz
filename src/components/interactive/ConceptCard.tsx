@@ -5,21 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { memo } from 'react'
 import { Lightbulb, BookOpen, Brain, Target } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
-
-interface ConceptCardContent {
-  title: string
-  summary: string
-  details: string
-  examples: string[]
-  keyPoints: string[]
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
-}
+import { InteractiveComponentProps, ConceptCardContent } from '@/types'
 
 export const ConceptCard = memo(function ConceptCard({ onInteraction, content, id }: InteractiveComponentProps) {
   const conceptContent = content as ConceptCardContent

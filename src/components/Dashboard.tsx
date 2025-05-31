@@ -228,12 +228,12 @@ export function Dashboard() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       {/* Main Dashboard Content */}
-      <div className="flex-1 flex bg-gray-50">
+      <div className="flex-1 flex flex-col lg:flex-row bg-gray-50 overflow-hidden">
         {/* History Pane - Responsive width */}
         <div className="w-full md:w-80 lg:w-72 xl:w-80 2xl:w-96 bg-white border-r border-gray-200 flex-shrink-0 
-                        md:block hidden">
+                        md:block hidden overflow-y-auto">
           <HistoryPane 
             subjects={subjects}
             selectedSubject={currentSubject}
@@ -298,18 +298,19 @@ export function Dashboard() {
         </div>
         
         {/* Main Content Area - Responsive layout */}
-        <div className="flex-1 flex flex-col lg:flex-row min-w-0">
-          {/* Content Pane - Responsive sizing */}
-          <div className="flex-1 lg:flex-[2] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col lg:flex-row min-w-0 overflow-hidden">
+          {/* Content Pane - Responsive sizing with proper flex basis */}
+          <div className="flex-1 lg:flex-[3] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0 overflow-hidden">
             <ContentPane 
               selectedSubject={currentSubject}
               onContentInteraction={handleContentInteraction}
             />
           </div>
           
-          {/* Chat Pane - Responsive sizing */}
-          <div className="w-full lg:w-80 xl:w-96 2xl:w-[480px] lg:flex-[1] xl:flex-[1] 2xl:flex-[1]
-                          bg-white border-l border-gray-200 lg:border-t-0 border-t flex-shrink-0">
+          {/* Chat Pane - Fixed width on larger screens, flexible on mobile */}
+          <div className="flex-none h-[50vh] lg:h-auto lg:w-80 xl:w-96 2xl:w-[400px] 
+                          bg-white border-l border-gray-200 lg:border-t-0 border-t 
+                          flex flex-col overflow-hidden">
             <ChatPane 
               ref={chatRef}
               selectedSubject={currentSubject}

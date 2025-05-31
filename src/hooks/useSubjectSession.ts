@@ -1,15 +1,7 @@
 import { useState, useCallback } from 'react'
-import { Subject } from './useSubjects'
+import { aiTutor } from '@/lib/aiService'
+import { LessonPlan, Message, UseSubjectSessionProps } from '@/types'
 import { persistenceService } from '@/lib/persistenceService'
-import { aiTutor, LessonPlan, LearningProgress } from '@/lib/aiService'
-import { Message } from '@/types/chat'
-
-interface UseSubjectSessionProps {
-  user?: { id: string } | null
-  selectedSubject: Subject | null
-  onMessagesLoaded?: (messages: Message[]) => void
-  onLessonPlanLoaded?: (plan: LessonPlan | null, progress: LearningProgress | null) => void
-}
 
 export function useSubjectSession({ 
   user, 
@@ -68,7 +60,7 @@ export function useSubjectSession({
         const restoredPlan: LessonPlan = {
           subject: selectedSubject.name,
           currentLessonIndex: selectedSubject.lessonPlan.currentLessonIndex || 0,
-          lessons: (selectedSubject.lessonPlan.lessons || []).map(lesson => ({
+          lessons: (selectedSubject.lessonPlan.lessons || []).map((lesson: { id: string; title: string; description: string }) => ({
             id: lesson.id,
             title: lesson.title,
             description: lesson.description,

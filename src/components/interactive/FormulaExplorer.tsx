@@ -5,49 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { Calculator, RotateCcw, Eye, EyeOff, Zap } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
-
-interface FormulaContent {
-  title: string
-  description: string
-  formula: string
-  variables: FormulaVariable[]
-  steps?: FormulaStep[]
-  examples?: FormulaExample[]
-  explanation?: string
-  category?: string
-}
-
-interface FormulaVariable {
-  id: string
-  symbol: string
-  name: string
-  unit?: string
-  min: number
-  max: number
-  step: number
-  defaultValue: number
-  description?: string
-}
-
-interface FormulaStep {
-  id: string
-  description: string
-  expression: string
-  highlight?: boolean
-}
-
-interface FormulaExample {
-  id: string
-  name: string
-  values: Record<string, number>
-  description?: string
-}
+import { 
+  InteractiveComponentProps, 
+  FormulaContent
+} from '@/types'
 
 export const FormulaExplorer = memo(function FormulaExplorer({ 
   onInteraction, 

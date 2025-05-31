@@ -1,5 +1,6 @@
 // Interactive Learning Components Library
 import dynamic from 'next/dynamic'
+import type { ComponentType, InteractiveComponentProps } from '@/types'
 
 // Lazily load heavy interactive components to improve initial page load time
 export const MultipleChoice = dynamic(
@@ -53,27 +54,5 @@ export const Placeholder = dynamic(
   { ssr: false }
 )
 
-// Component type definitions
-export type ComponentType =
-  | 'multiple-choice'
-  | 'fill-blank'
-  | 'drag-drop'
-  | 'formula-explorer'
-  | 'step-solver'
-  | 'concept-card'
-  | 'interactive-example'
-  | 'progress-quiz'
-  | 'graph-visualizer'
-  | 'text-highlighter'
-  | 'explainer'
-  | 'placeholder'
-
-// Shared interface for all interactive components
-export interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-  isLoading?: boolean
-}
-
-// Note: InteractiveComponentProps is now defined here to be shared across all components 
+// Re-export the types for backward compatibility
+export type { ComponentType, InteractiveComponentProps } 

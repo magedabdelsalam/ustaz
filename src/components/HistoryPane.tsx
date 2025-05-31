@@ -6,7 +6,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tabs, TabsList } from '@/components/ui/tabs'
-import { Subject } from '@/hooks/useSubjects'
+import { Subject } from '@/types'
 import { GraduationCap, LogOut, BookOpen } from 'lucide-react'
 import { SubjectItem } from './history/SubjectItem'
 import { DeleteConfirmationDialog } from './history/DeleteConfirmationDialog'
@@ -55,9 +55,9 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
   }, [subjects, onSubjectSelect])
 
   return (
-    <div className="flex flex-col bg-gray-50 h-full">
+    <div className="flex flex-col bg-gray-50 h-full overflow-hidden">
       {/* App Header */}
-      <div className="p-4 border-b border-gray-200 bg-white">
+      <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="flex items-center justify-between">
           {/* Logo */}
           <div className="flex items-center space-x-2">
@@ -97,7 +97,7 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
       </div>
 
       {/* Subject Tabs */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {subjects.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center max-w-sm">
@@ -113,9 +113,9 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
             value={selectedSubject?.id || subjects[0]?.id}
             onValueChange={handleTabChange}
             orientation="vertical"
-            className="flex-1 flex"
+            className="flex-1 flex overflow-hidden"
           >
-            <TabsList className="flex-col h-full bg-white w-full justify-start p-4 space-y-2">
+            <TabsList className="flex-col h-full bg-white w-full justify-start p-4 space-y-2 overflow-y-auto">
               {subjects.map((subject) => (
                 <SubjectItem
                   key={subject.id}

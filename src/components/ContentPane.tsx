@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingSpinner, SpinnerIcon } from '@/components/ui/loading-spinner'
 import { BookOpen, Sparkles, Trash2, RefreshCw, ChevronUp, ChevronDown, History } from 'lucide-react'
-import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { persistenceService } from '@/lib/persistenceService'
 import { ContentHistorySidebar } from './history/ContentHistorySidebar'
+import { Subject } from '@/types'
 import { 
   MultipleChoice, 
   ConceptCard, 
@@ -436,7 +436,7 @@ export function ContentPane({
 
   if (!selectedSubject) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         {/* Empty state */}
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center max-w-md">
@@ -453,7 +453,7 @@ export function ContentPane({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Main content area */}
       <div className="flex-1 relative overflow-hidden" data-scroll-navigation="true" ref={contentContainerRef}>
         {isLoading ? (
@@ -463,7 +463,7 @@ export function ContentPane({
         ) : currentContent ? (
           <>
             {/* Animated Content Display */}
-            <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="absolute inset-0 flex items-center justify-center p-4 overflow-y-auto">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={`content-${currentContent.id}-${selectedContentIndex}`}
@@ -488,7 +488,7 @@ export function ContentPane({
                     damping: 25,
                     mass: 0.8
                   }}
-                  className="w-full max-w-4xl mx-auto"
+                  className="w-full max-w-4xl mx-auto my-4"
                 >
                   <div className="relative">
                     {/* Activity info */}
@@ -571,18 +571,18 @@ export function ContentPane({
 
       {/* Header with controls - now at bottom */}
       <div className="flex-shrink-0 p-4 border-t border-gray-200 bg-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center space-x-3 min-w-0 truncate">
             {currentContent && (
               <>
-                <Badge variant="secondary" className="text-xs font-medium">
+                <Badge variant="secondary" className="text-xs font-medium flex-shrink-0">
                   Activity {selectedContentIndex >= 0 ? selectedContentIndex + 1 : contentFeed.length}
                 </Badge>
-                <h3 className="text-lg font-semibold text-gray-900">{currentContent.title}</h3>
+                <h3 className="text-lg font-semibold text-gray-900 truncate">{currentContent.title}</h3>
               </>
             )}
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2 flex-shrink-0">
             {contentFeed.length > 1 && (
               <Button
                 variant="outline"

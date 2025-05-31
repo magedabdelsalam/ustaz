@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { SpinnerIcon } from '@/components/ui/loading-spinner'
 import { Send, MessageCircle } from 'lucide-react'
-import { Subject } from '@/hooks/useSubjects'
 import { useAuth } from '@/hooks/useAuth'
 import { usePendingMessages } from '@/hooks/usePendingMessages'
 import { useSubjectSession } from '@/hooks/useSubjectSession'
 import { persistenceService } from '@/lib/persistenceService'
 import { buildPersistedSubject } from '@/lib/subjectUtils'
-import { aiTutor, Lesson, LessonPlan, LearningProgress, LessonContent } from '@/lib/aiService'
-import { Message } from '@/types/chat'
+import { aiTutor } from '@/lib/aiService'
+import { Message, Lesson, LessonPlan, LearningProgress, LessonContent, Subject } from '@/types'
 import { ChatMessageList } from './ChatMessageList'
 
 interface ChatPaneProps {
@@ -1457,7 +1456,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
 
   if (!selectedSubject) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full overflow-hidden">
         {/* Empty state */}
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="text-center max-w-sm">
@@ -1470,7 +1469,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         </div>
 
         {/* Input - Always show so users can start conversations */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 flex-shrink-0">
           <div className="flex space-x-2">
             <Input
               value={inputValue}
@@ -1484,7 +1483,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
               onClick={handleSendMessage}
               disabled={!inputValue.trim() || isTyping}
               size="lg"
-              className="p-6 bg-blue-600 hover:bg-blue-700"
+              className="p-6 bg-blue-600 hover:bg-blue-700 flex-shrink-0"
             >
               {isTyping ? (
                 <SpinnerIcon size="sm" />
@@ -1499,36 +1498,38 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Messages */}
-      <ChatMessageList
-        messages={messages}
-        isTyping={isTyping}
-        isLoading={isLoadingMessages}
-        pendingCount={pendingMessages.length}
-        scrollRef={scrollAreaRef}
-        onRetryMessage={handleChatRetry}
-        lessonInfo={
-          currentLessonPlan
-            ? {
-                current: currentLessonPlan.currentLessonIndex + 1,
-                total: currentLessonPlan.lessons.length
-              }
-            : undefined
-        }
-        progressInfo={
-          currentProgress
-            ? {
-                correct: currentProgress.correctAnswers,
-                total: currentProgress.totalAttempts,
-                ready: currentProgress.readyForNext
-              }
-            : undefined
-        }
-      />
+      <div className="flex-1 overflow-hidden">
+        <ChatMessageList
+          messages={messages}
+          isTyping={isTyping}
+          isLoading={isLoadingMessages}
+          pendingCount={pendingMessages.length}
+          scrollRef={scrollAreaRef}
+          onRetryMessage={handleChatRetry}
+          lessonInfo={
+            currentLessonPlan
+              ? {
+                  current: currentLessonPlan.currentLessonIndex + 1,
+                  total: currentLessonPlan.lessons.length
+                }
+              : undefined
+          }
+          progressInfo={
+            currentProgress
+              ? {
+                  correct: currentProgress.correctAnswers,
+                  total: currentProgress.totalAttempts,
+                  ready: currentProgress.readyForNext || false
+                }
+              : undefined
+          }
+        />
+      </div>
 
       {/* Input */}
-      <div className="p-6 pt-0">
+      <div className="p-4 border-t border-gray-200 flex-shrink-0">
         <div className="flex space-x-2">
           <Input
             value={inputValue}
@@ -1542,7 +1543,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || isTyping}
             size="lg"
-            className="p-6 bg-blue-600 hover:bg-blue-700"
+            className="p-6 bg-blue-600 hover:bg-blue-700 flex-shrink-0"
           >
             {isTyping ? (
               <SpinnerIcon size="sm" />

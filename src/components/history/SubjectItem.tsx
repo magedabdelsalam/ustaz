@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { TabsTrigger } from '@/components/ui/tabs'
 import { Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Subject } from '@/hooks/useSubjects'
+import { Subject } from '@/types'
 import { isRecentlyActive } from '@/lib/userUtils'
 
 interface SubjectItemProps {

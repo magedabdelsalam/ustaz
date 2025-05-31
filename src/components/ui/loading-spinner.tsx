@@ -1,23 +1,15 @@
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Skeleton } from '@/components/ui/skeleton'
-
-interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg' | 'xl'
-  text?: string
-  className?: string
-  fullScreen?: boolean
-  variant?: 'spinner' | 'skeleton'
-  skeletonRows?: number
-}
+import { LoadingSpinnerProps } from '@/types'
 
 export function LoadingSpinner({ 
   size = 'md', 
-  text = 'Loading...', 
+  message, 
   className = '',
+  fullWidth = false,
+  padding,
   fullScreen = false,
-  variant = 'spinner',
-  skeletonRows = 3
+  text
 }: LoadingSpinnerProps) {
   const sizeClasses = {
     sm: 'h-4 w-4',
@@ -33,42 +25,27 @@ export function LoadingSpinner({
     xl: 'text-base'
   }
 
-  const renderSpinner = () => (
-    <div className={cn("flex flex-col items-center justify-center", className)}>
+  const containerClasses = cn(
+    "flex flex-col items-center justify-center",
+    fullWidth && "w-full",
+    fullScreen && "fixed inset-0 bg-white/80 backdrop-blur-sm z-50",
+    padding,
+    className
+  )
+
+  return (
+    <div className={containerClasses}>
       <RefreshCw className={cn(
         sizeClasses[size],
         "text-gray-400 mx-auto mb-2 animate-spin"
       )} />
-      {text && (
+      {(message || text) && (
         <p className={cn("text-gray-600", textSizeClasses[size])}>
-          {text}
+          {message || text}
         </p>
       )}
     </div>
   )
-
-  const renderSkeleton = () => (
-    <div className={cn("space-y-3", className)}>
-      {Array.from({ length: skeletonRows }).map((_, i) => (
-        <div key={i} className="space-y-2">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-4/5" />
-        </div>
-      ))}
-    </div>
-  )
-
-  const content = variant === 'skeleton' ? renderSkeleton() : renderSpinner()
-
-  if (fullScreen) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        {content}
-      </div>
-    )
-  }
-
-  return content
 }
 
 // Export sub-components for specific use cases

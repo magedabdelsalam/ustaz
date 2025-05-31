@@ -2,10 +2,11 @@
 
 import { useState, useCallback, useMemo, useTransition, useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
-import { persistenceService, PersistedSubject } from '@/lib/persistenceService'
+import { persistenceService } from '@/lib/persistenceService'
 import { chatCompletion } from '@/lib/openaiClient'
 import { logger } from '@/lib/logger'
 import { buildPersistedSubject } from '@/lib/subjectUtils'
+import { Subject, PersistedSubject } from '@/types'
 
 // Global cache for AI analysis - persists across hook calls
 const messageAnalysisCache = new Map<string, {
@@ -13,31 +14,6 @@ const messageAnalysisCache = new Map<string, {
   isNewSubject: boolean
   confidence: number
 }>()
-
-export interface Subject {
-  id: string
-  name: string
-  progress: number
-  color: string
-  isActive: boolean
-  startedAt: Date
-  completedAt?: Date
-  topicKeywords: string[]
-  messageCount: number
-  lessonPlan?: {
-    lessons: Array<{ id: string; title: string; description: string }>
-    currentLessonIndex: number
-  }
-  learningProgress?: {
-    correctAnswers: number
-    totalAttempts: number
-    currentLessonIndex?: number
-    totalLessons?: number
-    needsReview?: boolean
-    readyForNext?: boolean
-  }
-  lastActive: Date
-}
 
 // Optimized hook with minimal re-renders
 export function useSubjects() {

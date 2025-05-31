@@ -203,16 +203,26 @@ export class ErrorHandler {
     if (!navigator.onLine) {
       return false
     }
-
+    
+    // If navigator.onLine is true, we'll do a simple check
+    // by trying to load a favicon or a small resource from a reliable CDN
     try {
-      // Try to fetch a small resource to test actual connectivity
-      const response = await fetch('/api/health', { 
+      const timeoutPromise = new Promise<Response>((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 3000);
+      });
+      
+      const fetchPromise = fetch('https://www.google.com/favicon.ico', {
         method: 'HEAD',
-        cache: 'no-cache'
-      })
-      return response.ok
-    } catch {
-      return false
+        mode: 'no-cors', // This is important for CORS issues
+        cache: 'no-store'
+      });
+      
+      // Race between fetch and timeout
+      await Promise.race([fetchPromise, timeoutPromise]);
+      return true; // If fetch succeeds without timeout, we're online
+    } catch (error) {
+      console.warn('Connectivity check failed:', error);
+      return false; // If fetch fails, we're likely offline
     }
   }
 

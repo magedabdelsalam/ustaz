@@ -1,12 +1,6 @@
-import { useRef, useCallback } from 'react'
+import { useCallback, useRef } from 'react'
+import { Message, UsePendingMessagesProps } from '@/types'
 import { persistenceService } from '@/lib/persistenceService'
-import { Message } from '@/types/chat'
-
-interface UsePendingMessagesProps {
-  user?: { id: string } | null
-  selectedSubject?: { id: string } | null
-  onRetrySuccess?: (savedMessages: Message[]) => void
-}
 
 export function usePendingMessages({ 
   user, 

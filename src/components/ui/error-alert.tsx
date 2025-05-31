@@ -7,13 +7,18 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AppError, networkMonitor } from '@/lib/errorHandler'
 import { cn } from '@/lib/utils'
+import { 
+  ErrorAlertProps as TypedErrorAlertProps,
+  SuccessAlertProps,
+  NetworkStatusProps,
+  ErrorToastProps as TypedErrorToastProps,
+  LoadingAlertProps
+} from '@/types'
 
-interface ErrorAlertProps {
+// Custom ErrorAlertProps that extends the centralized one
+interface ErrorAlertProps extends Omit<TypedErrorAlertProps, 'message' | 'title'> {
   error: AppError | null
-  onRetry?: () => void
-  onDismiss?: () => void
   showNetworkStatus?: boolean
-  className?: string
 }
 
 export function ErrorAlert({ 
@@ -189,12 +194,6 @@ export function ErrorAlert({
 }
 
 // Success alert for positive feedback
-interface SuccessAlertProps {
-  message: string
-  onDismiss?: () => void
-  className?: string
-}
-
 export function SuccessAlert({ message, onDismiss, className }: SuccessAlertProps) {
   return (
     <Alert className={cn("border-green-200 bg-green-50 border shadow-sm", className)}>
@@ -222,38 +221,51 @@ export function SuccessAlert({ message, onDismiss, className }: SuccessAlertProp
   )
 }
 
-// Network status indicator component
-interface NetworkStatusProps {
-  className?: string
-  showLabel?: boolean
-}
-
-export function NetworkStatus({ className, showLabel = true }: NetworkStatusProps) {
-  const [isOnline, setIsOnline] = useState(true)
+// Network status component
+export function NetworkStatus({ isOnline, className, onReconnect }: NetworkStatusProps) {
+  const [isOnlineState, setIsOnlineState] = useState(isOnline)
 
   useEffect(() => {
-    const unsubscribe = networkMonitor.subscribe(setIsOnline)
+    const unsubscribe = networkMonitor.subscribe(setIsOnlineState)
     return unsubscribe
   }, [])
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      {isOnline ? (
+      {isOnlineState ? (
         <>
           <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          {showLabel && <span className="text-sm font-medium text-green-600">Online</span>}
+          {onReconnect && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onReconnect}
+              className="text-green-600 hover:text-green-700"
+            >
+              Reconnect
+            </Button>
+          )}
         </>
       ) : (
         <>
           <div className="h-2 w-2 rounded-full bg-red-500" />
-          {showLabel && <span className="text-sm font-medium text-red-600">Offline</span>}
+          {onReconnect && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onReconnect}
+              className="text-red-600 hover:text-red-700"
+            >
+              Reconnect
+            </Button>
+          )}
         </>
       )}
     </div>
   )
 }
 
-// Compact network status badge
+// Simple network status badge
 export function NetworkStatusBadge({ className }: { className?: string }) {
   const [isOnline, setIsOnline] = useState(true)
 
@@ -282,12 +294,11 @@ export function NetworkStatusBadge({ className }: { className?: string }) {
   )
 }
 
-// Toast-style error notification with ShadCN styling
-interface ErrorToastProps {
+// Toast variant of error alert
+interface ErrorToastProps extends Omit<TypedErrorToastProps, 'message'> {
   error: AppError
-  onRetry?: () => void
-  onDismiss: () => void
   duration?: number
+  onRetry?: () => void
 }
 
 export function ErrorToast({ error, onRetry, onDismiss, duration = 6000 }: ErrorToastProps) {
@@ -323,12 +334,7 @@ export function ErrorToast({ error, onRetry, onDismiss, duration = 6000 }: Error
   )
 }
 
-// Loading alert for operations in progress
-interface LoadingAlertProps {
-  message: string
-  className?: string
-}
-
+// Loading alert for in-progress operations
 export function LoadingAlert({ message, className }: LoadingAlertProps) {
   return (
     <Alert className={cn("border-blue-200 bg-blue-50 border shadow-sm", className)}>

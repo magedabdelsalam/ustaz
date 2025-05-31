@@ -6,39 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Play, Pause, RotateCcw, Lightbulb, Activity, Palette, Calculator, Atom, Zap } from 'lucide-react'
-
-interface InteractiveComponentProps {
-  onInteraction: (action: string, data: unknown) => void
-  content: unknown
-  id: string
-}
-
-interface ExampleContent {
-  title: string
-  description: string
-  category?: string
-  controls: Control[]
-  display: DisplayElement[]
-  explanation: string
-  initialValues?: Record<string, number | boolean>
-}
-
-interface Control {
-  id: string
-  type: 'slider' | 'toggle' | 'button'
-  label: string
-  min?: number
-  max?: number
-  step?: number
-  defaultValue?: number | boolean
-}
-
-interface DisplayElement {
-  id: string
-  type: 'text' | 'formula' | 'shape' | 'color' | 'graph' | 'visualization'
-  content: string
-  style?: Record<string, unknown>
-}
+import { InteractiveComponentProps, ExampleContent, Control, DisplayElement } from '@/types'
 
 export const InteractiveExample = memo(function InteractiveExample({ 
   onInteraction: _onInteraction, 

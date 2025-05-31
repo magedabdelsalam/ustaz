@@ -1,13 +1,18 @@
 import { chatCompletion } from '@/lib/openaiClient'
 import { logger } from '@/lib/logger'
+import { 
+  LessonPlan, 
+  Lesson, 
+  LessonContent, 
+  ConceptInfo, 
+  LearningProgress,
+  ProgressCriteria,
+  CacheEntry,
+  PlanStructureData,
+  PlanDataStructure
+} from '@/types'
 
 // AI Response Cache - prevents duplicate API calls and saves tokens
-interface CacheEntry {
-  data: unknown
-  timestamp: number
-  type: string
-}
-
 class AICache {
   private cache = new Map<string, CacheEntry>()
   private readonly TTL = 30 * 60 * 1000 // 30 minutes
@@ -75,54 +80,6 @@ class AICache {
     }
     return { size: this.cache.size, types }
   }
-}
-
-export interface LessonPlan {
-  subject: string
-  lessons: Lesson[]
-  currentLessonIndex: number
-}
-
-export interface ConceptInfo {
-  id: string
-  name: string
-  description: string
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
-  estimatedPracticeItems: number
-}
-
-export interface Lesson {
-  id: string
-  title: string
-  description: string
-  content: LessonContent
-  completed: boolean
-  concepts: ConceptInfo[]
-  currentConceptIndex?: number
-}
-
-export interface LessonContent {
-  type: 'multiple-choice' | 'concept-card' | 'step-solver' | 'fill-blank' | 'explainer' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' | 'placeholder'
-  data: unknown
-}
-
-export interface LearningProgress {
-  correctAnswers: number
-  totalAttempts: number
-  needsReview: boolean
-  readyForNext: boolean
-}
-
-export interface ProgressCriteria {
-  minCorrectAnswers: number
-  minTotalAttempts: number
-  minAccuracy: number
-  adaptiveFactors: {
-    difficultyAdjustment: number
-    engagementWeight: number
-    retentionFactor: number
-  }
-  reasoning?: string
 }
 
 class AITutorService {
@@ -290,38 +247,20 @@ class AITutorService {
     try {
       logger.debug('🤖 AI Service creating lesson plan for:', subject)
       
-      // Define interface for plan structure data
-      interface PlanStructureData {
-        recommendedLessons: number
-        complexity: 'beginner' | 'intermediate' | 'advanced'
-        focusAreas: string[]
-        learningObjectives: string[]
-        estimatedHoursPerLesson: number
-        prerequisites: string[]
-        reasoning: string
-      }
+      // Analyze subject to determine optimal plan structure
+      const planStructurePrompt = this.createPlanStructurePrompt(subject)
+      const planStructureResponse = await this.sendPrompt(
+        "You are an expert curriculum designer. Based on the user's request, create a structured learning plan tailored to their needs.",
+        planStructurePrompt,
+        0.2,
+        800
+      )
       
-      // Use AI to determine appropriate lesson count and structure based on subject
-      const planStructureData = await this.cachedApiCall(
-        'lesson-structure',
-        { subject },
-        async () => {
-          const prompt = `Analyze "${subject}" and return JSON with:\n{\n  "recommendedLessons": number (6-15 based on complexity),\n  "complexity": "beginner|intermediate|advanced",\n  "focusAreas": ["area1", "area2", "area3"],\n  "learningObjectives": ["objective1", "objective2"],\n  "estimatedHoursPerLesson": number (0.5-3),\n  "prerequisites": ["prereq1", "prereq2"] or [],\n  "reasoning": "Why this structure works for this subject"\n}\n\nConsider:\n- Subject complexity and depth\n- Typical learning progression\n- Practical vs theoretical balance\n- Student engagement factors`
+      const planStructureContent = this.cleanJsonResponse(planStructureResponse)
+      const planStructure = JSON.parse(planStructureContent) as PlanStructureData
 
-          const content = await this.sendPrompt(
-            `You are an expert curriculum designer. Analyze the subject "${subject}" and determine the optimal learning structure.`,
-            prompt,
-            0.4,
-            800
-          )
-
-          const cleanedContent = this.cleanJsonResponse(content)
-          return JSON.parse(cleanedContent)
-        }
-      ) as PlanStructureData
-
-      const expectedLessons = planStructureData.recommendedLessons || 8
-      const complexity = planStructureData.complexity || 'intermediate'
+      const expectedLessons = planStructure.recommendedLessons || 8
+      const complexity = planStructure.complexity || 'intermediate'
       
       logger.debug(`📚 AI recommended ${expectedLessons} lessons for "${subject}" (complexity: ${complexity})`)
       
@@ -333,7 +272,7 @@ class AITutorService {
       logger.debug(`🎯 Using ${maxTokens} tokens for ${expectedLessons} lessons`)
       
       // Create cache parameters for this lesson plan request
-      const cacheParams = { subject, expectedLessons, maxTokens, complexity, focusAreas: planStructureData.focusAreas }
+      const cacheParams = { subject, expectedLessons, maxTokens, complexity, focusAreas: planStructure.focusAreas }
       
       // Use cached API call with retry logic
       const planData = await this.cachedApiCall(
@@ -352,8 +291,8 @@ class AITutorService {
 
 Subject Analysis:
 - Complexity: ${complexity}
-- Focus Areas: ${planStructureData.focusAreas?.join(', ') || 'General'}
-- Learning Objectives: ${planStructureData.learningObjectives?.join(', ') || 'Comprehensive understanding'}
+- Focus Areas: ${planStructure.focusAreas?.join(', ') || 'General'}
+- Learning Objectives: ${planStructure.learningObjectives?.join(', ') || 'Comprehensive understanding'}
 
 Return JSON:
 {
@@ -517,6 +456,25 @@ Requirements:
       logger.debug('⚠️ Generating dynamic fallback plan for subject:', subject)
       return this.generateUnifiedFallback<LessonPlan>('create_learning_plan', { subject }, 'lesson-plan', `Failed to create learning plan for ${subject}. Would you like to try again?`)
     }
+  }
+
+  private createPlanStructurePrompt(subject: string): string {
+    return `Analyze "${subject}" and return JSON with:
+{
+  "recommendedLessons": number (6-15 based on complexity),
+  "complexity": "beginner|intermediate|advanced",
+  "focusAreas": ["area1", "area2", "area3"],
+  "learningObjectives": ["objective1", "objective2"],
+  "estimatedHoursPerLesson": number (0.5-3),
+  "prerequisites": ["prereq1", "prereq2"] or [],
+  "reasoning": "Why this structure works for this subject"
+}
+
+Consider:
+- Subject complexity and depth
+- Typical learning progression
+- Practical vs theoretical balance
+- Student engagement factors`
   }
 
   // Store dynamic criteria for each subject
@@ -997,8 +955,6 @@ Requirements:
         return JSON.stringify(retryPrompt) as T
     }
   }
-
-
 
   // Generate lesson content for a specific lesson
   async generateLessonContent(
@@ -1547,6 +1503,12 @@ Keep it under 2 sentences. Be clear and direct.`
       difficulty: 'beginner',
       estimatedPracticeItems: 0
     }]
+  }
+
+  private isPlanDataValid(data: unknown): data is PlanDataStructure {
+    return typeof data === 'object' && data !== null &&
+           'subject' in data && 'lessons' in data &&
+           Array.isArray((data as PlanDataStructure).lessons)
   }
 }
 
