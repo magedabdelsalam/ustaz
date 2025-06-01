@@ -179,6 +179,16 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     lessonPlanCreationAttempted.current = subjectName
     
     setIsTyping(true)
+    
+    // Add a progress message to show the user that something is happening
+    const progressMessage: Message = {
+      id: `progress-${Date.now()}`,
+      role: 'assistant',
+      content: `Creating your personalized lesson plan for ${subjectName}... This may take up to 30 seconds.`,
+      timestamp: new Date()
+    }
+    setMessages(prev => [...prev, progressMessage])
+    
     try {
       console.log('📋 Creating lesson plan for:', subjectName)
       
@@ -191,6 +201,9 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
 
       setCurrentLessonPlan(lessonPlan)
       setCurrentProgress(progress)
+
+      // Remove the progress message since we succeeded
+      setMessages(prev => prev.filter(msg => msg.id !== progressMessage.id))
 
       // Also save to database (if user and subject are available)
       if (user && subjectForPlan && progress) {
@@ -302,6 +315,47 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       // await generateLessonContent(lessonPlan, progress, subjectName, subjectForPlan?.id)
     } catch (error) {
       console.error('Error creating lesson plan:', error)
+      
+      // Remove the progress message since we failed
+      setMessages(prev => prev.filter(msg => msg.id !== progressMessage.id))
+      
+      // Handle different types of errors with specific messaging
+      let errorMessage = 'I encountered an issue creating your lesson plan. Please try again.'
+      
+      if (error instanceof Error) {
+        if (error.message.includes('timed out') || error.message.includes('taking too long')) {
+          errorMessage = 'The AI service is taking longer than expected. Please try again in a moment.'
+        } else if (error.message.includes('network') || error.message.includes('connection')) {
+          errorMessage = 'There seems to be a connection issue. Please check your internet and try again.'
+        } else if (error.message.includes('slow') || error.message.includes('minutes')) {
+          errorMessage = 'The AI service is currently experiencing high load. Please try again in a few minutes.'
+        }
+      }
+      
+      // Add error message with retry option
+      const errorResponse: Message = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: JSON.stringify({
+          type: 'retry_prompt',
+          message: errorMessage,
+          action: 'retry',
+          originalAction: 'create_learning_plan',
+          originalData: { subject: subjectName }
+        }),
+        timestamp: new Date(),
+        hasGeneratedContent: false
+      }
+      setMessages(prev => [...prev, errorResponse])
+      
+      // Save error response
+      if (targetSubject || selectedSubject) {
+        await saveMessageToPersistence(errorResponse)
+      } else {
+        console.log('⏳ Adding error response to pending queue')
+        setPendingMessages(prev => [...prev, errorResponse])
+      }
+      
       setIsTyping(false)
     } finally {
       // Reset progress tracking
@@ -327,6 +381,52 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
       }
     }
   }, [selectedSubject, currentLessonPlan, createLessonPlan, messages])
+
+  // Helper function to detect if an AI response is asking for clarification
+  const detectClarificationRequest = useCallback((response: string): boolean => {
+    const clarificationPatterns = [
+      'specify',
+      'clarify',
+      'which',
+      'what specific',
+      'please be more specific',
+      'could you specify',
+      'what aspect',
+      'more details',
+      'which part',
+      'what type of',
+      'what kind of',
+      'please provide more',
+      'need more information',
+      'could you elaborate',
+      'what exactly',
+      'be more specific',
+      'which topic',
+      'what area',
+      'narrow down'
+    ]
+
+    const responseLower = response.toLowerCase()
+    
+    // Check for clarification patterns
+    const hasPattern = clarificationPatterns.some(pattern => responseLower.includes(pattern))
+    
+    // Check if it ends with a question mark (strong indicator of clarification)
+    const endsWithQuestion = response.trim().endsWith('?')
+    
+    // Check if it contains multiple question words (likely clarification)
+    const questionWords = ['what', 'which', 'how', 'when', 'where', 'why']
+    const questionWordCount = questionWords.filter(word => responseLower.includes(word)).length
+    
+    console.log('🔍 Clarification detection:', {
+      hasPattern,
+      endsWithQuestion,
+      questionWordCount,
+      isAsking: hasPattern || (endsWithQuestion && questionWordCount >= 1)
+    })
+    
+    return hasPattern || (endsWithQuestion && questionWordCount >= 1)
+  }, [])
 
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isTyping) return
@@ -388,30 +488,52 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
 
     // Handle direct educational questions with specific AI responses
     if (isDirectEducationalQuestion && selectedSubject) {
-      console.log('🎓 Detected direct educational question - generating explainer component')
+      console.log('🎓 Detected direct educational question - checking if we need clarification first')
       
       // Save user message to persistence
       await saveMessageToPersistence(userMessage)
       
       try {
-        // Generate brief acknowledgment response instead of long educational content
-        const briefResponse = `I'll create an interactive explanation to help you understand the key ${selectedSubject.name} concepts you need to master.`
+        // First, let the AI decide if it needs clarification or can provide a direct answer
+        const aiResponse = await aiTutor.generateDirectEducationalResponse(
+          currentInput,
+          selectedSubject.name,
+          currentLessonPlan ? { currentLesson: currentLessonPlan.lessons[currentLessonPlan.currentLessonIndex]?.title } : undefined
+        )
 
-        const aiResponse: Message = {
+        const responseMessage: Message = {
           id: `educational-${Date.now()}`,
           role: 'assistant',
-          content: briefResponse,
+          content: aiResponse,
           timestamp: new Date(),
-          hasGeneratedContent: true // Mark as generating content
+          hasGeneratedContent: false // Don't mark as generating content yet
         }
         
-        setMessages(prev => [...prev, aiResponse])
-        await saveMessageToPersistence(aiResponse)
+        setMessages(prev => [...prev, responseMessage])
+        await saveMessageToPersistence(responseMessage)
         
-        // Generate explainer component with the educational content
-        if (currentLessonPlan) {
-          console.log('📚 Generating explainer component for educational question')
+        // Check if the AI response is asking for clarification
+        const isAskingForClarification = detectClarificationRequest(aiResponse)
+
+        console.log('🤔 AI response analysis:', {
+          isAskingForClarification,
+          responsePreview: aiResponse.substring(0, 100) + '...'
+        })
+
+        // Only generate interactive content if the AI provided a substantive answer (not a clarifying question)
+        if (!isAskingForClarification && currentLessonPlan) {
+          console.log('📚 AI provided substantive answer - generating explainer component')
+          
+          // Update the message to mark it as generating content
+          setMessages(prev => prev.map(msg => 
+            msg.id === responseMessage.id 
+              ? { ...msg, hasGeneratedContent: true }
+              : msg
+          ))
+          
           await generateCurrentLessonContent('explainer')
+        } else {
+          console.log('❓ AI is asking for clarification - not generating content yet')
         }
         
         setIsTyping(false)
@@ -1005,28 +1127,33 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             { lesson: currentLesson, progress: currentProgress }
           )
 
-          const explanationMessage: Message = {
-            id: `explanation-${Date.now()}`,
+          // Check if the AI response is asking for clarification
+          const isAskingForClarification = detectClarificationRequest(aiResponse)
+
+          console.log('🤔 Contextual AI response analysis:', {
+            isAskingForClarification,
+            responsePreview: aiResponse.substring(0, 100) + '...'
+          })
+
+          const responseMessage: Message = {
+            id: `contextual-${Date.now()}`,
             role: 'assistant',
             content: aiResponse,
             timestamp: new Date(),
-            hasGeneratedContent: true
+            hasGeneratedContent: !isAskingForClarification // Only mark as generating content if not asking for clarification
           }
-          setMessages(prev => [...prev, explanationMessage])
-          await saveMessageToPersistence(explanationMessage)
+          setMessages(prev => [...prev, responseMessage])
+          await saveMessageToPersistence(responseMessage)
+
+          // Only generate interactive content if the AI provided a substantive answer
+          if (!isAskingForClarification && action === 'concept_expanded') {
+            console.log('📚 AI provided substantive answer - generating suggested component:', action)
+            await generateCurrentLessonContent(action)
+          } else {
+            console.log('❓ AI is asking for clarification - not generating content yet')
+          }
         }
       }
-      
-      // Generate new interactive content based on the specific action
-      let contentAction = ''
-      if (action === 'concept_expanded') {
-        contentAction = 'concept_expanded'
-      } else if (action === 'examples_requested') {
-        contentAction = 'examples_requested'
-      } else {
-        contentAction = 'concept_expanded'
-      }
-      await generateCurrentLessonContent(contentAction)
     } else if (action === 'ready_for_next') {
       // Student indicates they're ready to move forward (Practice This button)
       if (currentLessonPlan && currentProgress) {
@@ -1224,6 +1351,19 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
         
         case 'create_learning_plan': {
           const data = originalData as { subject: string }
+          console.log('🔄 Retrying lesson plan creation for:', data.subject)
+          
+          // Show loading message
+          setIsTyping(true)
+          const retryingMessage: Message = {
+            id: `retrying-plan-${Date.now()}`,
+            role: 'assistant',
+            content: `Let me try creating your lesson plan for ${data.subject} again...`,
+            timestamp: new Date()
+          }
+          setMessages(prev => [...prev, retryingMessage])
+          await saveMessageToPersistence(retryingMessage)
+          
           await createLessonPlan(data.subject, selectedSubject)
           break
         }
@@ -1286,14 +1426,78 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
   useEffect(() => {
     const handleNewSubject = (event: Event) => {
       const customEvent = event as CustomEvent
-      const { subject } = customEvent.detail
+      const { subject, triggeringMessage } = customEvent.detail
       console.log('🆕 ChatPane received new subject event:', subject.name)
+      
+      // Immediately add the user's message to the UI to prevent refresh requirement
+      if (triggeringMessage) {
+        const userMessage: Message = {
+          id: `user-initial-${Date.now()}`,
+          role: 'user',
+          content: triggeringMessage,
+          timestamp: new Date()
+        }
+        
+        // Update UI immediately
+        setMessages(prev => [...prev, userMessage])
+        
+        // Save message to persistence
+        setTimeout(async () => {
+          try {
+            await saveMessageToPersistence(userMessage)
+          } catch (error) {
+            console.error('❌ Failed to save initial user message:', error)
+            // Add to pending queue to retry later
+            setPendingMessages(prev => [...prev, userMessage])
+          }
+        }, 0)
+      }
       
       // Create lesson plan immediately with the new subject context
       if ((!currentLessonPlan || currentLessonPlan.subject !== subject.name) && 
           !lessonPlanCreationInProgress.current) {
         console.log('📚 Creating lesson plan for newly created subject:', subject.name)
+        
+        // Add intermediate message while lesson plan is being created
+        const preparingMessage: Message = {
+          id: `preparing-${Date.now()}`,
+          role: 'assistant',
+          content: `I'm preparing a lesson plan for ${subject.name}. This will just take a moment...`,
+          timestamp: new Date()
+        }
+        setMessages(prev => [...prev, preparingMessage])
+        
+        // Create the lesson plan with retry logic
         createLessonPlan(subject.name, subject)
+          .then(() => {
+            console.log('✅ Lesson plan created successfully for new subject')
+            
+            // Immediately generate an interactive component after lesson plan creation
+            if (currentLessonPlan) {
+              setTimeout(() => {
+                generateCurrentLessonContent('concept-card')
+                  .catch(error => console.error('❌ Failed to generate initial content:', error))
+              }, 500)
+            }
+          })
+          .catch(error => {
+            console.error('❌ Failed to create lesson plan for new subject:', error)
+            
+            // Add error message to inform user
+            const errorMessage: Message = {
+              id: `error-${Date.now()}`,
+              role: 'assistant',
+              content: `I'm having trouble creating a lesson plan for ${subject.name}. Let me try again...`,
+              timestamp: new Date()
+            }
+            setMessages(prev => [...prev, errorMessage])
+            
+            // Try again after a short delay
+            setTimeout(() => {
+              createLessonPlan(subject.name, subject)
+                .catch(e => console.error('❌ Second attempt to create lesson plan failed:', e))
+            }, 2000)
+          })
       }
     }
 
@@ -1301,7 +1505,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     return () => {
       window.removeEventListener('newSubjectCreated', handleNewSubject)
     }
-  }, [createLessonPlan, currentLessonPlan])
+  }, [createLessonPlan, currentLessonPlan, saveMessageToPersistence, generateCurrentLessonContent])
 
   // Listen for contextual content generation events from Dashboard
   useEffect(() => {
@@ -1334,84 +1538,93 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
             { lesson: currentLesson, progress: currentProgress }
           )
 
+          // Check if the AI response is asking for clarification
+          const isAskingForClarification = detectClarificationRequest(aiResponse)
+
+          console.log('🤔 Contextual AI response analysis:', {
+            isAskingForClarification,
+            responsePreview: aiResponse.substring(0, 100) + '...'
+          })
+
           const responseMessage: Message = {
             id: `contextual-${Date.now()}`,
             role: 'assistant',
             content: aiResponse,
             timestamp: new Date(),
-            hasGeneratedContent: true
+            hasGeneratedContent: !isAskingForClarification // Only mark as generating content if not asking for clarification
           }
           setMessages(prev => [...prev, responseMessage])
           await saveMessageToPersistence(responseMessage)
+
+          // Only generate interactive content if the AI provided a substantive answer
+          if (!isAskingForClarification && suggestedComponent) {
+            console.log('📚 AI provided substantive answer - generating suggested component:', suggestedComponent)
+            await generateCurrentLessonContent(suggestedComponent)
+          } else {
+            console.log('❓ AI is asking for clarification - not generating content yet')
+          }
         }
       } else {
-        // Use retry prompt when lesson plan or progress is not available
-        const retryResponse: Message = {
-          id: `contextual-retry-${Date.now()}`,
-          role: 'assistant',
-          content: JSON.stringify({
-            type: 'retry_prompt',
-            message: 'Learning plan not ready yet. Please try again in a moment.',
-            action: 'retry',
-            originalAction: 'contextual_content_request',
-            originalData: { subject, userMessage, suggestedComponent, confidence, reasoning }
-          }),
-          timestamp: new Date(),
-          hasGeneratedContent: false
-        }
-        setMessages(prev => [...prev, retryResponse])
-        await saveMessageToPersistence(retryResponse)
-      }
-
-      // Only generate ONE interactive content component - but NOT if lesson plan creation is in progress
-      if (currentLessonPlan && currentProgress && !lessonPlanCreationInProgress.current) {
-        console.log('📚 Generating single contextual content with suggested component:', suggestedComponent)
+        // No lesson plan exists - try to create one first
+        console.log('📋 No lesson plan exists for contextual content, attempting to create one...')
         
-        // Map suggested component to content action for generateLessonContent
-        let contentAction: 'explainer' | 'concept-card' | 'multiple-choice' | 'fill-blank' | 'step-solver' | 'interactive-example' | 'text-highlighter' | 'drag-drop' | 'graph-visualizer' | 'formula-explorer' = 'explainer'
-        switch (suggestedComponent) {
-          case 'explainer':
-            contentAction = 'explainer'
-            break
-          case 'multiple-choice':
-            contentAction = 'multiple-choice'
-            break
-          case 'fill-blank':
-            contentAction = 'fill-blank'
-            break
-          case 'concept-card':
-            contentAction = 'concept-card'
-            break
-          case 'step-solver':
-            contentAction = 'step-solver'
-            break
-          case 'interactive-example':
-            contentAction = 'interactive-example'
-            break
-          case 'text-highlighter':
-            contentAction = 'text-highlighter'
-            break
-          case 'drag-drop':
-            contentAction = 'drag-drop'
-            break
-          case 'graph-visualizer':
-            contentAction = 'graph-visualizer'
-            break
-          case 'formula-explorer':
-            contentAction = 'formula-explorer'
-            break
-          default:
-            contentAction = 'explainer'
+        if (selectedSubject && !lessonPlanCreationInProgress.current) {
+          try {
+            setIsTyping(true)
+            await createLessonPlan(selectedSubject.name, selectedSubject)
+            
+            // After successful creation, try to generate the contextual content
+            if (currentLessonPlan && currentProgress) {
+              const responseMessage: Message = {
+                id: `contextual-${Date.now()}`,
+                role: 'assistant',
+                content: `Great! I've prepared your lesson plan for ${selectedSubject.name}. Let me create some content for you.`,
+                timestamp: new Date(),
+                hasGeneratedContent: true
+              }
+              setMessages(prev => [...prev, responseMessage])
+              await saveMessageToPersistence(responseMessage)
+            }
+          } catch (error) {
+            console.error('❌ Failed to create lesson plan for contextual content:', error)
+            
+            // Only show retry message if lesson plan creation actually failed
+            const retryResponse: Message = {
+              id: `contextual-retry-${Date.now()}`,
+              role: 'assistant',
+              content: JSON.stringify({
+                type: 'retry_prompt',
+                message: 'Having trouble creating your lesson plan. Please try again.',
+                action: 'retry',
+                originalAction: 'create_learning_plan',
+                originalData: { subject: selectedSubject.name }
+              }),
+              timestamp: new Date(),
+              hasGeneratedContent: false
+            }
+            setMessages(prev => [...prev, retryResponse])
+            await saveMessageToPersistence(retryResponse)
+          } finally {
+            setIsTyping(false)
+          }
+        } else {
+          // Use retry prompt when lesson plan creation is already in progress or no subject
+          const retryResponse: Message = {
+            id: `contextual-retry-${Date.now()}`,
+            role: 'assistant',
+            content: JSON.stringify({
+              type: 'retry_prompt',
+              message: 'Learning plan not ready yet. Please try again in a moment.',
+              action: 'retry',
+              originalAction: 'contextual_content_request',
+              originalData: { subject, userMessage, suggestedComponent, confidence, reasoning }
+            }),
+            timestamp: new Date(),
+            hasGeneratedContent: false
+          }
+          setMessages(prev => [...prev, retryResponse])
+          await saveMessageToPersistence(retryResponse)
         }
-        
-        // Generate exactly ONE piece of content
-        await generateCurrentLessonContent(contentAction)
-      } else if (selectedSubject && !lessonPlanCreationInProgress.current) {
-        // If no lesson plan exists, create one first
-        console.log('📋 No lesson plan exists, creating one first for contextual content')
-        await createLessonPlan(selectedSubject.name, selectedSubject)
-      } else if (lessonPlanCreationInProgress.current) {
-        console.log('⏸️ Lesson plan creation in progress, skipping content generation to avoid duplicates')
       }
     }
 
@@ -1419,7 +1632,7 @@ export const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubjec
     return () => {
       window.removeEventListener('generateContextualContent', handleContextualContent)
     }
-  }, [currentLessonPlan, currentProgress, selectedSubject, saveMessageToPersistence, generateCurrentLessonContent, createLessonPlan])
+  }, [currentLessonPlan, currentProgress, selectedSubject, saveMessageToPersistence, generateCurrentLessonContent, createLessonPlan, detectClarificationRequest])
 
   // Generate dynamic placeholder text based on context
   const getPlaceholderText = (): string => {

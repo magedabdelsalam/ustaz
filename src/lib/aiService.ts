@@ -190,6 +190,12 @@ class AITutorService {
         }
       }
       
+      // Remove trailing commas before closing brackets or braces
+      fixed = fixed.replace(/,(\s*[\]}])/g, '$1');
+      
+      // Fix property keys without quotes
+      fixed = fixed.replace(/([{,]\s*)([a-zA-Z0-9_]+)(\s*:)/g, '$1"$2"$3');
+      
       // Count open and close braces to balance them
       const openBraces = (fixed.match(/\{/g) || []).length
       const closeBraces = (fixed.match(/\}/g) || []).length
@@ -214,6 +220,69 @@ class AITutorService {
         logger.debug('✅ Successfully fixed incomplete JSON')
         return fixed
       } catch {
+        logger.debug('⚠️ Could not fix JSON with standard methods, attempting advanced recovery')
+        
+        try {
+          // More aggressive fixing - extract the valid part of the JSON
+          if (fixed.startsWith('{') && fixed.includes('}')) {
+            // Find the last valid closing brace
+            let validJson = fixed.substring(0, fixed.lastIndexOf('}') + 1);
+            // Ensure we have balanced braces
+            const vOpenBraces = (validJson.match(/\{/g) || []).length;
+            const vCloseBraces = (validJson.match(/\}/g) || []).length;
+            if (vOpenBraces > vCloseBraces) {
+              validJson += '}'.repeat(vOpenBraces - vCloseBraces);
+            }
+            JSON.parse(validJson); // Verify it's valid
+            logger.debug('✅ Successfully recovered partial JSON');
+            return validJson;
+          }
+          
+          // For subjects with simple names, create a minimal valid structure as fallback
+          if (typeof jsonString === 'string' && jsonString.length < 100) {
+            const subjectName = jsonString.replace(/[^a-zA-Z0-9\s]/g, '').trim();
+            const fallbackJson = `{
+              "subject": "${subjectName || 'General Subject'}",
+              "lessons": [
+                {
+                  "id": "lesson-1",
+                  "title": "Introduction to ${subjectName || 'the Subject'}",
+                  "description": "An overview of key concepts",
+                  "concepts": [
+                    {
+                      "id": "concept-1-1",
+                      "name": "Core Concepts",
+                      "description": "Understanding the fundamentals",
+                      "difficulty": "beginner",
+                      "estimatedPracticeItems": 3
+                    }
+                  ]
+                },
+                {
+                  "id": "lesson-2",
+                  "title": "Building Knowledge",
+                  "description": "Developing deeper understanding",
+                  "concepts": [
+                    {
+                      "id": "concept-2-1",
+                      "name": "Advanced Applications",
+                      "description": "Applying concepts in real scenarios",
+                      "difficulty": "intermediate",
+                      "estimatedPracticeItems": 4
+                    }
+                  ]
+                }
+              ]
+            }`;
+            
+            JSON.parse(fallbackJson); // Verify it's valid
+            logger.debug('✅ Created fallback JSON structure');
+            return fallbackJson;
+          }
+        } catch (recoveryError) {
+          logger.error('💥 Recovery attempts failed:', recoveryError);
+        }
+        
         logger.debug('❌ Could not fix JSON, will use fallback')
         throw new Error('Unable to fix incomplete JSON response')
       }
@@ -227,20 +296,37 @@ class AITutorService {
     temperature: number,
     maxTokens: number
   ): Promise<string> {
-    const result = await chatCompletion({
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user }
-      ],
-      temperature,
-      max_tokens: maxTokens
-    })
+    try {
+      const result = await chatCompletion({
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ],
+        temperature,
+        max_tokens: maxTokens
+      })
 
-    const content = result.choices[0]?.message.content
-    if (!content) {
-      throw new Error('No content returned from AI')
+      const content = result.choices[0]?.message.content
+      if (!content) {
+        throw new Error('No content returned from AI')
+      }
+      return content.trim()
+    } catch (error) {
+      // Handle timeout errors specifically
+      if (error instanceof Error && error.message.includes('timed out')) {
+        logger.error('⏰ OpenAI API request timed out:', error.message)
+        throw new Error('AI request timed out - please try again')
+      }
+      
+      // Handle other network/API errors
+      if (error instanceof Error && (error.message.includes('failed') || error.message.includes('network'))) {
+        logger.error('🌐 OpenAI API network error:', error.message)
+        throw new Error('Network error while connecting to AI - please try again')
+      }
+      
+      // Re-throw other errors as-is
+      throw error
     }
-    return content.trim()
   }
 
   async createLearningPlan(subject: string): Promise<LessonPlan> {
@@ -257,7 +343,25 @@ class AITutorService {
       )
       
       const planStructureContent = this.cleanJsonResponse(planStructureResponse)
-      const planStructure = JSON.parse(planStructureContent) as PlanStructureData
+      
+      // Add error handling for initial subject analysis
+      let planStructure: PlanStructureData;
+      try {
+        planStructure = JSON.parse(planStructureContent) as PlanStructureData;
+      } catch (error) {
+        logger.error('❌ Failed to parse subject analysis JSON:', error);
+        // Provide fallback defaults
+        planStructure = {
+          recommendedLessons: 5,
+          complexity: 'intermediate',
+          focusAreas: ['core concepts', 'practical applications'],
+          learningObjectives: ['understand fundamentals', 'apply knowledge'],
+          estimatedHoursPerLesson: 1,
+          prerequisites: [],
+          reasoning: 'Fallback plan for error recovery'
+        };
+        logger.debug('⚠️ Using fallback subject analysis:', planStructure)
+      }
 
       const expectedLessons = planStructure.recommendedLessons || 8
       const complexity = planStructure.complexity || 'intermediate'
@@ -341,48 +445,58 @@ Requirements:
               if (!content) throw new Error('No content received from AI')
 
               const cleanedContent = this.cleanJsonResponse(content)
-              const fixedContent = this.fixIncompleteJson(cleanedContent)
-              const parsedData = JSON.parse(fixedContent)
               
-              // Validate the response structure
-              if (!parsedData.subject || !parsedData.lessons || !Array.isArray(parsedData.lessons)) {
-                throw new Error('Invalid lesson plan structure from AI')
-              }
-              
-              // Ensure we have a reasonable number of lessons
-              if (parsedData.lessons.length < 3) {
-                throw new Error(`Too few lessons generated: ${parsedData.lessons.length}`)
-              }
-              
-              // Validate that lessons have concepts
-              for (let i = 0; i < parsedData.lessons.length; i++) {
-                const lesson = parsedData.lessons[i]
-                if (!lesson.concepts || !Array.isArray(lesson.concepts) || lesson.concepts.length === 0) {
-                  // Generate fallback concepts for this lesson if missing
-                  lesson.concepts = this.generateFallbackConcepts(lesson.title || `Lesson ${i + 1}`, i)
+              try {
+                const fixedContent = this.fixIncompleteJson(cleanedContent)
+                const parsedData = JSON.parse(fixedContent)
+                
+                // Validate the response structure
+                if (!parsedData.subject || !parsedData.lessons || !Array.isArray(parsedData.lessons)) {
+                  throw new Error('Invalid lesson plan structure from AI')
                 }
+                
+                return parsedData
+              } catch (parseError) {
+                // If this isn't the last attempt, rethrow to trigger retry
+                if (attempt < maxRetries) {
+                  throw parseError
+                }
+                
+                // On last attempt, create a minimal fallback structure
+                logger.error('❌ Failed to parse lesson plan JSON after all attempts:', parseError)
+                logger.debug('⚠️ Creating fallback lesson plan for:', subject)
+                
+                // Create a meaningful fallback lesson plan when all else fails
+                const fallbackLessonPlan = this.createSubjectSpecificFallback(subject)
+                
+                // Save the fallback plan
+                this.lessonPlans.set(subject, fallbackLessonPlan);
+                
+                // Create default progress
+                const fallbackProgress: LearningProgress = {
+                  correctAnswers: 0,
+                  totalAttempts: 0,
+                  readyForNext: false,
+                  needsReview: false
+                };
+                this.progress.set(subject, fallbackProgress);
+                
+                logger.debug(`⚠️ Using dynamic fallback lesson plan for "${subject}" with ${fallbackLessonPlan.lessons.length} lessons`);
+                return fallbackLessonPlan;
               }
-              
-              logger.debug(`✅ Successfully generated lesson plan with ${parsedData.lessons.length} lessons on attempt ${attempt}`)
-              return parsedData
-              
             } catch (error) {
               lastError = error as Error
-              console.error(`❌ Attempt ${attempt} failed:`, error)
-              
-              // If it's the last attempt, don't retry
-              if (attempt === maxRetries) {
-                throw lastError
+              logger.error(`❌ Attempt ${attempt} failed:`, error)
+              if (attempt < maxRetries) {
+                // Add some delay between retries
+                await new Promise(resolve => setTimeout(resolve, 1000))
+              } else {
+                throw error
               }
-              
-              // Wait before retrying (exponential backoff)
-              const delay = Math.pow(2, attempt) * 1000 // 2s, 4s...
-              logger.debug(`⏳ Waiting ${delay}ms before retry...`)
-              await new Promise(resolve => setTimeout(resolve, delay))
             }
           }
           
-          throw lastError || new Error('All retry attempts failed')
+          throw lastError || new Error('Failed to generate lesson plan after multiple attempts')
         }
       )
       
@@ -421,7 +535,7 @@ Requirements:
           title: lesson.title || `Lesson ${index + 1}`,
           description: lesson.description || 'Learn the fundamentals of this topic.',
           completed: false,
-          content: { type: 'concept-card', data: {} }, // Will be generated when accessed
+          content: { type: 'concept-card', data: {} as Record<string, unknown> as Record<string, unknown> }, // Will be generated when accessed
           concepts: lesson.concepts?.map((concept, conceptIndex) => ({
             id: concept.id || `concept-${index + 1}-${conceptIndex + 1}`,
             name: concept.name || `Concept ${conceptIndex + 1}`,
@@ -445,16 +559,134 @@ Requirements:
       return lessonPlan
       
     } catch (error) {
-      console.error('🚨 Error creating learning plan after all retries:', error)
-      console.error('Error details:', {
-        message: (error as Error).message,
-        subject,
-        timestamp: new Date().toISOString()
-      })
+      logger.error('❌ Failed to create lesson plan:', error)
       
-      // Generate dynamic fallback plan if AI fails
-      logger.debug('⚠️ Generating dynamic fallback plan for subject:', subject)
-      return this.generateUnifiedFallback<LessonPlan>('create_learning_plan', { subject }, 'lesson-plan', `Failed to create learning plan for ${subject}. Would you like to try again?`)
+      // Handle different types of errors with specific messaging
+      if (error instanceof Error) {
+        if (error.message.includes('timed out')) {
+          logger.error('⏰ Lesson plan creation timed out')
+          throw new Error(`The AI service is taking too long to respond. Please try again in a moment.`)
+        }
+        
+        if (error.message.includes('network') || error.message.includes('failed')) {
+          logger.error('🌐 Network error during lesson plan creation')
+          throw new Error(`Network error while creating lesson plan. Please check your connection and try again.`)
+        }
+      }
+      
+      // Instead of templates, try a simplified AI generation one more time
+      logger.debug('🔄 Attempting simplified AI generation for:', subject)
+      
+      try {
+        // Use a much shorter timeout for the fallback attempt
+        const simplePrompt = `Create a learning plan for "${subject}". Return only valid JSON:
+{
+  "subject": "${subject}",
+  "lessons": [
+    {
+      "id": "lesson-1",
+      "title": "Lesson title for ${subject}",
+      "description": "What students will learn",
+      "concepts": [
+        {
+          "id": "concept-1-1",
+          "name": "Specific concept name",
+          "description": "What this concept covers",
+          "difficulty": "beginner",
+          "estimatedPracticeItems": 3
+        }
+      ]
+    }
+  ]
+}
+
+Create 3-4 lessons with 2-3 concepts each. Focus on ${subject} specifically.`
+
+        const fallbackContent = await this.sendPrompt(
+          "You are an expert curriculum designer. Create a specific learning plan for the given subject.",
+          simplePrompt,
+          0.2,
+          1200
+        )
+        
+        const cleanedFallbackContent = this.cleanJsonResponse(fallbackContent)
+        const fallbackData = JSON.parse(cleanedFallbackContent)
+        
+        if (!fallbackData.subject || !fallbackData.lessons || !Array.isArray(fallbackData.lessons)) {
+          throw new Error('Invalid fallback lesson plan structure')
+        }
+        
+        // Create the lesson plan object from AI-generated content
+        const lessonPlan: LessonPlan = {
+          subject: fallbackData.subject,
+          lessons: fallbackData.lessons.map((lesson: unknown, index: number) => {
+            const lessonObj = lesson as { 
+              id?: string; 
+              title?: string; 
+              description?: string; 
+              concepts?: unknown[] 
+            }
+            
+            return {
+              id: lessonObj.id || `lesson-${index + 1}`,
+              title: lessonObj.title || `Lesson ${index + 1}`,
+              description: lessonObj.description || 'Learn important concepts.',
+              completed: false,
+              content: { type: 'concept-card', data: {} as Record<string, unknown> as Record<string, unknown> },
+              concepts: lessonObj.concepts?.map((concept: unknown, conceptIndex: number) => {
+                const conceptObj = concept as {
+                  id?: string;
+                  name?: string;
+                  description?: string;
+                  difficulty?: string;
+                  estimatedPracticeItems?: number;
+                }
+                
+                return {
+                  id: conceptObj.id || `concept-${index + 1}-${conceptIndex + 1}`,
+                  name: conceptObj.name || `Concept ${conceptIndex + 1}`,
+                  description: conceptObj.description || 'Learn this concept.',
+                  difficulty: (conceptObj.difficulty as 'beginner' | 'intermediate' | 'advanced') || 'beginner',
+                  estimatedPracticeItems: conceptObj.estimatedPracticeItems || 3
+                }
+              }) || [],
+              currentConceptIndex: 0
+            }
+          }),
+          currentLessonIndex: 0
+        }
+
+        this.lessonPlans.set(subject, lessonPlan)
+        
+        // Create default progress
+        const fallbackProgress: LearningProgress = {
+          correctAnswers: 0,
+          totalAttempts: 0,
+          readyForNext: false,
+          needsReview: false
+        }
+        this.progress.set(subject, fallbackProgress)
+        
+        logger.debug(`✅ Simplified AI generation succeeded for "${subject}" with ${lessonPlan.lessons.length} lessons`)
+        return lessonPlan
+        
+      } catch (fallbackError) {
+        logger.error('❌ Even simplified AI generation failed:', fallbackError)
+        
+        // Provide specific error messages for different scenarios
+        if (fallbackError instanceof Error) {
+          if (fallbackError.message.includes('timed out')) {
+            throw new Error(`AI service is currently slow. Please try again in a few minutes.`)
+          }
+          
+          if (fallbackError.message.includes('network')) {
+            throw new Error(`Connection issue. Please check your internet and try again.`)
+          }
+        }
+        
+        // Generic fallback message for other errors
+        throw new Error(`Unable to create lesson plan for "${subject}" right now. Please try again.`)
+      }
     }
   }
 
@@ -1017,7 +1249,39 @@ Consider:
       
     } catch (error) {
       logger.error('Failed to generate lesson content:', error)
-      // Return placeholder content instead of generating a fallback
+      
+      // Handle timeout errors specifically
+      if (error instanceof Error && error.message.includes('timed out')) {
+        logger.error('⏰ Lesson content generation timed out')
+        // Return a retry prompt instead of placeholder content for timeouts
+        return {
+          type: 'placeholder',
+          data: {
+            type: 'retry_prompt',
+            message: 'Content generation is taking too long. Please try again.',
+            action: 'retry',
+            originalAction: 'generate_lesson_content',
+            originalData: { subjectName, lessonTitle: lesson.title, contentType }
+          }
+        }
+      }
+      
+      // Handle network errors
+      if (error instanceof Error && (error.message.includes('network') || error.message.includes('failed'))) {
+        logger.error('🌐 Network error during content generation')
+        return {
+          type: 'placeholder',
+          data: {
+            type: 'retry_prompt',
+            message: 'Network error while creating content. Please try again.',
+            action: 'retry',
+            originalAction: 'generate_lesson_content',
+            originalData: { subjectName, lessonTitle: lesson.title, contentType }
+          }
+        }
+      }
+      
+      // For other errors, return placeholder content as before
       return this.createPlaceholderContent(contentType)
     }
   }
@@ -1507,10 +1771,410 @@ Keep it under 2 sentences. Be clear and direct.`
 
   private isPlanDataValid(data: unknown): data is PlanDataStructure {
     return typeof data === 'object' && data !== null &&
-           'subject' in data && 'lessons' in data &&
-           Array.isArray((data as PlanDataStructure).lessons)
+            'lessons' in data &&
+            Array.isArray((data as PlanDataStructure).lessons)
+  }
+
+  private createSubjectSpecificFallback(subject: string): LessonPlan {
+    const subjectLower = subject.toLowerCase()
+    
+    // Determine subject category for better lesson structure
+    let lessons: Array<{
+      id: string;
+      title: string;
+      description: string;
+      completed: boolean;
+      content: { type: 'concept-card'; data: Record<string, unknown> };
+      concepts: ConceptInfo[];
+      currentConceptIndex: number;
+    }> = []
+    
+    if (subjectLower.includes('history')) {
+      lessons = [
+        {
+          id: "lesson-1",
+          title: `Introduction to ${subject}`,
+          description: "Explore the foundational events and key periods that shaped this historical era",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-1-1",
+              name: "Historical Context",
+              description: `Understanding the background and setting of ${subject}`,
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            },
+            {
+              id: "concept-1-2", 
+              name: "Key Time Periods",
+              description: "Important dates and chronological framework",
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-2", 
+          title: `Major Events in ${subject}`,
+          description: "Study the significant events and turning points",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-2-1",
+              name: "Pivotal Moments",
+              description: "Critical events that changed the course of history",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            },
+            {
+              id: "concept-2-2",
+              name: "Cause and Effect",
+              description: "Understanding how events influenced each other",
+              difficulty: "intermediate", 
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-3",
+          title: `Legacy and Impact of ${subject}`,
+          description: "Examine the lasting effects and modern relevance",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-3-1",
+              name: "Historical Significance",
+              description: "Why this period matters for understanding today",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-3-2",
+              name: "Modern Connections",
+              description: "How this history influences contemporary events",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            }
+          ],
+          currentConceptIndex: 0
+        }
+      ]
+    } else if (subjectLower.includes('science') || subjectLower.includes('physics') || subjectLower.includes('chemistry') || subjectLower.includes('biology')) {
+      lessons = [
+        {
+          id: "lesson-1",
+          title: `Fundamentals of ${subject}`,
+          description: "Master the basic principles and scientific foundations",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-1-1",
+              name: "Core Principles",
+              description: `Essential scientific concepts in ${subject}`,
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            },
+            {
+              id: "concept-1-2",
+              name: "Scientific Method",
+              description: "How research and discovery work in this field",
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-2",
+          title: `Applied ${subject}`,
+          description: "Learn practical applications and problem-solving",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-2-1",
+              name: "Real-World Applications",
+              description: "How these concepts apply in everyday life",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            },
+            {
+              id: "concept-2-2",
+              name: "Problem Solving",
+              description: "Analytical thinking and scientific reasoning",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-3",
+          title: `Advanced ${subject}`,
+          description: "Explore complex concepts and cutting-edge developments",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-3-1",
+              name: "Advanced Theory",
+              description: "Complex principles and relationships",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-3-2",
+              name: "Current Research",
+              description: "Latest developments and future directions",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            }
+          ],
+          currentConceptIndex: 0
+        }
+      ]
+    } else if (subjectLower.includes('math') || subjectLower.includes('algebra') || subjectLower.includes('calculus') || subjectLower.includes('geometry')) {
+      lessons = [
+        {
+          id: "lesson-1",
+          title: `${subject} Foundations`,
+          description: "Build essential mathematical understanding and skills",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-1-1",
+              name: "Basic Concepts",
+              description: `Fundamental ideas and terminology in ${subject}`,
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            },
+            {
+              id: "concept-1-2",
+              name: "Problem-Solving Strategies",
+              description: "Systematic approaches to mathematical thinking",
+              difficulty: "beginner",
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-2",
+          title: `${subject} Applications`,
+          description: "Practice solving problems and applying concepts",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-2-1",
+              name: "Computational Skills",
+              description: "Accurate calculation and formula application",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-2-2",
+              name: "Word Problems",
+              description: "Translating real situations into mathematical language",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-3",
+          title: `Mastering ${subject}`,
+          description: "Develop advanced skills and mathematical reasoning",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-3-1",
+              name: "Advanced Techniques",
+              description: "Sophisticated mathematical methods and proofs",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-3-2",
+              name: "Mathematical Reasoning",
+              description: "Logic, proof, and abstract thinking",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            }
+          ],
+          currentConceptIndex: 0
+        }
+      ]
+    } else if (subjectLower.includes('language') || subjectLower.includes('english') || subjectLower.includes('writing') || subjectLower.includes('literature')) {
+      lessons = [
+        {
+          id: "lesson-1",
+          title: `${subject} Basics`,
+          description: "Develop core language skills and understanding",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-1-1",
+              name: "Language Fundamentals",
+              description: `Essential grammar, vocabulary, and structure in ${subject}`,
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            },
+            {
+              id: "concept-1-2",
+              name: "Communication Skills",
+              description: "Clear expression and comprehension",
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-2",
+          title: `${subject} in Practice`,
+          description: "Apply language skills in real contexts",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-2-1",
+              name: "Reading Comprehension",
+              description: "Understanding and analyzing written texts",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            },
+            {
+              id: "concept-2-2",
+              name: "Writing Skills",
+              description: "Effective composition and expression",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-3",
+          title: `Advanced ${subject}`,
+          description: "Master complex language use and critical analysis",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-3-1",
+              name: "Critical Analysis",
+              description: "Deep interpretation and evaluation of texts",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-3-2",
+              name: "Advanced Expression",
+              description: "Sophisticated communication and style",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            }
+          ],
+          currentConceptIndex: 0
+        }
+      ]
+    } else {
+      // Generic fallback for any other subject
+      lessons = [
+        {
+          id: "lesson-1",
+          title: `Introduction to ${subject}`,
+          description: "Learn the fundamental concepts and principles",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-1-1",
+              name: "Core Concepts",
+              description: `Essential ideas and principles in ${subject}`,
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            },
+            {
+              id: "concept-1-2",
+              name: "Basic Terminology",
+              description: "Key terms and vocabulary for this field",
+              difficulty: "beginner",
+              estimatedPracticeItems: 3
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-2",
+          title: `Exploring ${subject}`,
+          description: "Develop deeper understanding through practice and application",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-2-1",
+              name: "Practical Applications",
+              description: "How to apply knowledge in real situations",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            },
+            {
+              id: "concept-2-2",
+              name: "Skill Development",
+              description: "Building competency through guided practice",
+              difficulty: "intermediate",
+              estimatedPracticeItems: 4
+            }
+          ],
+          currentConceptIndex: 0
+        },
+        {
+          id: "lesson-3",
+          title: `Mastering ${subject}`,
+          description: "Achieve expertise and develop advanced understanding",
+          completed: false,
+          content: { type: 'concept-card', data: {} as Record<string, unknown> },
+          concepts: [
+            {
+              id: "concept-3-1",
+              name: "Advanced Concepts",
+              description: "Complex ideas and sophisticated understanding",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            },
+            {
+              id: "concept-3-2",
+              name: "Expert Application",
+              description: "Professional-level skills and creative problem-solving",
+              difficulty: "advanced",
+              estimatedPracticeItems: 5
+            }
+          ],
+          currentConceptIndex: 0
+        }
+      ]
+    }
+    
+    return {
+      subject: subject,
+      lessons: lessons,
+      currentLessonIndex: 0
+    }
   }
 }
 
-export const aiTutor = new AITutorService() 
+export const aiTutor = new AITutorService()
+export default AITutorService 
 
