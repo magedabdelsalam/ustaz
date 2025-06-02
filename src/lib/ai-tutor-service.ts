@@ -766,9 +766,9 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       // Get the assistant's response
       const messages = await this.openai.beta.threads.messages.list(threadId);
       const lastMessage = messages.data[0];
-      const response = lastMessage.content[0].type === 'text' 
-        ? lastMessage.content[0].text.value 
-        : 'I apologize, but I could not generate a proper response.';
+      const response = lastMessage.content[0].type === 'text'
+        ? lastMessage.content[0].text.value
+        : 'Unable to generate a response. Check server logs for details.';
 
       // Add assistant response to conversation history
       this.context.conversationHistory.push({
