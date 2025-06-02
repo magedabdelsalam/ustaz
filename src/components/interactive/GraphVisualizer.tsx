@@ -382,12 +382,12 @@ export const GraphVisualizer = memo(function GraphVisualizer({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
             {getGraphIcon()}
-            {graphContent.title}
+            <span className="ml-2">{graphContent.title}</span>
           </CardTitle>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={handleReset}>
@@ -395,9 +395,7 @@ export const GraphVisualizer = memo(function GraphVisualizer({
             </Button>
           </div>
         </div>
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <p className="text-blue-900 text-sm">{graphContent.description}</p>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{graphContent.description}</p>
       </CardHeader>
 
       <CardContent className="space-y-6">

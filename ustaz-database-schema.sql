@@ -18,6 +18,18 @@ CREATE TABLE profiles (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- AI Assistant settings table - stores global AI assistant configuration
+CREATE TABLE ai_assistant_settings (
+  id SERIAL PRIMARY KEY,
+  assistant_id TEXT NOT NULL,
+  subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  name TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Subjects table - stores learning subjects/topics
 CREATE TABLE subjects (
   id TEXT PRIMARY KEY,
@@ -74,6 +86,10 @@ CREATE TABLE content_feed (
 -- Profile indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON profiles(email);
 
+-- AI Assistant settings indexes
+CREATE INDEX IF NOT EXISTS idx_ai_assistant_active ON ai_assistant_settings(is_active);
+CREATE INDEX IF NOT EXISTS idx_ai_assistant_subject ON ai_assistant_settings(subject_id);
+
 -- Subject indexes
 CREATE INDEX IF NOT EXISTS idx_subjects_user_id ON subjects(user_id);
 CREATE INDEX IF NOT EXISTS idx_subjects_last_active ON subjects(user_id, last_active DESC);
@@ -92,6 +108,7 @@ CREATE INDEX IF NOT EXISTS idx_content_feed_order ON content_feed(subject_id, or
 
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_assistant_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE content_feed ENABLE ROW LEVEL SECURITY;
@@ -100,6 +117,9 @@ ALTER TABLE content_feed ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- AI Assistant settings policies (read-only for all authenticated users)
+CREATE POLICY "All authenticated users can view AI settings" ON ai_assistant_settings FOR SELECT USING (auth.role() = 'authenticated');
 
 -- Subject policies
 CREATE POLICY "Users can view own subjects" ON subjects FOR SELECT USING (auth.uid() = user_id);
@@ -152,6 +172,10 @@ CREATE TRIGGER update_profiles_updated_at
   BEFORE UPDATE ON profiles 
   FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 
+CREATE TRIGGER update_ai_assistant_settings_updated_at 
+  BEFORE UPDATE ON ai_assistant_settings 
+  FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+
 -- Function to clean up old data
 CREATE OR REPLACE FUNCTION cleanup_old_data()
 RETURNS void AS $$
@@ -180,6 +204,7 @@ $$ LANGUAGE plpgsql;
 -- ============================================================
 
 COMMENT ON TABLE profiles IS 'Stores user profile information';
+COMMENT ON TABLE ai_assistant_settings IS 'Stores per-subject AI assistant configuration and OpenAI assistant IDs';
 COMMENT ON TABLE subjects IS 'Stores learning subjects/topics with lesson plans and progress';
 COMMENT ON TABLE chat_messages IS 'Stores conversation history between user and AI tutor';
 COMMENT ON TABLE content_feed IS 'Stores interactive learning components in chronological order';

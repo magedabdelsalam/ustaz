@@ -32,99 +32,6 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
   const [playSpeed] = useState(2000) // milliseconds
   
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use category if available
-    if (solverContent.category && solverContent.category !== 'Problem Solution') {
-      return `${solverContent.category} Problem`
-    }
-
-    // Priority 2: Use problemType if it's specific and meaningful
-    if (solverContent.problemType && solverContent.problemType !== 'Problem Solution') {
-      return solverContent.problemType
-    }
-
-    // Priority 3: Check for specific problem types and create contextual titles
-    const problemLower = solverContent.problem.toLowerCase()
-    
-    const problemTypeKeywords = [
-      { words: ['derivative', 'differentiate', 'rate of change'], title: 'Calculus Problem' },
-      { words: ['integral', 'integrate', 'area under curve'], title: 'Integration Problem' },
-      { words: ['quadratic', 'parabola', 'x²'], title: 'Quadratic Equation' },
-      { words: ['linear equation', 'slope', 'y = mx + b'], title: 'Linear Equation' },
-      { words: ['triangle', 'angle', 'pythagorean'], title: 'Geometry Problem' },
-      { words: ['probability', 'chance', 'odds'], title: 'Probability Problem' },
-      { words: ['logarithm', 'log', 'exponential'], title: 'Logarithmic Problem' },
-      { words: ['matrix', 'determinant', 'eigenvalue'], title: 'Linear Algebra Problem' },
-      { words: ['optimize', 'maximum', 'minimum'], title: 'Optimization Problem' },
-      { words: ['physics', 'force', 'velocity', 'acceleration'], title: 'Physics Problem' }
-    ]
-
-    for (const problemType of problemTypeKeywords) {
-      if (problemType.words.some(keyword => problemLower.includes(keyword))) {
-        return problemType.title
-      }
-    }
-
-    // Priority 4: Subject-specific patterns based on problem content
-    if (problemLower.includes('solve') || problemLower.includes('find') || problemLower.includes('calculate')) {
-      if (problemLower.includes('x') || problemLower.includes('=') || /\d+/.test(problemLower)) {
-        return 'Math Problem'
-      }
-    }
-
-    if (problemLower.includes('prove') || problemLower.includes('theorem') || problemLower.includes('formula')) {
-      return 'Mathematical Proof'
-    }
-
-    if (problemLower.includes('rate') || problemLower.includes('speed') || problemLower.includes('velocity')) {
-      return 'Rate Problem'
-    }
-
-    if (problemLower.includes('area') || problemLower.includes('volume') || problemLower.includes('perimeter')) {
-      return 'Geometry Problem'
-    }
-
-    // Priority 5: Look at the steps for context clues
-    if (solverContent.steps && solverContent.steps.length > 0) {
-      const allStepsText = solverContent.steps.map(step => step.description).join(' ').toLowerCase()
-      
-      if (allStepsText.includes('derivative') || allStepsText.includes('differentiate')) {
-        return 'Calculus Problem'
-      }
-      if (allStepsText.includes('factor') || allStepsText.includes('expand')) {
-        return 'Algebra Problem'
-      }
-      if (allStepsText.includes('triangle') || allStepsText.includes('angle')) {
-        return 'Geometry Problem'
-      }
-    }
-
-    // Priority 6: Extract key topic more intelligently
-    const meaningfulWords = solverContent.problem.split(' ')
-      .filter(word => {
-        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-        return cleanWord.length > 3 && 
-               !['find', 'solve', 'calculate', 'determine', 'what', 'how', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-      })
-      .map(word => word.replace(/[^\w]/g, ''))
-      .filter(word => word.length > 0)
-
-    if (meaningfulWords.length > 0) {
-      const keyTopic = meaningfulWords[0]
-      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Problem`
-    }
-
-    // Priority 7: Default fallback based on number of steps
-    if (solverContent.steps.length === 1) {
-      return 'Single-Step Solution'
-    } else if (solverContent.steps.length <= 3) {
-      return 'Step-by-Step Solution'
-    } else {
-      return 'Multi-Step Problem'
-    }
-  }
-
   const handleNextStep = () => {
     if (currentStep < solverContent.steps.length) {
       const newStep = currentStep + 1
@@ -180,8 +87,6 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
   }
 
   const handleNextProblem = async () => {
-    console.log('🎯 StepByStepSolver: Next Problem button clicked!')
-    
     onInteraction('next_problem', {
       componentId: id,
       category: solverContent.category,
@@ -204,33 +109,20 @@ export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, 
   const progressPercent = Math.round((currentStep / solverContent.steps.length) * 100)
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
-            <Calculator className="h-6 w-6 text-emerald-600 mr-2" />
-            {generateMeaningfulTitle()}
+            <Calculator className="h-6 w-6 text-blue-600 mr-2" />
+            {solverContent.category || solverContent.problemType}
           </CardTitle>
-          <div className="flex items-center space-x-2">
-            {solverContent.category && (
-              <Badge variant="outline" className="text-xs font-medium">
-                {solverContent.category}
-              </Badge>
-            )}
-            <Badge variant="outline" className="text-xs font-medium">
-              {solverContent.problemType}
+          {solverContent.difficulty && (
+            <Badge className={getDifficultyColor(solverContent.difficulty)}>
+              <span className="text-xs font-semibold capitalize tracking-wide">{solverContent.difficulty}</span>
             </Badge>
-            {solverContent.difficulty && (
-              <Badge className={getDifficultyColor(solverContent.difficulty)}>
-                <span className="text-xs font-semibold capitalize tracking-wide">{solverContent.difficulty}</span>
-              </Badge>
-            )}
-          </div>
+          )}
         </div>
-        <div className="bg-emerald-50 p-5 rounded-lg border border-emerald-200 mt-3">
-          <h3 className="font-semibold text-emerald-900 mb-3 text-base">Problem:</h3>
-          <p className="text-emerald-800 text-lg font-medium leading-relaxed">{solverContent.problem}</p>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{solverContent.problem}</p>
       </CardHeader>
       
       <CardContent className="space-y-4">

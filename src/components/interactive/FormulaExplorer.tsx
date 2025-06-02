@@ -234,11 +234,11 @@ export const FormulaExplorer = memo(function FormulaExplorer({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            <Calculator className="h-5 w-5 text-green-600 mr-2" />
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <Calculator className="h-6 w-6 text-purple-600 mr-2" />
             {formulaContent.title}
           </CardTitle>
           <div className="flex gap-2">
@@ -259,12 +259,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
             </Button>
           </div>
         </div>
-        <div className="bg-green-50 p-4 rounded-lg">
-          <p className="text-green-900 text-sm mb-3">{formulaContent.description}</p>
-          <div className="bg-white p-3 rounded border">
-            {renderFormula(formulaContent.formula, true)}
-          </div>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{formulaContent.description}</p>
       </CardHeader>
 
       <CardContent className="space-y-6">

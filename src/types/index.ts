@@ -27,19 +27,15 @@ export interface Subject {
   completedAt?: Date
   topicKeywords: string[]
   messageCount: number
+  lastActive: Date
   lessonPlan?: {
-    lessons: Array<{ id: string; title: string; description: string }>
+    lessons: Array<{
+      id: string
+      title: string
+      description: string
+    }>
     currentLessonIndex: number
   }
-  learningProgress?: {
-    correctAnswers: number
-    totalAttempts: number
-    currentLessonIndex?: number
-    totalLessons?: number
-    needsReview?: boolean
-    readyForNext?: boolean
-  }
-  lastActive: Date
 }
 
 // ============================================================
@@ -271,7 +267,6 @@ export interface UseSubjectSessionProps {
   user?: { id: string } | null
   selectedSubject: Subject | null
   onMessagesLoaded?: (messages: Message[]) => void
-  onLessonPlanLoaded?: (plan: LessonPlan | null, progress: LearningProgress | null) => void
 }
 
 export interface UsePendingMessagesProps {

@@ -1,55 +1,39 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'
 import { HistoryPane } from '@/components/HistoryPane'
 import { ContentPane } from '@/components/ContentPane'
 import { ChatPane, ChatPaneRef } from '@/components/ChatPane'
 import { Button } from '@/components/ui/button'
-import { useError } from '@/components/ErrorProvider'
-import { useSupabaseOperations } from '@/hooks/useSupabaseOperations'
+import { persistenceService } from '@/lib/persistenceService'
+import { InteractiveContent } from '@/types'
 
 export function Dashboard() {
   const { user } = useAuth()
-  const { showSuccess } = useError()
-  const { testConnection } = useSupabaseOperations()
   const { 
     subjects, 
     currentSubject, 
-    analyzeMessage,
     selectSubject,
     createSubject,
-    deleteSubject,
-    updateSubjectProgress
+    deleteSubject
   } = useSubjects()
   const chatRef = useRef<ChatPaneRef>(null)
   const lastUserMessageRef = useRef<{ id: string; content: string; previousSubjectId: string | null } | null>(null)
 
   // Test connection on mount
   useEffect(() => {
-    testConnection()
-  }, [testConnection])
-
-  // Listen for progress updates from ChatPane
-  useEffect(() => {
-    const handleProgressUpdate = (event: CustomEvent) => {
-      const { subjectId, learningProgress } = event.detail
-      console.log('📊 Dashboard received progress update:', { subjectId, learningProgress })
-      
-      if (updateSubjectProgress && subjectId) {
-        updateSubjectProgress(subjectId, learningProgress)
-        console.log('✅ Subject progress updated in Dashboard')
+    persistenceService.testConnection().then(success => {
+      if (success) {
+        console.log('✅ Database connection successful')
+      } else {
+        console.error('❌ Database connection failed')
       }
-    }
+    })
+  }, [])
 
-    window.addEventListener('progressUpdated', handleProgressUpdate as EventListener)
-    return () => {
-      window.removeEventListener('progressUpdated', handleProgressUpdate as EventListener)
-    }
-  }, [updateSubjectProgress])
-
-  // Listen for user messages from ChatPane
+  // Listen for user messages from ChatPane (for tracking purposes)
   useEffect(() => {
     const handleUserMessage = (event: CustomEvent) => {
       const { messageId, content } = event.detail
@@ -63,87 +47,119 @@ export function Dashboard() {
       }
     }
 
-    window.addEventListener('userMessageSent', handleUserMessage as EventListener)
-    return () => {
-      window.removeEventListener('userMessageSent', handleUserMessage as EventListener)
-    }
-  }, [currentSubject])
+    const handleNewSubjectCreated = (event: CustomEvent) => {
+      const { subject, initialMessage, initialResponse } = event.detail
 
-  // Optimized message handler - no useEffect needed
-  const handleNewMessage = async (message: string, isUserMessage: boolean = true) => {
-    try {
-      console.log('🎯 Dashboard handling new message:', { message: message.substring(0, 50) + '...', isUserMessage })
+      console.log('🎯 Dashboard received new subject created event:', subject.name)
+
+      // Check if subject already exists by ID
+      const subjectExists = subjects.some(s => s.id === subject.id)
       
-      // Only process user messages for subject detection
-      if (!isUserMessage) {
-        console.log('⏸️ Skipping non-user message')
-        return
-      }
-
-      // Analyze message for subject and component suggestions
-      const analysis = await analyzeMessage(message)
-      console.log('📊 Message analysis:', analysis)
-
-      // Handle subject detection based on analysis result structure
-      if (analysis.isNewSubject && analysis.subjectName) {
-        // Check if subject already exists
-        const existingSubject = subjects.find(s => 
-          s.name.toLowerCase() === analysis.subjectName.toLowerCase()
-        )
-
+      if (!subjectExists) {
+        // If not, create it
+        createSubject(subject.name)
+          .then(newSubject => {
+            console.log('✅ Created new subject:', newSubject.name)
+            // Automatically select this new subject
+            selectSubject(newSubject)
+            
+            // Log the initial messages for context
+            if (initialMessage) {
+              // Check if initialMessage is an object with content property or a string
+              const messageContent = typeof initialMessage === 'string' 
+                ? initialMessage 
+                : (initialMessage.content || initialMessage.toString());
+              console.log('📝 Initial message carried over:', messageContent.substring(0, 30) + '...')
+            }
+            if (initialResponse) {
+              console.log('🤖 Initial response carried over:', initialResponse.content.substring(0, 30) + '...')
+            }
+            
+            // Wait for the subject to be fully saved to the database before saving messages
+            // This prevents foreign key constraint errors
+            setTimeout(async () => {
+              try {
+                // Now that subject should be in the database, save the messages
+                if (initialMessage && typeof initialMessage === 'object' && initialMessage.content) {
+                  // Save the actual messages
+                  const userMessageSaved = await persistenceService.saveMessage({
+                    id: initialMessage.id || `user-${Date.now()}`,
+                    user_id: user?.id || '',
+                    subject_id: newSubject.id,
+                    role: 'user',
+                    content: initialMessage.content,
+                    timestamp: initialMessage.timestamp?.toISOString() || new Date().toISOString(),
+                    has_generated_content: false
+                  });
+                  
+                  if (userMessageSaved) {
+                    console.log('✅ Saved initial user message for new subject');
+                  }
+                  
+                  if (initialResponse) {
+                    const aiMessageSaved = await persistenceService.saveMessage({
+                      id: initialResponse.id || `ai-${Date.now()}`,
+                      user_id: user?.id || '',
+                      subject_id: newSubject.id,
+                      role: 'assistant',
+                      content: initialResponse.content,
+                      timestamp: initialResponse.timestamp?.toISOString() || new Date().toISOString(),
+                      has_generated_content: initialResponse.hasGeneratedContent || false
+                    });
+                    
+                    if (aiMessageSaved) {
+                      console.log('✅ Saved initial AI response for new subject');
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('❌ Failed to save initial messages:', error);
+              }
+            }, 1000); // Wait 1 second for the subject to be saved to the database
+          })
+          .catch(err => {
+            console.error('❌ Failed to create subject:', err)
+          })
+      } else {
+        // If it exists, just select it
+        const existingSubject = subjects.find(s => s.id === subject.id)
         if (existingSubject) {
-          console.log('📖 Switching to existing subject:', existingSubject.name)
           selectSubject(existingSubject)
           
-          // Emit subject selected event
-          const subjectEvent = new CustomEvent('subjectSelected', {
-            detail: { subject: existingSubject }
-          })
-          window.dispatchEvent(subjectEvent)
-        } else {
-          console.log('📚 Creating new subject:', analysis.subjectName)
-          try {
-            const newSubject = await createSubject(analysis.subjectName)
-            console.log('✅ New subject created successfully:', newSubject.name)
-            
-            // Show success message
-            showSuccess(`Created new subject: ${newSubject.name}`)
-            
-            // Notify ChatPane about the new subject for lesson plan creation
-            const newSubjectEvent = new CustomEvent('newSubjectCreated', {
-              detail: {
-                subject: newSubject,
-                triggeringMessage: message
-              }
-            })
-            window.dispatchEvent(newSubjectEvent)
-          } catch (error) {
-            console.error('❌ Failed to create subject:', error)
+          // Log the initial messages for context
+          if (initialMessage) {
+            // Check if initialMessage is an object with content property or a string
+            const messageContent = typeof initialMessage === 'string' 
+              ? initialMessage 
+              : (initialMessage.content || initialMessage.toString());
+            console.log('📝 Initial message carried over to existing subject:', messageContent.substring(0, 30) + '...')
+          }
+          if (initialResponse) {
+            console.log('🤖 Initial response carried over to existing subject:', initialResponse.content.substring(0, 30) + '...')
           }
         }
-        
-      } else if (currentSubject) {
-        // Continue with current subject - generate appropriate interactive component
-        console.log('📝 Continuing with current subject:', currentSubject.name)
-        console.log('🎯 Suggested component:', analysis.suggestedComponent)
-        console.log('💭 Analysis reasoning:', analysis.reasoning)
-        
-        // Dispatch event to ChatPane to generate context-specific interactive content
-        const contextualContentEvent = new CustomEvent('generateContextualContent', {
-          detail: {
-            subject: currentSubject,
-            userMessage: message,
-            suggestedComponent: analysis.suggestedComponent,
-            confidence: analysis.confidence,
-            reasoning: analysis.reasoning
-          }
-        })
-        window.dispatchEvent(contextualContentEvent)
       }
-    } catch (error) {
-      console.error('Error handling message:', error)
     }
-  }
+
+    window.addEventListener('userMessageSent', handleUserMessage as EventListener)
+    window.addEventListener('newSubjectCreated', handleNewSubjectCreated as EventListener)
+    
+    return () => {
+      window.removeEventListener('userMessageSent', handleUserMessage as EventListener)
+      window.removeEventListener('newSubjectCreated', handleNewSubjectCreated as EventListener)
+    }
+  }, [currentSubject, subjects, createSubject, selectSubject, user])
+
+  // AI-first message handler - let AI decide everything
+  const handleNewMessage = useCallback(async (message: string, isUserMessage = false) => {
+    console.log('📩 Message received:', { 
+      message: message.substring(0, 50) + '...', 
+      isUserMessage
+    })
+
+    // Just pass through to AI - no hardcoded logic
+    // AI will decide whether to create subjects, switch contexts, etc.
+  }, [])
 
   const handleContentInteraction = async (action: string, data: unknown) => {
     console.log('🎯 Content interaction:', action, data)
@@ -315,6 +331,11 @@ export function Dashboard() {
               ref={chatRef}
               selectedSubject={currentSubject}
               onNewMessage={handleNewMessage}
+              onGeneratedContent={(content: InteractiveContent) => {
+                console.log('🎯 AI generated interactive content:', content.type);
+                // The content will be automatically displayed in ContentPane
+                // via the existing event system from the AI tutor callbacks
+              }}
             />
           </div>
         </div>

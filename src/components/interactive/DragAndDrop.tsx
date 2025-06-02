@@ -40,99 +40,6 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
   
   const dragContent = content as DragAndDropContent
 
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use category if available
-    if (dragContent.category && dragContent.category !== 'Drag and Drop') {
-      return `${dragContent.category} Matching`
-    }
-
-    // Priority 2: Check for specific educational keywords and create contextual titles
-    const questionLower = dragContent.question.toLowerCase()
-    const instructionsLower = dragContent.instructions.toLowerCase()
-    const allText = `${questionLower} ${instructionsLower}`
-    
-    const topicKeywords = [
-      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Matching' },
-      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Matching' },
-      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Matching' },
-      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Matching' },
-      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Matching' },
-      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Matching' },
-      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Matching' },
-      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Matching' },
-      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Matching' },
-      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Matching' }
-    ]
-
-    for (const topic of topicKeywords) {
-      if (topic.words.some(keyword => allText.includes(keyword))) {
-        return topic.title
-      }
-    }
-
-    // Priority 3: Subject-specific patterns
-    if (allText.includes('match') || allText.includes('pair') || allText.includes('connect')) {
-      if (allText.includes('math') || allText.includes('number') || allText.includes('equation') || /\d+/.test(allText)) {
-        return 'Math Matching'
-      }
-      if (allText.includes('science') || allText.includes('experiment')) {
-        return 'Science Matching'
-      }
-      if (allText.includes('history') || allText.includes('historical')) {
-        return 'History Matching'
-      }
-      if (allText.includes('language') || allText.includes('word') || allText.includes('vocabulary')) {
-        return 'Language Matching'
-      }
-    }
-
-    // Priority 4: Look at the items and targets for context
-    if (dragContent.items && dragContent.targets) {
-      const allItemsText = dragContent.items.map(item => item.content).join(' ').toLowerCase()
-      const allTargetsText = dragContent.targets.map(target => target.label).join(' ').toLowerCase()
-      const itemsAndTargets = `${allItemsText} ${allTargetsText}`
-      
-      if (/\d+/.test(itemsAndTargets) || itemsAndTargets.includes('=') || itemsAndTargets.includes('+')) {
-        return 'Math Matching'
-      }
-      if (itemsAndTargets.includes('cell') || itemsAndTargets.includes('dna') || itemsAndTargets.includes('protein')) {
-        return 'Biology Matching'
-      }
-      if (itemsAndTargets.includes('element') || itemsAndTargets.includes('atom') || itemsAndTargets.includes('molecule')) {
-        return 'Chemistry Matching'
-      }
-    }
-
-    // Priority 5: Extract key topic more intelligently
-    const meaningfulWords = dragContent.question.split(' ')
-      .filter(word => {
-        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-        return cleanWord.length > 3 && 
-               !['match', 'drag', 'drop', 'connect', 'pair', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-      })
-      .map(word => word.replace(/[^\w]/g, ''))
-      .filter(word => word.length > 0)
-
-    if (meaningfulWords.length > 0) {
-      const keyTopic = meaningfulWords[0]
-      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Matching`
-    }
-
-    // Priority 6: Activity type-based fallbacks
-    if (allText.includes('category') || allText.includes('group') || allText.includes('classify')) {
-      return 'Category Matching'
-    }
-    if (allText.includes('definition') || allText.includes('term')) {
-      return 'Definition Matching'
-    }
-    if (allText.includes('sequence') || allText.includes('order')) {
-      return 'Sequence Matching'
-    }
-
-    return 'Drag & Drop Exercise'
-  }
-
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggedItem(itemId)
     e.dataTransfer.effectAllowed = 'move'
@@ -207,18 +114,15 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
-            <Move className="h-6 w-6 text-orange-600 mr-2" />
-            {generateMeaningfulTitle()}
+            <Move className="h-6 w-6 text-blue-600 mr-2" />
+            {dragContent.category || 'Drag & Drop'}
           </CardTitle>
         </div>
-        <div className="bg-orange-50 p-5 rounded-lg border border-orange-200 mt-3">
-          <h3 className="text-orange-900 font-semibold text-lg leading-relaxed mb-3">{dragContent.question}</h3>
-          <p className="text-base text-orange-700 leading-relaxed">{dragContent.instructions}</p>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{dragContent.question}</p>
       </CardHeader>
       <CardContent className="space-y-8">
         {/* Items to drag */}

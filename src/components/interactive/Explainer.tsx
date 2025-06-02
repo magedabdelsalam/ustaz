@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { memo, useState, useMemo } from 'react'
-import { FileText, MessageCircle, BookOpen, ArrowRight, Eye, Loader2 } from 'lucide-react'
+import { MessageCircle, BookOpen, ArrowRight, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
 
 interface ExplainerContent {
@@ -92,81 +92,6 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     return defaultContent
   }, [explainerContent])
 
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use provided title if it's meaningful (not generic)
-    if (sanitizedContent.title && 
-        sanitizedContent.title.trim().length > 3 &&
-        !['content', 'lesson', 'topic', 'explanation', 'overview'].some(generic => 
-          sanitizedContent.title.toLowerCase().includes(generic))) {
-      return sanitizedContent.title
-    }
-
-    // Priority 2: Extract key topic from first section heading
-    if (sanitizedContent.sections.length > 0) {
-      const firstHeading = sanitizedContent.sections[0].heading
-      const meaningfulWords = firstHeading.split(' ')
-        .filter(word => {
-          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-          return cleanWord.length > 3 && 
-                 !['what', 'how', 'why', 'when', 'where', 'introduction', 'overview', 'explanation', 'the', 'a', 'an', 'is', 'are', 'was', 'were'].includes(cleanWord)
-        })
-        .map(word => word.replace(/[^\w]/g, ''))
-        .filter(word => word.length > 0)
-
-      if (meaningfulWords.length > 0) {
-        const keyTopic = meaningfulWords[0]
-        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Explanation`
-      }
-    }
-
-    // Priority 3: Extract from overview content
-    if (sanitizedContent.overview) {
-      const overviewWords = sanitizedContent.overview.split(' ')
-        .filter(word => {
-          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-          return cleanWord.length > 4 && 
-                 !['this', 'that', 'these', 'those', 'will', 'learn', 'about', 'understanding', 'explanation', 'overview'].includes(cleanWord)
-        })
-        .map(word => word.replace(/[^\w]/g, ''))
-        .filter(word => word.length > 0)
-
-      if (overviewWords.length > 0) {
-        const keyTopic = overviewWords[0]
-        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Guide`
-      }
-    }
-
-    // Priority 4: Extract from conclusion
-    if (sanitizedContent.conclusion) {
-      const conclusionWords = sanitizedContent.conclusion.split(' ')
-        .filter(word => {
-          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-          return cleanWord.length > 4 && 
-                 !['conclusion', 'summary', 'therefore', 'finally', 'overall'].includes(cleanWord)
-        })
-        .map(word => word.replace(/[^\w]/g, ''))
-        .filter(word => word.length > 0)
-
-      if (conclusionWords.length > 0) {
-        const keyTopic = conclusionWords[0]
-        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Summary`
-      }
-    }
-
-    // Final fallback based on difficulty
-    switch (sanitizedContent.difficulty) {
-      case 'beginner':
-        return 'Basic Topic Explanation'
-      case 'intermediate':
-        return 'Intermediate Topic Guide'
-      case 'advanced':
-        return 'Advanced Topic Analysis'
-      default:
-        return sanitizedContent.title || 'Topic Explanation'
-    }
-  }
-
   const handleAskQuestion = async () => {
     setButtonLoadingStates(prev => ({ ...prev, askQuestion: true }))
     try {
@@ -201,10 +126,10 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
   const handleNextTopic = async () => {
     setButtonLoadingStates(prev => ({ ...prev, nextTopic: true }))
     try {
-      onInteraction('ready_for_next', {
+      onInteraction('next_topic_requested', {
         componentId: id,
-        topic: sanitizedContent.title,
-        action: 'continue'
+        currentTopic: sanitizedContent.title,
+        difficulty: sanitizedContent.difficulty
       })
     } finally {
       setTimeout(() => {
@@ -223,49 +148,40 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
   }
 
   const estimateReadTime = (): number => {
-    if (sanitizedContent.estimatedReadTime) {
-      return sanitizedContent.estimatedReadTime
-    }
+    // Calculate read time based on content length (200 words per minute average reading speed)
+    const overview = sanitizedContent.overview || ''
+    const paragraphs = sanitizedContent.sections.flatMap(s => s.paragraphs || []).join(' ')
+    const conclusion = sanitizedContent.conclusion || ''
     
-    // Calculate based on content length (average 200 words per minute)
-    // Add null/undefined checks to prevent split errors
-    const overviewWords = sanitizedContent.overview ? sanitizedContent.overview.split(' ').length : 0
-    const sectionsWords = sanitizedContent.sections ? sanitizedContent.sections.reduce((acc, section) => {
-      if (!section || !section.paragraphs || !Array.isArray(section.paragraphs)) {
-        return acc
-      }
-      return acc + section.paragraphs
-        .filter(paragraph => paragraph && typeof paragraph === 'string')
-        .join(' ')
-        .split(' ')
-        .length
-    }, 0) : 0
-    const conclusionWords = sanitizedContent.conclusion ? sanitizedContent.conclusion.split(' ').length : 0
+    const totalContent = `${overview} ${paragraphs} ${conclusion}`
+    const wordCount = totalContent.split(/\s+/).length
+    const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200))
     
-    const totalWords = overviewWords + sectionsWords + conclusionWords
-    
-    return Math.max(1, Math.ceil(totalWords / 200))
+    return sanitizedContent.estimatedReadTime || readTimeMinutes
   }
 
+  const readTime = estimateReadTime()
+
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <FileText className="h-6 w-6 text-indigo-600" />
-            <CardTitle className="text-xl font-bold text-gray-900">{generateMeaningfulTitle()}</CardTitle>
+          <div className="flex items-center">
+            <BookOpen className="h-6 w-6 text-blue-600 mr-2" />
+            <CardTitle className="text-xl font-bold text-gray-900">
+              {sanitizedContent.title}
+            </CardTitle>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant="outline" className="text-xs">
-              <Eye className="h-3 w-3 mr-1" />
-              {estimateReadTime()} min read
-            </Badge>
             <Badge className={getDifficultyColor(sanitizedContent.difficulty)}>
               <span className="text-xs font-semibold capitalize tracking-wide">{sanitizedContent.difficulty}</span>
             </Badge>
+            <Badge variant="outline" className="text-xs font-medium">
+              {readTime} min read
+            </Badge>
           </div>
         </div>
-        <p className="text-gray-700 text-base leading-relaxed mt-2">{sanitizedContent.overview || 'No overview available'}</p>
+        <p className="text-gray-600 text-base leading-relaxed mt-2">{sanitizedContent.overview}</p>
       </CardHeader>
       
       <CardContent className="space-y-4">

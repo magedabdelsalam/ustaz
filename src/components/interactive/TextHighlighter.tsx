@@ -330,35 +330,30 @@ export const TextHighlighter = memo(function TextHighlighter({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            <Highlighter className="h-5 w-5 text-pink-600 mr-2" />
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <Highlighter className="h-6 w-6 text-indigo-600 mr-2" />
             {highlighterContent.title}
           </CardTitle>
-          <div className="flex gap-2">
-            {highlighterContent.targets && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowTargets(!showTargets)}
-              >
-                {showTargets ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                {showTargets ? 'Hide' : 'Show'} Targets
-              </Button>
+          <div className="flex items-center space-x-2">
+            {highlighterContent.category && (
+              <Badge variant="outline" className="text-xs font-medium">
+                {highlighterContent.category}
+              </Badge>
             )}
-            <Button size="sm" variant="outline" onClick={handleReset}>
-              <RotateCcw className="h-4 w-4" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTargets(!showTargets)}
+              disabled={showResults || !highlighterContent.targets}
+            >
+              {showTargets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
             </Button>
           </div>
         </div>
-        <div className="bg-pink-50 p-4 rounded-lg">
-          <p className="text-pink-900 text-sm mb-2">{highlighterContent.description}</p>
-          {highlighterContent.instructions && (
-            <p className="text-pink-700 text-sm">{highlighterContent.instructions}</p>
-          )}
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{highlighterContent.description}</p>
       </CardHeader>
 
       <CardContent className="space-y-6">

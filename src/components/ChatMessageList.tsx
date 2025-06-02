@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -115,7 +117,32 @@ export function ChatMessageList({
                   <div className="flex items-start space-x-2">
                     {message.role === 'assistant' && <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />}
                     <div className="flex-1 overflow-hidden">
-                      <p className="text-sm whitespace-pre-wrap overflow-hidden">{message.content}</p>
+                      {message.role === 'assistant' ? (
+                        <div className="text-sm prose prose-sm max-w-none">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              // Customize styling for markdown elements
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1">{children}</ol>,
+                              li: ({ children }) => <li className="text-sm">{children}</li>,
+                              code: ({ children }) => <code className="bg-gray-200 px-1 py-0.5 rounded text-xs font-mono">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-gray-200 p-2 rounded text-xs font-mono overflow-x-auto">{children}</pre>,
+                              blockquote: ({ children }) => <blockquote className="border-l-4 border-gray-300 pl-4 italic">{children}</blockquote>,
+                              strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                              em: ({ children }) => <em className="italic">{children}</em>
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap overflow-hidden">{message.content}</p>
+                      )}
                       {message.hasGeneratedContent && (
                         <div className="flex items-center space-x-1 mt-2 pt-2 border-t border-opacity-20">
                           <Sparkles className="h-3 w-3" />

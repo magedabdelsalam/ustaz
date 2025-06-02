@@ -5,6 +5,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholde
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+// Check if Supabase is properly configured with valid environment variables
+export const isSupabaseConfigured = 
+  process.env.NEXT_PUBLIC_SUPABASE_URL !== undefined && 
+  process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder.supabase.co' &&
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== undefined &&
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'placeholder-key'
+
 export type Json =
   | string
   | number

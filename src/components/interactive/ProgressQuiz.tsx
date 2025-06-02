@@ -3,8 +3,8 @@
 import { useState, memo, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { CheckCircle, XCircle, ArrowRight, ArrowLeft, RotateCcw, Trophy, Clock } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { CheckCircle, XCircle, ArrowRight, ArrowLeft, RotateCcw, Trophy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 
 interface InteractiveComponentProps {
@@ -51,7 +51,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
   const quizContent = content as QuizContent
   const currentQuestion = quizContent.questions[currentQuestionIndex]
   const totalQuestions = quizContent.questions.length
-  const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100
+  // const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100  // @typescript-eslint/no-unused-vars
 
   // Initialize timer
   useEffect(() => {
@@ -238,12 +238,6 @@ export const ProgressQuiz = memo(function ProgressQuiz({
     onInteraction('quiz_reset', { componentId: id })
   }
 
-  const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
-
   const renderQuestion = () => {
     const userAnswer = answers[currentQuestion.id]
 
@@ -397,33 +391,20 @@ export const ProgressQuiz = memo(function ProgressQuiz({
 
   if (!quizStarted) {
     return (
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
-            <Trophy className="h-6 w-6 text-purple-600 mr-2" />
-            {quizContent.title}
-          </CardTitle>
-          <div className="bg-purple-50 p-5 rounded-lg border border-purple-200 mt-3">
-            <p className="text-purple-900 text-base leading-relaxed mb-4">{quizContent.description}</p>
-            <div className="grid grid-cols-2 gap-6 text-base">
-              <div>
-                <span className="font-semibold text-gray-900">Questions:</span> <span className="text-gray-700">{totalQuestions}</span>
-              </div>
-              {quizContent.timeLimit && (
-                <div>
-                  <span className="font-semibold text-gray-900">Time Limit:</span> <span className="text-gray-700">{formatTime(quizContent.timeLimit)}</span>
-                </div>
-              )}
-              {quizContent.passingScore && (
-                <div>
-                  <span className="font-semibold text-gray-900">Passing Score:</span> <span className="text-gray-700">{quizContent.passingScore}%</span>
-                </div>
-              )}
-              <div>
-                <span className="font-semibold text-gray-900">Retries:</span> <span className="text-gray-700">{quizContent.allowRetry ? 'Allowed' : 'Not allowed'}</span>
-              </div>
-            </div>
+      <Card className="w-full mb-6">
+        <CardHeader className="space-y-1">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+              <Trophy className="h-6 w-6 text-purple-600 mr-2" />
+              {quizContent.title}
+            </CardTitle>
+            {quizContent.category && (
+              <Badge variant="outline" className="text-xs font-medium">
+                {quizContent.category}
+              </Badge>
+            )}
           </div>
+          <p className="text-gray-600 text-base leading-relaxed mt-1">{quizContent.description}</p>
         </CardHeader>
         <CardContent>
           <Button onClick={handleStartQuiz} className="w-full h-12 text-base font-medium">
@@ -462,29 +443,21 @@ export const ProgressQuiz = memo(function ProgressQuiz({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
             <Trophy className="h-6 w-6 text-purple-600 mr-2" />
             {quizContent.title}
           </CardTitle>
-          {timeRemaining !== null && (
-            <div className="flex items-center text-base font-medium text-gray-700">
-              <Clock className="h-5 w-5 mr-2" />
-              {formatTime(timeRemaining)}
-            </div>
+          {quizContent.category && (
+            <Badge variant="outline" className="text-xs font-medium">
+              {quizContent.category}
+            </Badge>
           )}
         </div>
-        <div className="space-y-3 mt-4">
-          <div className="flex justify-between text-base text-gray-700">
-            <span className="font-medium">Question {currentQuestionIndex + 1} of {totalQuestions}</span>
-            <span className="font-medium">{Math.round(progress)}% Complete</span>
-          </div>
-          <Progress value={progress} className="w-full h-3" />
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{quizContent.description}</p>
       </CardHeader>
-
       <CardContent className="space-y-8">
         <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
           <h3 className="font-semibold text-lg mb-6 text-gray-900 leading-relaxed">{currentQuestion.question}</h3>

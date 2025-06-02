@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, XCircle, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff, PenTool, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps, FillInTheBlankContent } from '@/types'
 
 export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
@@ -30,94 +30,6 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
   // Initialize answers array if needed
   if (userAnswers.length === 0) {
     setUserAnswers(new Array(blanksCount).fill(''))
-  }
-
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use category if available
-    if (fillContent.category && fillContent.category !== 'Complete the Text') {
-      return `${fillContent.category} Exercise`
-    }
-
-    // Priority 2: Check for specific educational keywords and create contextual titles
-    const templateText = fillContent.template.replace(/___/g, '').trim()
-    const questionLower = fillContent.question.toLowerCase()
-    const combinedText = `${templateText} ${questionLower}`.toLowerCase()
-    
-    const topicKeywords = [
-      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Exercise' },
-      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Practice' },
-      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Exercise' },
-      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Exercise' },
-      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Exercise' },
-      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Exercise' },
-      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Exercise' },
-      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Exercise' },
-      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Exercise' },
-      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Exercise' }
-    ]
-
-    for (const topic of topicKeywords) {
-      if (topic.words.some(keyword => combinedText.includes(keyword))) {
-        return topic.title
-      }
-    }
-
-    // Priority 3: Subject-specific patterns
-    if (questionLower.includes('math') || questionLower.includes('calculation') || questionLower.includes('solve') || /\d+/.test(combinedText)) {
-      return 'Math Exercise'
-    }
-    if (questionLower.includes('science') || questionLower.includes('experiment')) {
-      return 'Science Exercise'
-    }
-    if (questionLower.includes('history') || questionLower.includes('historical')) {
-      return 'History Exercise'
-    }
-    if (questionLower.includes('language') || questionLower.includes('grammar') || questionLower.includes('sentence')) {
-      return 'Language Arts Exercise'
-    }
-    if (questionLower.includes('literature') || questionLower.includes('story') || questionLower.includes('poem')) {
-      return 'Literature Exercise'
-    }
-
-    // Priority 4: Look at the answers for context clues
-    if (fillContent.answers && fillContent.answers.length > 0) {
-      const firstAnswer = fillContent.answers[0].toLowerCase()
-      
-      if (/^\d+$/.test(firstAnswer) || firstAnswer.includes('=') || firstAnswer.includes('+') || firstAnswer.includes('-')) {
-        return 'Math Exercise'
-      }
-      if (firstAnswer.includes('cell') || firstAnswer.includes('dna') || firstAnswer.includes('protein')) {
-        return 'Biology Exercise'
-      }
-      if (firstAnswer.includes('element') || firstAnswer.includes('atom') || firstAnswer.includes('molecule')) {
-        return 'Chemistry Exercise'
-      }
-    }
-
-    // Priority 5: Extract key topic more intelligently
-    const meaningfulWords = templateText.split(' ')
-      .filter(word => {
-        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-        return cleanWord.length > 3 && 
-               !['what', 'which', 'how', 'where', 'when', 'why', 'who', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-      })
-      .map(word => word.replace(/[^\w]/g, ''))
-      .filter(word => word.length > 0)
-
-    if (meaningfulWords.length > 0) {
-      const keyTopic = meaningfulWords[0]
-      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Exercise`
-    }
-
-    // Priority 6: Determine based on exercise characteristics
-    if (blanksCount === 1) {
-      return 'Complete the Statement'
-    } else if (blanksCount <= 3) {
-      return 'Fill in the Blanks'
-    } else {
-      return 'Complete the Passage'
-    }
   }
 
   const handleAnswerChange = (index: number, value: string) => {
@@ -198,8 +110,8 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
     try {
       onInteraction('explain_more', {
         componentId: id,
-        topic: fillContent.category || 'this concept',
-        question: fillContent.question
+        topic: fillContent.category,
+        blanks: fillContent.answers
       })
     } finally {
       setTimeout(() => {
@@ -237,34 +149,19 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
   const accuracy = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
-            <PenTool className="h-6 w-6 text-indigo-600 mr-2" />
-            {generateMeaningfulTitle()}
+          <CardTitle className="text-xl font-bold text-gray-900">
+            {fillContent.title || fillContent.category}
           </CardTitle>
-          <div className="flex items-center space-x-2">
-            {fillContent.category && (
-              <Badge variant="outline" className="text-xs font-medium">
-                {fillContent.category}
-              </Badge>
-            )}
-            {fillContent.difficulty && (
-              <Badge className={getDifficultyColor(fillContent.difficulty)}>
-                <span className="text-xs font-semibold capitalize tracking-wide">{fillContent.difficulty}</span>
-              </Badge>
-            )}
-            {showResult && (
-              <Badge className={accuracy >= 80 ? 'bg-green-100 text-green-800' : accuracy >= 60 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}>
-                <span className="text-xs font-semibold">{accuracy}% ({score}/{totalScore})</span>
-              </Badge>
-            )}
-          </div>
+          {fillContent.difficulty && (
+            <Badge className={getDifficultyColor(fillContent.difficulty)}>
+              <span className="text-xs font-semibold capitalize tracking-wide">{fillContent.difficulty}</span>
+            </Badge>
+          )}
         </div>
-        <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200 mt-3">
-          <h3 className="text-indigo-900 font-semibold text-lg leading-relaxed">{fillContent.question}</h3>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{fillContent.question}</p>
       </CardHeader>
       
       <CardContent className="space-y-6">

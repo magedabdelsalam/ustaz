@@ -4,7 +4,7 @@ import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle, XCircle, HelpCircle, Brain, RotateCcw, Target, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Brain, RotateCcw, Target, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
 
 interface MultipleChoiceContent {
@@ -29,102 +29,6 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
   })
   
   const mcContent = content as MultipleChoiceContent
-
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    const questionLower = mcContent.question.toLowerCase()
-    
-    // Priority 1: Use category if available
-    if (mcContent.category) {
-      return `${mcContent.category} Quiz`
-    }
-
-    // Priority 2: Check for specific educational keywords and create contextual titles
-    const topicKeywords = [
-      { words: ['photosynthesis', 'chlorophyll', 'plant'], title: 'Plant Biology Quiz' },
-      { words: ['equation', 'algebra', 'solve', 'variable'], title: 'Algebra Quiz' },
-      { words: ['shakespeare', 'hamlet', 'literature', 'author'], title: 'Literature Quiz' },
-      { words: ['world war', 'napoleon', 'revolution', 'treaty'], title: 'History Quiz' },
-      { words: ['atom', 'molecule', 'chemical', 'element'], title: 'Chemistry Quiz' },
-      { words: ['cell', 'dna', 'biology', 'organism'], title: 'Biology Quiz' },
-      { words: ['gravity', 'force', 'physics', 'motion'], title: 'Physics Quiz' },
-      { words: ['geography', 'continent', 'country', 'capital'], title: 'Geography Quiz' },
-      { words: ['grammar', 'verb', 'noun', 'sentence'], title: 'Language Arts Quiz' },
-      { words: ['programming', 'code', 'algorithm', 'computer'], title: 'Computer Science Quiz' }
-    ]
-
-    for (const topic of topicKeywords) {
-      if (topic.words.some(keyword => questionLower.includes(keyword))) {
-        return topic.title
-      }
-    }
-
-    // Priority 3: Subject-specific patterns based on question content
-    if (questionLower.includes('math') || questionLower.includes('calculate') || questionLower.includes('solve') || questionLower.includes('number') || /\d+/.test(questionLower)) {
-      return 'Math Quiz'
-    }
-    if (questionLower.includes('science') || questionLower.includes('experiment') || questionLower.includes('hypothesis')) {
-      return 'Science Quiz'
-    }
-    if (questionLower.includes('history') || questionLower.includes('historical') || questionLower.includes('century') || questionLower.includes('war')) {
-      return 'History Quiz'
-    }
-    if (questionLower.includes('language') || questionLower.includes('grammar') || questionLower.includes('verb') || questionLower.includes('noun')) {
-      return 'Language Quiz'
-    }
-    if (questionLower.includes('literature') || questionLower.includes('author') || questionLower.includes('novel') || questionLower.includes('poem')) {
-      return 'Literature Quiz'
-    }
-
-    // Priority 4: Look at the answers for context clues
-    if (mcContent.options && mcContent.options.length > 0) {
-      const allOptionsText = mcContent.options.join(' ').toLowerCase()
-      
-      // Check if options suggest a topic
-      if (/\d+/.test(allOptionsText) || allOptionsText.includes('=') || allOptionsText.includes('+') || allOptionsText.includes('-')) {
-        return 'Math Quiz'
-      }
-      if (allOptionsText.includes('cell') || allOptionsText.includes('dna') || allOptionsText.includes('protein')) {
-        return 'Biology Quiz'
-      }
-      if (allOptionsText.includes('element') || allOptionsText.includes('atom') || allOptionsText.includes('molecule')) {
-        return 'Chemistry Quiz'
-      }
-    }
-
-    // Priority 5: Extract key topic from question more intelligently
-    const meaningfulWords = mcContent.question.split(' ')
-      .filter(word => {
-        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-        return cleanWord.length > 3 && 
-               !['what', 'which', 'how', 'where', 'when', 'why', 'who', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-      })
-      .map(word => word.replace(/[^\w]/g, ''))
-      .filter(word => word.length > 0)
-
-    if (meaningfulWords.length > 0) {
-      // Take the most meaningful word (usually a noun or key concept)
-      const keyTopic = meaningfulWords[0]
-      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Quiz`
-    }
-
-    // Priority 6: Question type-based fallbacks
-    if (questionLower.includes('true') || questionLower.includes('false')) {
-      return 'True/False Question'
-    }
-    if (questionLower.includes('best') || questionLower.includes('correct') || questionLower.includes('most')) {
-      return 'Multiple Choice Question'
-    }
-    if (questionLower.includes('define') || questionLower.includes('definition')) {
-      return 'Definition Quiz'
-    }
-    if (questionLower.includes('compare') || questionLower.includes('contrast')) {
-      return 'Comparison Quiz'
-    }
-
-    // Final fallback
-    return 'Knowledge Quiz'
-  }
 
   const handleSubmit = async () => {
     if (selectedOption === null) return
@@ -167,7 +71,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     try {
       onInteraction('explain_more', {
         componentId: id,
-        topic: mcContent.category || 'this concept',
+        topic: mcContent.category,
         question: mcContent.question
       })
     } finally {
@@ -213,31 +117,20 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
   const isCorrect = showResult && selectedOption === mcContent.correctAnswer
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
-            <HelpCircle className="h-6 w-6 text-purple-600 mr-2" />
-            {generateMeaningfulTitle()}
+          <CardTitle className="text-xl font-bold text-gray-900">
+            {mcContent.category}
           </CardTitle>
-          <div className="flex items-center space-x-2">
-            {mcContent.category && (
-              <Badge variant="outline" className="text-xs font-medium">
-                {mcContent.category}
-              </Badge>
-            )}
-            {mcContent.difficulty && (
-              <Badge className={getDifficultyColor(mcContent.difficulty)}>
-                <span className="text-xs font-semibold capitalize tracking-wide">{mcContent.difficulty}</span>
-              </Badge>
-            )}
-          </div>
+          {mcContent.difficulty && (
+            <Badge className={getDifficultyColor(mcContent.difficulty)}>
+              <span className="text-xs font-semibold capitalize tracking-wide">{mcContent.difficulty}</span>
+            </Badge>
+          )}
         </div>
-        <div className="bg-purple-50 p-5 rounded-lg border border-purple-200 mt-3">
-          <h3 className="text-purple-900 font-semibold text-lg leading-relaxed">{mcContent.question}</h3>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{mcContent.question}</p>
       </CardHeader>
-      
       <CardContent className="space-y-6">
         {/* Hints section */}
         {mcContent.hints && mcContent.hints.length > 0 && !showResult && (

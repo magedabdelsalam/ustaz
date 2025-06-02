@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { Play, Pause, RotateCcw, Lightbulb, Activity, Palette, Calculator, Atom, Zap } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Lightbulb, Activity } from 'lucide-react'
 import { InteractiveComponentProps, ExampleContent, Control, DisplayElement } from '@/types'
 
 export const InteractiveExample = memo(function InteractiveExample({ 
@@ -16,7 +17,7 @@ export const InteractiveExample = memo(function InteractiveExample({
   void _onInteraction // Intentionally unused - interface requirement
   void _id // Intentionally unused - interface requirement
   const [controlValues, setControlValues] = useState<Record<string, number | boolean>>({})
-  const [isPlaying, setIsPlaying] = useState(false)
+  const isPlaying = useState(false)[0]
   const [animationFrame, setAnimationFrame] = useState(0)
   
   const exampleContent = content as ExampleContent
@@ -60,22 +61,6 @@ export const InteractiveExample = memo(function InteractiveExample({
       ...prev,
       [controlId]: value
     }))
-  }
-
-  const handlePlayPause = () => {
-    setIsPlaying(!isPlaying)
-  }
-
-  const handleReset = () => {
-    const resetValues: Record<string, number | boolean> = {}
-    
-    exampleContent.controls.forEach(control => {
-      resetValues[control.id] = control.defaultValue ?? (control.type === 'toggle' ? false : control.min ?? 0)
-    })
-    
-    setControlValues(resetValues)
-    setIsPlaying(false)
-    setAnimationFrame(0)
   }
 
   // Enhanced evaluation system that handles different domains
@@ -161,27 +146,6 @@ export const InteractiveExample = memo(function InteractiveExample({
     b = Math.round((b + m) * 255)
     
     return `rgb(${r}, ${g}, ${b})`
-  }
-
-  // Get domain-specific icon
-  const getDomainIcon = () => {
-    const title = exampleContent.title.toLowerCase()
-    const description = exampleContent.description.toLowerCase()
-    
-    if (title.includes('color') || description.includes('color') || description.includes('hue')) {
-      return <Palette className="h-5 w-5 text-purple-600 mr-2" />
-    }
-    if (title.includes('physics') || description.includes('motion') || description.includes('wave')) {
-      return <Zap className="h-5 w-5 text-blue-600 mr-2" />
-    }
-    if (title.includes('math') || description.includes('formula') || description.includes('equation')) {
-      return <Calculator className="h-5 w-5 text-green-600 mr-2" />
-    }
-    if (title.includes('chemistry') || description.includes('molecule') || description.includes('atom')) {
-      return <Atom className="h-5 w-5 text-red-600 mr-2" />
-    }
-    
-    return <Lightbulb className="h-5 w-5 text-yellow-600 mr-2" />
   }
 
   const renderControl = (control: Control) => {
@@ -369,39 +333,20 @@ export const InteractiveExample = memo(function InteractiveExample({
   }
 
   return (
-    <Card className="w-full">
-      <CardHeader>
+    <Card className="w-full mb-6">
+      <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center">
-            {getDomainIcon()}
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <Lightbulb className="h-6 w-6 text-yellow-600 mr-2" />
             {exampleContent.title}
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handlePlayPause}
-              className="flex items-center gap-1"
-            >
-              {isPlaying ? (
-                <Pause className="h-4 w-4" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {isPlaying ? 'Pause' : 'Play'}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleReset}
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
+          {exampleContent.category && (
+            <Badge variant="outline" className="text-xs font-medium">
+              {exampleContent.category}
+            </Badge>
+          )}
         </div>
-        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-          <p className="text-yellow-900 text-sm">{exampleContent.description}</p>
-        </div>
+        <p className="text-gray-600 text-base leading-relaxed mt-1">{exampleContent.description}</p>
       </CardHeader>
       
       <CardContent className="space-y-6">

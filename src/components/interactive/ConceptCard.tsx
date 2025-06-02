@@ -10,78 +10,6 @@ import { InteractiveComponentProps, ConceptCardContent } from '@/types'
 export const ConceptCard = memo(function ConceptCard({ onInteraction, content, id }: InteractiveComponentProps) {
   const conceptContent = content as ConceptCardContent
 
-  // Generate a meaningful title based on content
-  const generateMeaningfulTitle = (): string => {
-    // Priority 1: Use provided title if it's meaningful (not generic)
-    if (conceptContent.title && 
-        conceptContent.title.trim().length > 3 &&
-        !['concept', 'lesson', 'topic', 'learning'].some(generic => 
-          conceptContent.title.toLowerCase().includes(generic))) {
-      return conceptContent.title
-    }
-
-    // Priority 2: Extract key topic from title intelligently
-    if (conceptContent.title) {
-      const meaningfulWords = conceptContent.title.split(' ')
-        .filter(word => {
-          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-          return cleanWord.length > 3 && 
-                 !['learn', 'about', 'introduction', 'concept', 'explanation', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-        })
-        .map(word => word.replace(/[^\w]/g, ''))
-        .filter(word => word.length > 0)
-
-      if (meaningfulWords.length > 0) {
-        const keyTopic = meaningfulWords[0]
-        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Concept`
-      }
-    }
-
-    // Priority 3: Extract from summary
-    const summaryMeaningfulWords = conceptContent.summary.split(' ')
-      .filter(word => {
-        const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-        return cleanWord.length > 3 && 
-               !['learn', 'about', 'introduction', 'concept', 'explanation', 'the', 'a', 'an', 'is', 'are', 'was', 'were', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'this', 'that', 'these', 'those', 'and', 'or', 'but', 'from', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'than', 'very', 'can', 'will', 'just', 'should', 'now'].includes(cleanWord)
-      })
-      .map(word => word.replace(/[^\w]/g, ''))
-      .filter(word => word.length > 0)
-
-    if (summaryMeaningfulWords.length > 0) {
-      const keyTopic = summaryMeaningfulWords[0]
-      return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Concept`
-    }
-
-    // Priority 4: Extract from details
-    if (conceptContent.details) {
-      const detailsWords = conceptContent.details.split(' ')
-        .filter(word => {
-          const cleanWord = word.toLowerCase().replace(/[^\w]/g, '')
-          return cleanWord.length > 4 && 
-                 !['details', 'important', 'understand', 'knowledge'].includes(cleanWord)
-        })
-        .map(word => word.replace(/[^\w]/g, ''))
-        .filter(word => word.length > 0)
-
-      if (detailsWords.length > 0) {
-        const keyTopic = detailsWords[0]
-        return `${keyTopic.charAt(0).toUpperCase()}${keyTopic.slice(1)} Concept`
-      }
-    }
-
-    // Final fallback based on difficulty
-    switch (conceptContent.difficulty) {
-      case 'beginner':
-        return 'Basic Concept'
-      case 'intermediate':
-        return 'Intermediate Concept'
-      case 'advanced':
-        return 'Advanced Concept'
-      default:
-        return conceptContent.title || 'Learning Concept'
-    }
-  }
-
   const handleExplainFurther = () => {
     onInteraction('concept_expanded', {
       componentId: id,
@@ -121,7 +49,7 @@ export const ConceptCard = memo(function ConceptCard({ onInteraction, content, i
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <BookOpen className="h-6 w-6 text-blue-600" />
-            <CardTitle className="text-xl font-bold text-gray-900">{generateMeaningfulTitle()}</CardTitle>
+            <CardTitle className="text-xl font-bold text-gray-900">{conceptContent.title}</CardTitle>
           </div>
           <Badge className={getDifficultyColor(conceptContent.difficulty)}>
             <span className="text-xs font-semibold capitalize tracking-wide">{conceptContent.difficulty}</span>
