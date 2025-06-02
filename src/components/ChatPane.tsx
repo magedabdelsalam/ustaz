@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { SpinnerIcon } from '@/components/ui/loading-spinner'
 import { ChatMessageList } from './ChatMessageList'
 import { supabase } from '@/lib/supabase'
+import { errorHandler } from '@/lib/errorHandler'
 
 interface ChatPaneProps {
   selectedSubject: Subject | null
@@ -286,11 +287,12 @@ const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubject, onNe
 
     } catch (error) {
       console.error('❌ AI conversation error:', error)
-      
+      const appError = errorHandler.handleError(error, 'chat_send')
+
       const errorMessage: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: 'I apologize, but I encountered an error. Please try again.',
+        content: `Error: ${appError.userMessage}`,
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
@@ -319,6 +321,7 @@ const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubject, onNe
 
     } catch (error) {
       console.error('❌ Interaction error:', error)
+      errorHandler.handleError(error, 'content_interaction')
     }
   }, [selectedSubject, aiTutor, saveMessageToPersistence])
 
@@ -350,6 +353,7 @@ const ChatPane = forwardRef<ChatPaneRef, ChatPaneProps>(({ selectedSubject, onNe
       
     } catch (error) {
       console.error('❌ Retry failed:', error)
+      errorHandler.handleError(error, 'chat_retry')
     } finally {
       setIsTyping(false)
     }

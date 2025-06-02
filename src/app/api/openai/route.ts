@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { AITutorService } from '@/lib/ai-tutor-service'
 import { OPENAI_API_KEY } from '@/lib/config'
 import { persistenceService } from '@/lib/persistenceService'
+import { errorHandler } from '@/lib/errorHandler'
 
 // Define an interface for the subject data structure
 interface SubjectData {
@@ -200,9 +201,10 @@ export async function POST(request: Request) {
 
   } catch (error) {
     console.error('❌ AI Tutor API error:', error)
-    return NextResponse.json({ 
-      error: 'AI Tutor API error',
-      response: 'I apologize, but I encountered an error. Please try again.'
+    const appError = errorHandler.handleError(error, 'ai_tutor_api')
+    return NextResponse.json({
+      error: appError.message,
+      userMessage: appError.userMessage
     }, { status: 500 })
   }
 }

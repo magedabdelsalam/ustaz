@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { TutorContext, TutorToolName } from '@/lib/ai-tutor-service';
 import { Subject, LessonPlan, LearningProgress, ComponentType, InteractiveContent } from '@/types';
+import { errorHandler } from '@/lib/errorHandler';
 
 interface ToolCallResult {
   name: TutorToolName;
@@ -97,10 +98,10 @@ export function useAITutor(options: UseAITutorOptions = {}) {
       return data.response;
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(errorMessage);
+      const appError = errorHandler.handleError(err, 'send_message');
+      setError(appError.userMessage);
       console.error('AI Tutor Error:', err);
-      return `I apologize, but I encountered an error: ${errorMessage}. Please try again.`;
+      return `Error: ${appError.userMessage}`;
     } finally {
       setIsLoading(false);
     }
@@ -191,11 +192,11 @@ export function useAITutor(options: UseAITutorOptions = {}) {
       };
 
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      setError(errorMessage);
+      const appError = errorHandler.handleError(err, 'send_message_with_metadata');
+      setError(appError.userMessage);
       console.error('AI Tutor Error:', err);
       return {
-        response: `I apologize, but I encountered an error: ${errorMessage}. Please try again.`,
+        response: `Error: ${appError.userMessage}`,
         hasGeneratedInteractiveContent: false
       };
     } finally {
