@@ -7,9 +7,9 @@ import { Slider } from '@/components/ui/slider'
 import { BarChart3, LineChart, PieChart, Zap, RotateCcw } from 'lucide-react'
 import { 
   InteractiveComponentProps, 
-  GraphContent, 
   DataPoint, 
-  FunctionConfig 
+  FunctionConfig,
+  GraphContent
 } from '@/types'
 
 export const GraphVisualizer = memo(function GraphVisualizer({ 

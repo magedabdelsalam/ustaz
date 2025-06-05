@@ -1,27 +1,19 @@
 'use client'
 
+import React from 'react'
 import { useState, memo, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Highlighter, RotateCcw, CheckCircle, XCircle, Eye, EyeOff } from 'lucide-react'
+import type { HighlighterContent } from '@/types'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
   content: unknown
   id: string
-}
-
-interface HighlighterContent {
-  title: string
-  description: string
-  text: string
-  categories: HighlightCategory[]
-  instructions?: string
-  targets?: HighlightTarget[]
-  showFeedback?: boolean
-  explanation?: string
-  category?: string
 }
 
 interface HighlightCategory {
@@ -56,7 +48,6 @@ export const TextHighlighter = memo(function TextHighlighter({
 }: InteractiveComponentProps) {
   const [userHighlights, setUserHighlights] = useState<UserHighlight[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string>('')
-  const [showTargets, setShowTargets] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const textRef = useRef<HTMLDivElement>(null)
   
@@ -140,50 +131,8 @@ export const TextHighlighter = memo(function TextHighlighter({
   }
 
   const calculateResults = () => {
-    if (!highlighterContent.targets) return null
-
-    const correctHighlights: string[] = []
-    const incorrectHighlights: string[] = []
-    const missedTargets: HighlightTarget[] = []
-
-    // Check user highlights against targets
-    userHighlights.forEach(userHighlight => {
-      const matchingTarget = highlighterContent.targets?.find(target => 
-        target.startIndex === userHighlight.startIndex &&
-        target.endIndex === userHighlight.endIndex &&
-        target.categoryId === userHighlight.categoryId
-      )
-
-      if (matchingTarget) {
-        correctHighlights.push(userHighlight.id)
-      } else {
-        incorrectHighlights.push(userHighlight.id)
-      }
-    })
-
-    // Find missed targets
-    highlighterContent.targets.forEach(target => {
-      const wasHighlighted = userHighlights.some(userHighlight =>
-        target.startIndex === userHighlight.startIndex &&
-        target.endIndex === userHighlight.endIndex &&
-        target.categoryId === userHighlight.categoryId
-      )
-
-      if (!wasHighlighted) {
-        missedTargets.push(target)
-      }
-    })
-
-    const totalTargets = highlighterContent.targets.length
-    const score = totalTargets > 0 ? (correctHighlights.length / totalTargets) * 100 : 0
-
-    return {
-      correctHighlights,
-      incorrectHighlights,
-      missedTargets,
-      score,
-      totalTargets
-    }
+    // TODO: Add support for grading if targets are provided via props or context
+    return null
   }
 
   const renderTextWithHighlights = () => {
@@ -198,7 +147,6 @@ export const TextHighlighter = memo(function TextHighlighter({
     // Collect all highlights and targets
     const allHighlights = [
       ...userHighlights.map(h => ({ ...h, type: 'user' as const })),
-      ...(showTargets && highlighterContent.targets ? highlighterContent.targets.map(t => ({ ...t, type: 'target' as const })) : [])
     ].sort((a, b) => a.startIndex - b.startIndex)
 
     let currentIndex = 0
@@ -216,12 +164,6 @@ export const TextHighlighter = memo(function TextHighlighter({
         segments.push({
           text: text.substring(highlight.startIndex, highlight.endIndex),
           highlight: highlight as UserHighlight
-        })
-      } else {
-        segments.push({
-          text: text.substring(highlight.startIndex, highlight.endIndex),
-          target: highlight as HighlightTarget,
-          isTarget: true
         })
       }
 
@@ -265,19 +207,6 @@ export const TextHighlighter = memo(function TextHighlighter({
         )
       }
 
-      if (segment.isTarget && segment.target) {
-        const category = highlighterContent.categories.find(c => c.id === segment.target!.categoryId)
-        return (
-          <span
-            key={index}
-            className="border-2 border-dashed rounded px-1"
-            style={{ borderColor: category?.color }}
-          >
-            {segment.text}
-          </span>
-        )
-      }
-
       return <span key={index}>{segment.text}</span>
     })
   }
@@ -290,47 +219,18 @@ export const TextHighlighter = memo(function TextHighlighter({
   }
 
   const renderResults = () => {
-    const results = calculateResults()
-    if (!results) return null
+    // Grading is not available for this exercise
+    return <div className="text-gray-500 text-center">No grading available for this exercise.</div>
+  }
 
-    return (
-      <div className="space-y-4">
-        <div className="text-center">
-          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 ${
-            results.score >= 80 ? 'bg-green-100' : results.score >= 60 ? 'bg-yellow-100' : 'bg-red-100'
-          }`}>
-            <span className={`text-2xl font-bold ${
-              results.score >= 80 ? 'text-green-600' : results.score >= 60 ? 'text-yellow-600' : 'text-red-600'
-            }`}>
-              {Math.round(results.score)}%
-            </span>
-          </div>
-          <p className="text-gray-600">
-            You correctly identified {results.correctHighlights.length} out of {results.totalTargets} targets
-          </p>
-        </div>
-
-        {results.missedTargets.length > 0 && (
-          <div className="bg-yellow-50 p-4 rounded-lg">
-            <h5 className="font-medium text-yellow-800 mb-2">Missed Highlights:</h5>
-            <ul className="text-sm text-yellow-700 space-y-1">
-              {results.missedTargets.map(target => {
-                const category = highlighterContent.categories.find(c => c.id === target.categoryId)
-                return (
-                  <li key={target.id}>
-                    &quot;{target.text}&quot; should be highlighted as <strong>{category?.name}</strong>
-                  </li>
-                )
-              })}
-            </ul>
-          </div>
-        )}
-      </div>
-    )
+  // Show feedback with animation and toast (if applicable)
+  const showFeedback = (isCorrect: boolean) => {
+    toast[isCorrect ? 'success' : 'error'](isCorrect ? 'Correct!' : 'Try again!')
+    setShowResults(true)
   }
 
   return (
-    <Card className="w-full mb-6">
+    <Card className="w-full mb-6" role="form" aria-label={`Text highlighter: ${highlighterContent.title}`} tabIndex={0}>
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
@@ -338,22 +238,11 @@ export const TextHighlighter = memo(function TextHighlighter({
             {highlighterContent.title}
           </CardTitle>
           <div className="flex items-center space-x-2">
-            {highlighterContent.category && (
-              <Badge variant="outline" className="text-xs font-medium">
-                {highlighterContent.category}
-              </Badge>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowTargets(!showTargets)}
-              disabled={showResults || !highlighterContent.targets}
-            >
-              {showTargets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </Button>
+            {/* Removed highlighterContent.category badge as it does not exist on type */}
           </div>
         </div>
         <p className="text-gray-600 text-base leading-relaxed mt-1">{highlighterContent.description}</p>
+        <span className="sr-only">Select text and press a category to highlight. Click a highlight to remove it.</span>
       </CardHeader>
 
       <CardContent className="space-y-6">
@@ -366,19 +255,18 @@ export const TextHighlighter = memo(function TextHighlighter({
                 key={category.id}
                 variant={selectedCategory === category.id ? "default" : "outline"}
                 size="sm"
-                className="h-auto p-2"
+                className="h-auto p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 onClick={() => setSelectedCategory(category.id)}
                 style={{
                   backgroundColor: selectedCategory === category.id ? category.color : 'transparent',
                   borderColor: category.color,
                   color: selectedCategory === category.id ? 'white' : category.color
                 }}
+                aria-label={`Select category ${category.name}`}
               >
                 <div className="text-center">
                   <div className="font-medium">{category.name}</div>
-                  {category.shortcut && (
-                    <div className="text-xs opacity-75">{category.shortcut}</div>
-                  )}
+                  {/* Removed shortcut display as shortcut is not in type */}
                 </div>
               </Button>
             ))}
@@ -399,9 +287,11 @@ export const TextHighlighter = memo(function TextHighlighter({
           <h4 className="font-medium text-gray-900">Text to Analyze</h4>
           <div 
             ref={textRef}
-            className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 select-text leading-relaxed text-gray-800"
+            className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 select-text leading-relaxed text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
             onMouseUp={handleTextSelection}
             style={{ userSelect: 'text' }}
+            tabIndex={0}
+            aria-label="Highlightable text"
           >
             {renderTextWithHighlights()}
           </div>
@@ -411,30 +301,22 @@ export const TextHighlighter = memo(function TextHighlighter({
         </div>
 
         {/* Action buttons */}
-        {highlighterContent.targets && !showResults && (
-          <div className="flex justify-center">
-            <Button 
-              onClick={handleCheckAnswers}
-              disabled={userHighlights.length === 0}
-            >
-              Check My Highlights
+        {showResults && (
+          <div className="flex space-x-3 justify-center">
+            <Button onClick={handleNewText} className="flex-1 max-w-48 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2" aria-label="New text">
+              New Text
+            </Button>
+            <Button onClick={handleReset} variant="outline" className="flex-1 max-w-48 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2" aria-label="Try again">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Try Again
             </Button>
           </div>
         )}
 
         {/* Results */}
         {showResults && (
-          <div className="space-y-4">
+          <div className="space-y-4" aria-live="polite" role="status">
             {renderResults()}
-            <div className="flex space-x-3 justify-center">
-              <Button onClick={handleNewText} className="flex-1 max-w-48">
-                New Text
-              </Button>
-              <Button onClick={handleReset} variant="outline" className="flex-1 max-w-48">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
-            </div>
           </div>
         )}
 
@@ -445,6 +327,20 @@ export const TextHighlighter = memo(function TextHighlighter({
             <p className="text-sm text-pink-700">{highlighterContent.explanation}</p>
           </div>
         )}
+
+        <AnimatePresence>
+          {showResults && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.18 }}
+              className="mt-4 text-center font-semibold text-gray-600"
+            >
+              No grading available for this exercise.
+            </motion.div>
+          )}
+        </AnimatePresence>
       </CardContent>
     </Card>
   )

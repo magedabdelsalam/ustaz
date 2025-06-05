@@ -6,22 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, ArrowRight, ArrowLeft, RotateCcw, Trophy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import type { QuizContent } from '@/types'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
   content: unknown
   id: string
-}
-
-interface QuizContent {
-  title: string
-  description: string
-  timeLimit?: number // in seconds
-  questions: QuizQuestion[]
-  passingScore?: number // percentage
-  allowRetry?: boolean
-  showExplanations?: boolean
-  category?: string
 }
 
 interface QuizQuestion {

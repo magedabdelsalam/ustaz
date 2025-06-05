@@ -1,14 +1,17 @@
 'use client'
 
-import { useRef, useEffect, useCallback } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'
 import { HistoryPane } from '@/components/HistoryPane'
-import { ContentPane } from '@/components/ContentPane'
-import { ChatPane, ChatPaneRef } from '@/components/ChatPane'
 import { Button } from '@/components/ui/button'
 import { persistenceService } from '@/lib/persistenceService'
-import { InteractiveContent } from '@/types'
+import { InteractiveContent, Message, LessonPlan } from '@/types'
+import { StreamPane, StreamItem, StreamMessage, StreamInteractiveContent } from './StreamPane'
+import { useAITutor } from '@/hooks/useAITutor'
+import { Subject } from '@/types'
+import { useSubjectSession } from '@/hooks/useSubjectSession'
+import { toast } from 'sonner'
 
 export function Dashboard() {
   const { user } = useAuth()
@@ -19,8 +22,49 @@ export function Dashboard() {
     createSubject,
     deleteSubject
   } = useSubjects()
-  const chatRef = useRef<ChatPaneRef>(null)
   const lastUserMessageRef = useRef<{ id: string; content: string; previousSubjectId: string | null } | null>(null)
+
+  // Unified stream state
+  const [stream, setStream] = useState<StreamItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+
+  // State for lesson plan
+  const [lessonPlan, setLessonPlan] = useState<LessonPlan | null>(null)
+
+  // Memoized callback to avoid infinite loop
+  const onMessagesLoaded = useCallback((messages: Message[]) => {
+    const mapped = messages.map((msg: Message) => ({
+      ...msg,
+      streamType: 'message' as const,
+      timestamp: msg.timestamp instanceof Date ? msg.timestamp : new Date(msg.timestamp),
+    }))
+    setStream(mapped)
+  }, [])
+
+  // Load previous messages for the selected subject
+  const { loadSubjectSession, isLoadingMessages } = useSubjectSession({
+    user,
+    selectedSubject: currentSubject,
+    onMessagesLoaded,
+  })
+
+  // AI Tutor logic
+  const aiTutor = useAITutor({
+    subject: currentSubject,
+    userId: user?.id,
+    onInteractiveContent: (content) => {
+      // Add interactive content to the stream
+      const interactive: StreamInteractiveContent = {
+        ...content,
+        streamType: 'interactive',
+        timestamp: new Date(),
+      }
+      setStream(prev => [...prev, interactive])
+    },
+    onLessonPlanCreated: (plan) => {
+      setLessonPlan(plan)
+    },
+  })
 
   // Test connection on mount
   useEffect(() => {
@@ -47,108 +91,12 @@ export function Dashboard() {
       }
     }
 
-    const handleNewSubjectCreated = (event: CustomEvent) => {
-      const { subject, initialMessage, initialResponse } = event.detail
-
-      console.log('🎯 Dashboard received new subject created event:', subject.name)
-
-      // Check if subject already exists by ID
-      const subjectExists = subjects.some(s => s.id === subject.id)
-      
-      if (!subjectExists) {
-        // If not, create it
-        createSubject(subject.name)
-          .then(newSubject => {
-            console.log('✅ Created new subject:', newSubject.name)
-            // Automatically select this new subject
-            selectSubject(newSubject)
-            
-            // Log the initial messages for context
-            if (initialMessage) {
-              // Check if initialMessage is an object with content property or a string
-              const messageContent = typeof initialMessage === 'string' 
-                ? initialMessage 
-                : (initialMessage.content || initialMessage.toString());
-              console.log('📝 Initial message carried over:', messageContent.substring(0, 30) + '...')
-            }
-            if (initialResponse) {
-              console.log('🤖 Initial response carried over:', initialResponse.content.substring(0, 30) + '...')
-            }
-            
-            // Wait for the subject to be fully saved to the database before saving messages
-            // This prevents foreign key constraint errors
-            setTimeout(async () => {
-              try {
-                // Now that subject should be in the database, save the messages
-                if (initialMessage && typeof initialMessage === 'object' && initialMessage.content) {
-                  // Save the actual messages
-                  const userMessageSaved = await persistenceService.saveMessage({
-                    id: initialMessage.id || `user-${Date.now()}`,
-                    user_id: user?.id || '',
-                    subject_id: newSubject.id,
-                    role: 'user',
-                    content: initialMessage.content,
-                    timestamp: initialMessage.timestamp?.toISOString() || new Date().toISOString(),
-                    has_generated_content: false
-                  });
-                  
-                  if (userMessageSaved) {
-                    console.log('✅ Saved initial user message for new subject');
-                  }
-                  
-                  if (initialResponse) {
-                    const aiMessageSaved = await persistenceService.saveMessage({
-                      id: initialResponse.id || `ai-${Date.now()}`,
-                      user_id: user?.id || '',
-                      subject_id: newSubject.id,
-                      role: 'assistant',
-                      content: initialResponse.content,
-                      timestamp: initialResponse.timestamp?.toISOString() || new Date().toISOString(),
-                      has_generated_content: initialResponse.hasGeneratedContent || false
-                    });
-                    
-                    if (aiMessageSaved) {
-                      console.log('✅ Saved initial AI response for new subject');
-                    }
-                  }
-                }
-              } catch (error) {
-                console.error('❌ Failed to save initial messages:', error);
-              }
-            }, 1000); // Wait 1 second for the subject to be saved to the database
-          })
-          .catch(err => {
-            console.error('❌ Failed to create subject:', err)
-          })
-      } else {
-        // If it exists, just select it
-        const existingSubject = subjects.find(s => s.id === subject.id)
-        if (existingSubject) {
-          selectSubject(existingSubject)
-          
-          // Log the initial messages for context
-          if (initialMessage) {
-            // Check if initialMessage is an object with content property or a string
-            const messageContent = typeof initialMessage === 'string' 
-              ? initialMessage 
-              : (initialMessage.content || initialMessage.toString());
-            console.log('📝 Initial message carried over to existing subject:', messageContent.substring(0, 30) + '...')
-          }
-          if (initialResponse) {
-            console.log('🤖 Initial response carried over to existing subject:', initialResponse.content.substring(0, 30) + '...')
-          }
-        }
-      }
-    }
-
     window.addEventListener('userMessageSent', handleUserMessage as EventListener)
-    window.addEventListener('newSubjectCreated', handleNewSubjectCreated as EventListener)
     
     return () => {
       window.removeEventListener('userMessageSent', handleUserMessage as EventListener)
-      window.removeEventListener('newSubjectCreated', handleNewSubjectCreated as EventListener)
     }
-  }, [currentSubject, subjects, createSubject, selectSubject, user])
+  }, [currentSubject, user])
 
   // AI-first message handler - let AI decide everything
   const handleNewMessage = useCallback(async (message: string, isUserMessage = false) => {
@@ -161,85 +109,149 @@ export function Dashboard() {
     // AI will decide whether to create subjects, switch contexts, etc.
   }, [])
 
-  const handleContentInteraction = async (action: string, data: unknown) => {
-    console.log('🎯 Content interaction:', action, data)
-    
-    if (!chatRef.current) {
-      console.error('❌ Chat reference not available')
-      return
+  // Handle user sending a message
+  const handleSendMessage = useCallback(async (message: string) => {
+    if (!user || !currentSubject) return
+    setIsLoading(true)
+    // Add user message to stream
+    const userMsg: StreamMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: message,
+      timestamp: new Date(),
+      streamType: 'message',
     }
-
+    setStream(prev => [...prev, userMsg])
+    // Save to persistence (optional)
+    await persistenceService.saveMessage({
+      id: userMsg.id,
+      user_id: user.id,
+      subject_id: currentSubject.id,
+      role: 'user',
+      content: message,
+      timestamp: userMsg.timestamp.toISOString(),
+      has_generated_content: false,
+    })
+    // Get AI response
     try {
-      // Handle all the different interaction types from interactive components
-      switch (action) {
-        // ConceptCard actions
-        case 'ready_for_next':
-          const interactionData = data as { concept?: string; action?: string; componentId?: string }
-          if (interactionData.action === 'practice' && interactionData.concept) {
-            console.log('🎯 Practice request for concept:', interactionData.concept)
-            await chatRef.current.handleContentInteraction('ready_for_next', {
-              concept: interactionData.concept,
-              action: 'practice',
-              componentId: interactionData.componentId
-            })
-          } else {
-            console.log('🔄 General ready_for_next request')
-            await chatRef.current.handleContentInteraction(action, data)
-          }
-          break
-
-        case 'concept_expanded':
-        case 'examples_requested':
-          console.log('🧠 Concept expansion/examples request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Answer submission actions from all components
-        case 'answer_submitted':
-        case 'fill_blank_submitted':
-        case 'drag_drop_submitted':
-          console.log('✅ Answer submitted from interactive component')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Next content requests
-        case 'next_question':
-        case 'next_exercise':
-        case 'next_problem':
-          console.log('➡️ Next content request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Reset actions
-        case 'reset_question':
-        case 'fill_blank_reset':
-        case 'drag_drop_reset':
-        case 'solver_reset':
-          console.log('🔄 Component reset request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Explanation requests
-        case 'explain_more':
-          console.log('📚 Explanation request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Special interactive actions
-        case 'item_dropped':
-        case 'auto_play_started':
-          console.log('🎮 Interactive action')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Fallback for any unhandled actions
-        default:
-          console.log('🤔 Unhandled interaction type:', action, 'forwarding to ChatPane')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
+      const aiResult = await aiTutor.sendMessageWithMetadata(message)
+      // Add AI message to stream
+      const aiMsg: StreamMessage = {
+        id: `ai-${Date.now()}`,
+        role: 'assistant',
+        content: aiResult.response,
+        timestamp: new Date(),
+        streamType: 'message',
       }
-    } catch (error) {
-      console.error('❌ Failed to handle content interaction:', error)
+      setStream(prev => [...prev, aiMsg])
+      // Save AI message
+      await persistenceService.saveMessage({
+        id: aiMsg.id,
+        user_id: user.id,
+        subject_id: currentSubject.id,
+        role: 'assistant',
+        content: aiResult.response,
+        timestamp: aiMsg.timestamp.toISOString(),
+        has_generated_content: aiResult.hasGeneratedInteractiveContent || false,
+      })
+      // If AI generated interactive content, it will be added via onInteractiveContent
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user, currentSubject, aiTutor])
+
+  // Handle interaction from interactive components
+  const handleInteraction = useCallback(async (action: string, data: unknown) => {
+    if (!user || !currentSubject) return
+    setIsLoading(true)
+    try {
+      // Let AI handle the interaction and respond
+      const aiResult = await aiTutor.sendMessageWithMetadata(`User interacted: ${action} - ${JSON.stringify(data)}`)
+      const aiMsg: StreamMessage = {
+        id: `ai-${Date.now()}`,
+        role: 'assistant',
+        content: aiResult.response,
+        timestamp: new Date(),
+        streamType: 'message',
+      }
+      setStream(prev => [...prev, aiMsg])
+      await persistenceService.saveMessage({
+        id: aiMsg.id,
+        user_id: user.id,
+        subject_id: currentSubject.id,
+        role: 'assistant',
+        content: aiResult.response,
+        timestamp: aiMsg.timestamp.toISOString(),
+        has_generated_content: aiResult.hasGeneratedInteractiveContent || false,
+      })
+      // If AI generates new interactive content, it will be added via onInteractiveContent
+    } finally {
+      setIsLoading(false)
+    }
+  }, [user, currentSubject, aiTutor])
+
+  // Load previous stream for the selected subject
+  useEffect(() => {
+    if (currentSubject && user) {
+      loadSubjectSession()
+    } else {
+      setStream([])
+    }
+  }, [currentSubject?.id, user?.id, loadSubjectSession])
+
+  // Handler for when goals/level are set in HistoryPane
+  const handleGoalsAndLevelSet = (subjectId: string, goals: string, level: string) => {
+    // Update the subject in local state (if needed)
+    if (currentSubject && currentSubject.id === subjectId) {
+      currentSubject.userGoals = goals
+      currentSubject.userLevel = level
+    }
+    // Update TutorContext in useAITutor so backend receives the info
+    if (aiTutor && typeof aiTutor.updateContext === 'function') {
+      aiTutor.updateContext({ userGoals: goals, userLevel: level })
+    }
+  }
+
+  // Handler for practice/assessment completion
+  const handlePracticeComplete = async ({ lessonId, score, total, difficulty }: { lessonId: string, score: number, total: number, difficulty?: string }) => {
+    // Call the new API route for adaptive mastery
+    const res = await fetch('/api/assessment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lessonId, score, total, difficulty })
+    })
+    const result = await res.json()
+    setLessonPlan(prev => {
+      if (!prev) return prev
+      const lessons = prev.lessons.map(lesson =>
+        lesson.id === lessonId ? { ...lesson, completed: result.success } : lesson
+      )
+      return { ...prev, lessons }
+    })
+    // Show feedback to the user
+    if (result.success) {
+      toast.success(result.message || 'Lesson mastered! You can advance to the next lesson.')
+      // If a lesson or subject summary is present, add it to the stream
+      if (result.summary && result.summary.content) {
+        setStream(prev => [...prev, {
+          id: `summary-${lessonId}-${Date.now()}`,
+          streamType: 'message',
+          role: 'assistant',
+          content: typeof result.summary.content === 'string' ? result.summary.content : JSON.stringify(result.summary.content),
+          timestamp: new Date()
+        }])
+      }
+      if (result.subjectSummary && result.subjectSummary.content) {
+        setStream(prev => [...prev, {
+          id: `subject-summary-${Date.now()}`,
+          streamType: 'message',
+          role: 'assistant',
+          content: typeof result.subjectSummary.content === 'string' ? result.subjectSummary.content : JSON.stringify(result.subjectSummary.content),
+          timestamp: new Date()
+        }])
+      }
+    } else {
+      toast.error(result.message || 'Keep practicing to master this lesson.')
     }
   }
 
@@ -256,7 +268,46 @@ export function Dashboard() {
             user={user}
             onSubjectSelect={selectSubject}
             onSubjectDelete={deleteSubject}
+            onSubjectCreate={async (name) => {
+              try {
+                const newSubject = await createSubject(name)
+                selectSubject(newSubject)
+              } catch (e) {
+                // Optionally handle error (already handled in HistoryPane UI)
+              }
+            }}
+            showCloseButton={false}
+            onGoalsAndLevelSet={handleGoalsAndLevelSet}
           />
+          {/* Lesson Plan Sidebar Section */}
+          {lessonPlan && (
+            <div className="p-4 border-t border-gray-200 bg-white">
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Lesson Plan</h3>
+              <ol className="space-y-2">
+                {lessonPlan.lessons.map((lesson, idx) => (
+                  <li
+                    key={lesson.id}
+                    className={`flex items-center space-x-2 px-2 py-1 rounded transition-colors ${
+                      lessonPlan.currentLessonIndex === idx
+                        ? 'bg-blue-100 text-blue-900 font-semibold'
+                        : lesson.completed
+                        ? 'text-green-700 line-through'
+                        : 'text-gray-700'
+                    }`}
+                  >
+                    {lessonPlan.currentLessonIndex === idx ? (
+                      <span className="inline-block w-2 h-2 bg-blue-600 rounded-full mr-2" />
+                    ) : lesson.completed ? (
+                      <span className="inline-block w-2 h-2 bg-green-500 rounded-full mr-2" />
+                    ) : (
+                      <span className="inline-block w-2 h-2 bg-gray-300 rounded-full mr-2" />
+                    )}
+                    <span className="truncate">{lesson.title}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
         
         {/* Mobile History Toggle - Show on mobile */}
@@ -308,6 +359,7 @@ export function Dashboard() {
                   }
                 }}
                 onSubjectDelete={deleteSubject}
+                onGoalsAndLevelSet={handleGoalsAndLevelSet}
               />
             </div>
           </div>
@@ -315,27 +367,13 @@ export function Dashboard() {
         
         {/* Main Content Area - Responsive layout */}
         <div className="flex-1 flex flex-col lg:flex-row min-w-0 overflow-hidden">
-          {/* Content Pane - Responsive sizing with proper flex basis */}
-          <div className="flex-1 lg:flex-[3] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0 overflow-hidden">
-            <ContentPane 
-              selectedSubject={currentSubject}
-              onContentInteraction={handleContentInteraction}
-            />
-          </div>
-          
-          {/* Chat Pane - Fixed width on larger screens, flexible on mobile */}
-          <div className="flex-none h-[50vh] lg:h-auto lg:w-80 xl:w-96 2xl:w-[400px] 
-                          bg-white border-l border-gray-200 lg:border-t-0 border-t 
-                          flex flex-col overflow-hidden">
-            <ChatPane 
-              ref={chatRef}
-              selectedSubject={currentSubject}
-              onNewMessage={handleNewMessage}
-              onGeneratedContent={(content: InteractiveContent) => {
-                console.log('🎯 AI generated interactive content:', content.type);
-                // The content will be automatically displayed in ContentPane
-                // via the existing event system from the AI tutor callbacks
-              }}
+          {/* Unified StreamPane replaces ContentPane and ChatPane */}
+          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <StreamPane
+              stream={stream}
+              onInteraction={handleInteraction}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
             />
           </div>
         </div>

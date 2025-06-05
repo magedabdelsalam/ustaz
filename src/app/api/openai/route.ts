@@ -58,6 +58,8 @@ export async function POST(request: Request) {
     console.log('📤 Context instructionOverrides:', tutorContext?.instructionOverrides ? 'YES' : 'NO');
     if (tutorContext?.instructionOverrides?.preferInteractiveContent) {
       console.log('✅ preferInteractiveContent is enabled');
+      console.log('📝 Interactive content guidelines:', 
+        tutorContext.instructionOverrides.interactiveContentGuidelines?.substring(0, 200) + '...');
     } else {
       console.log('⚠️ preferInteractiveContent is NOT enabled in context');
     }
@@ -72,6 +74,42 @@ export async function POST(request: Request) {
     const newSubjectToolCall = result.toolCalls.find(tc => tc.name === 'new_subject');
     const newSubjectCreated = newSubjectToolCall ? newSubjectToolCall.result.success : false;
     const newSubjectData = newSubjectToolCall ? newSubjectToolCall.result.subject : null;
+    
+    // If the response is the fallback error message and we have a subject context, try to recover
+    if (result.response.includes("I'm sorry, I encountered an error") && 
+        tutorContext?.subject && 
+        tutorContext.subject.id) {
+      
+      console.log('🔄 Attempting recovery with explicit subject context');
+      
+      // Try again with a more explicit subject context
+      const recoveryResult = await tutorService.generateResponse(message, {
+        ...tutorContext,
+        subject: {
+          ...tutorContext.subject,
+          // Ensure these fields are present
+          progress: tutorContext.subject.progress || 0,
+          messageCount: tutorContext.subject.messageCount || 0,
+          isActive: true,
+          topicKeywords: tutorContext.subject.topicKeywords || [tutorContext.subject.name.toLowerCase()]
+        }
+      });
+      
+      // If recovery succeeded (no error message), use the recovery result
+      if (!recoveryResult.response.includes("I'm sorry, I encountered an error")) {
+        console.log('✅ Recovery successful, using recovered response');
+        return NextResponse.json({
+          response: recoveryResult.response,
+          toolCalls: recoveryResult.toolCalls,
+          context: recoveryResult.updatedContext,
+          sessionId,
+          newSubjectCreated,
+          newSubjectData
+        });
+      } else {
+        console.log('❌ Recovery failed, using original fallback response');
+      }
+    }
     
     if (newSubjectCreated && newSubjectData && userId) {
       console.log('🎯 New subject created:', newSubjectData);
@@ -110,7 +148,8 @@ export async function POST(request: Request) {
       const componentType = interactiveComponentToolCall.parameters.type as string;
       
       // The AI's response often contains valuable content that should be used in the interactive component
-      const aiResponse = result.response;
+      // Not currently used - the AI should directly generate structured content
+      // const aiResponse = result.response;
       
       // Parse the response to extract relevant content based on component type
       if (componentType === 'explainer' && 
@@ -119,72 +158,33 @@ export async function POST(request: Request) {
         
         const content = interactiveComponentToolCall.parameters.content as Record<string, unknown>;
         
-        // If the content doesn't have rich sections but the AI response does, parse it
-        if ((!content.sections || (Array.isArray(content.sections) && content.sections.length === 0)) && 
-            aiResponse.includes(':')) {
+        // If the content doesn't have rich sections, provide a minimal default structure
+        // but don't try to parse it from the AI response text - the AI should directly generate structured content
+        if (!content.sections || (Array.isArray(content.sections) && content.sections.length === 0)) {
+          console.log('🔍 Adding default structure to explainer content');
           
-          console.log('🔍 Enhancing explainer content with AI response');
+          // Set default sections only if none were provided
+          content.sections = content.sections || [];
           
-          // Attempt to parse sections from the AI response
-          const sections = [];
-          const lines = aiResponse.split('\n');
-          let currentSection = null;
-          
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            
-            // Skip empty lines
-            if (!trimmedLine) continue;
-            
-            // Check if this is a heading (ends with a colon or starts with a common heading format)
-            if (trimmedLine.endsWith(':') || /^(What is|Key Characteristics|Characteristics|Properties|Features|Definition|Overview|Graph Shape|Vertex|Axis of Symmetry|Roots|Y-intercept)/i.test(trimmedLine)) {
-              // Start a new section
-              currentSection = {
-                title: trimmedLine.endsWith(':') ? trimmedLine.slice(0, -1) : trimmedLine,
-                content: ''
-              };
-              sections.push(currentSection);
-            } 
-            // If we have a current section, append this line to its content
-            else if (currentSection) {
-              if (currentSection.content) {
-                currentSection.content += '\n' + trimmedLine;
-              } else {
-                currentSection.content = trimmedLine;
-              }
-            }
+          // Ensure we have a title
+          if (!content.title) {
+            const learningObjective = interactiveComponentToolCall.parameters.learning_objective as string;
+            content.title = learningObjective || 'Learning Topic';
           }
           
-          // Only update if we found useful sections
-          if (sections.length > 0) {
-            content.sections = sections;
-            
-            // Extract overview if not present
-            if (!content.overview) {
-              // Use the first paragraph before any sections as overview
-              const overviewLines = [];
-              for (const line of lines) {
-                if (line.trim().endsWith(':') || /^(What is|Key Characteristics|Characteristics|Properties|Features|Definition)/i.test(line.trim())) {
-                  break;
-                }
-                if (line.trim()) {
-                  overviewLines.push(line.trim());
-                }
-              }
-              if (overviewLines.length > 0) {
-                content.overview = overviewLines.join('\n');
-              }
-            }
-            
-            // Update the tool call with the enhanced content
-            interactiveComponentToolCall.parameters.content = content;
-            
-            // Also update the result
-            if (interactiveComponentToolCall.result && 
-                typeof interactiveComponentToolCall.result === 'object' &&
-                interactiveComponentToolCall.result.content) {
-              interactiveComponentToolCall.result.content = content;
-            }
+          // Ensure we have an overview
+          if (!content.overview) {
+            content.overview = "Let's explore this important topic in detail.";
+          }
+          
+          // Update the tool call with the enhanced content
+          interactiveComponentToolCall.parameters.content = content;
+          
+          // Also update the result if it exists
+          if (interactiveComponentToolCall.result && 
+              typeof interactiveComponentToolCall.result === 'object' &&
+              interactiveComponentToolCall.result.content) {
+            interactiveComponentToolCall.result.content = content;
           }
         }
       }

@@ -1,12 +1,16 @@
 'use client'
 
+import React from 'react'
 import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, Lightbulb, Brain, RotateCcw, Target, Eye, EyeOff, Loader2 } from 'lucide-react'
-import { InteractiveComponentProps, FillInTheBlankContent } from '@/types'
+import { InteractiveComponentProps } from '@/types'
+import type { FillInTheBlankContent } from '@/types'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [userAnswers, setUserAnswers] = useState<string[]>([])
@@ -23,6 +27,20 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
   
   const fillContent = content as FillInTheBlankContent
   
+  // Defensive: If template is missing or not a string, render a fallback
+  if (typeof fillContent.template !== 'string' || fillContent.template.length === 0) {
+    return (
+      <Card className="w-full mb-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-gray-900">{fillContent.title || 'Fill in the Blank'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-600">No template available for this exercise.</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Parse template to find blanks and text segments
   const parts = fillContent.template.split('___')
   const blanksCount = parts.length - 1
@@ -82,6 +100,10 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
         allCorrect: score === totalScore,
         accuracy: Math.round((score / totalScore) * 100)
       })
+
+      // Show feedback with animation and toast
+      const isCorrect = score === totalScore
+      toast[isCorrect ? 'success' : 'error'](isCorrect ? 'Correct!' : 'Try again!')
     } finally {
       setTimeout(() => {
         setButtonLoadingStates(prev => ({ ...prev, submit: false }))
@@ -149,7 +171,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
   const accuracy = totalScore > 0 ? Math.round((score / totalScore) * 100) : 0
 
   return (
-    <Card className="w-full mb-6">
+    <Card className="w-full mb-6" role="form" aria-label="Fill in the blank exercise">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900">
@@ -161,7 +183,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             </Badge>
           )}
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{fillContent.question}</p>
+        <p className="text-gray-600 text-base leading-relaxed mt-1" id={`question-desc-${id}`}>{fillContent.question}</p>
       </CardHeader>
       
       <CardContent className="space-y-6">
@@ -173,13 +195,15 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               size="default"
               onClick={() => setShowHints(!showHints)}
               className="flex items-center text-sm font-medium"
+              aria-expanded={showHints}
+              aria-controls={`hints-${id}`}
             >
               <Lightbulb className="h-4 w-4 mr-2" />
               {showHints ? 'Hide Hints' : 'Show Hints'}
             </Button>
             
             {showHints && (
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200" id={`hints-${id}`}>
                 <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center">💡 Hints:</h4>
                 <div className="space-y-3">
                   {fillContent.hints.map((hint, index) => (
@@ -210,7 +234,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                         value={userAnswers[index] || ''}
                         onChange={(e) => handleAnswerChange(index, e.target.value)}
                         disabled={showResult}
-                        className={`w-40 h-12 text-center font-semibold border-2 transition-all text-base ${
+                        className={`w-40 h-12 text-center font-semibold border-2 transition-all text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
                           showResult
                             ? results[index]
                               ? 'bg-green-50 border-green-400 text-green-800'
@@ -224,13 +248,16 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                             ? `Enter ${fillContent.category.toLowerCase()} term`
                             : `Fill blank ${index + 1}`
                         }
+                        aria-label={`Blank ${index + 1}`}
+                        aria-describedby={`question-desc-${id}`}
+                        tabIndex={0}
                       />
                       <span className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                         {index + 1}
                       </span>
                     </div>
                     {showResult && (
-                      <div className="mt-2">
+                      <div className="mt-2" aria-live="polite" role="status">
                         {results[index] ? (
                           <CheckCircle className="h-6 w-6 text-green-600" />
                         ) : (
@@ -253,13 +280,15 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               size="default"
               onClick={() => setShowAnswers(!showAnswers)}
               className="flex items-center text-sm font-medium"
+              aria-expanded={showAnswers}
+              aria-controls={`answers-${id}`}
             >
               {showAnswers ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
               {showAnswers ? 'Hide Answers' : 'Show Correct Answers'}
             </Button>
             
             {showAnswers && (
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
+              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200" id={`answers-${id}`}>
                 <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">✅ Correct Answers:</h4>
                 <div className="grid gap-3">
                   {fillContent.answers.map((answer, index) => (
@@ -287,7 +316,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             accuracy >= 80 ? 'bg-green-50 border-green-200' : 
             accuracy >= 60 ? 'bg-yellow-50 border-yellow-200' : 
             'bg-red-50 border-red-200'
-          }`}>
+          }`} aria-live="polite" role="status">
             <div className="flex items-center mb-4">
               {accuracy >= 80 ? (
                 <CheckCircle className="h-7 w-7 text-green-600 mr-3" />
@@ -329,7 +358,8 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             <Button 
               onClick={handleSubmit} 
               disabled={userAnswers.some(answer => !answer.trim()) || buttonLoadingStates.submit || isLoading}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-base font-medium h-12"
+              className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-base font-medium h-12 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              aria-label="Check answers"
             >
               {buttonLoadingStates.submit ? (
                 <>
@@ -345,8 +375,9 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               <Button 
                 onClick={handleReset} 
                 variant="outline" 
-                className="flex items-center text-sm font-medium h-11"
+                className="flex items-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 disabled={buttonLoadingStates.reset || isLoading}
+                aria-label="Try again"
               >
                 {buttonLoadingStates.reset ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -358,8 +389,9 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               <Button 
                 onClick={handleExplainMore} 
                 variant="outline"
-                className="flex items-center text-sm font-medium h-11"
+                className="flex items-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 disabled={buttonLoadingStates.explainMore || isLoading}
+                aria-label="Explain more"
               >
                 {buttonLoadingStates.explainMore ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -370,8 +402,9 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               </Button>
               <Button 
                 onClick={handleNextExercise}
-                className="flex items-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
+                className="flex items-center bg-green-700 hover:bg-green-800 text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
                 disabled={buttonLoadingStates.nextExercise || isLoading}
+                aria-label="Next exercise"
               >
                 {buttonLoadingStates.nextExercise ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -384,6 +417,20 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             </>
           )}
         </div>
+
+        <AnimatePresence>
+          {showResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.18 }}
+              className={`mt-4 text-center font-semibold ${score === totalScore ? 'text-green-600' : 'text-red-600'}`}
+            >
+              {score === totalScore ? 'Correct!' : 'Try again!'}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </CardContent>
     </Card>
   )

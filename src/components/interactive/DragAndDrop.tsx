@@ -1,23 +1,18 @@
 'use client'
 
+import React from 'react'
 import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { CheckCircle, XCircle, RotateCcw, Move } from 'lucide-react'
+import { CheckCircle, XCircle, RotateCcw, Move, Loader2 } from 'lucide-react'
+import type { DragAndDropContent } from '@/types'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
   content: unknown
   id: string
-}
-
-interface DragAndDropContent {
-  question: string
-  instructions: string
-  items: DragItem[]
-  targets: DropTarget[]
-  explanation: string
-  category?: string
 }
 
 interface DragItem {
@@ -37,6 +32,7 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
   const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [showResult, setShowResult] = useState(false)
   const [results, setResults] = useState<Record<string, boolean>>({})
+  const [submitting, setSubmitting] = useState(false)
   
   const dragContent = content as DragAndDropContent
 
@@ -61,7 +57,8 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    setSubmitting(true)
     const newResults: Record<string, boolean> = {}
     
     dragContent.items.forEach(item => {
@@ -83,6 +80,12 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
       totalScore,
       allCorrect: score === totalScore
     })
+
+    // Show feedback with animation and toast
+    const isCorrect = score === totalScore
+    toast[isCorrect ? 'success' : 'error'](isCorrect ? 'Correct!' : 'Try again!')
+
+    setSubmitting(false)
   }
 
   const handleReset = () => {
@@ -113,16 +116,33 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
     return itemId ? dragContent.items.find(item => item.id === itemId) : null
   }
 
+  // Defensive: If items or targets are missing or not arrays, render a fallback
+  if (!Array.isArray(dragContent.items) || dragContent.items.length === 0 || !Array.isArray(dragContent.targets) || dragContent.targets.length === 0) {
+    return (
+      <Card className="w-full mb-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
+            <Move className="h-6 w-6 text-blue-600 mr-2" />
+            Drag & Drop
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-600">No items or targets available for this exercise.</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <Card className="w-full mb-6">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900 flex items-center">
             <Move className="h-6 w-6 text-blue-600 mr-2" />
-            {dragContent.category || 'Drag & Drop'}
+            {'Drag & Drop'}
           </CardTitle>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{dragContent.question}</p>
+        {/* No question property on DragAndDropContent; omit or add a placeholder if needed */}
       </CardHeader>
       <CardContent className="space-y-8">
         {/* Items to drag */}
@@ -144,7 +164,7 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                     : 'hover:bg-blue-200'
                 }`}
               >
-                <span className="text-base font-semibold">{item.content}</span>
+                <span className="text-base font-semibold">{item.id}</span>
                 {showResult && (
                   <span className="ml-3">
                     {results[item.id] ? (
@@ -198,11 +218,11 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                   
                   {assignedItem ? (
                     <div className="mt-3 px-3 py-2 bg-white rounded-md border shadow-sm">
-                      <span className="text-base font-medium">{assignedItem.content}</span>
+                      <span className="text-base font-medium">{assignedItem.id}</span>
                     </div>
                   ) : (
                     <div className="mt-3 text-sm text-gray-600 italic">
-                      {target.placeholder}
+                      {'Drop item here'}
                     </div>
                   )}
                 </div>
@@ -220,26 +240,30 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
         )}
 
         {/* Action buttons */}
-        <div className="flex space-x-3 pt-4">
-          {!showResult ? (
-            <Button 
-              onClick={handleSubmit} 
-              disabled={Object.keys(assignments).length !== dragContent.items.length}
-              className="flex-1 text-base font-medium h-12"
+        <div className="flex flex-col gap-4">
+          <AnimatePresence>
+            {showResult && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                transition={{ duration: 0.18 }}
+                className={`mt-4 text-center font-semibold ${results[Object.keys(results)[0]] ? 'text-green-600' : 'text-red-600'}`}
+              >
+                {results[Object.keys(results)[0]] ? 'Correct!' : 'Try again!'}
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex justify-end mt-4">
+            <Button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
+              aria-label="Submit answer"
             >
-              Check Answers
+              {submitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Submit'}
             </Button>
-          ) : (
-            <div className="flex space-x-3 w-full">
-              <Button onClick={handleNewExercise} className="flex-1 text-sm font-medium h-11">
-                New Exercise
-              </Button>
-              <Button onClick={handleReset} variant="outline" className="flex-1 text-sm font-medium h-11">
-                <RotateCcw className="h-4 w-4 mr-2" />
-                Try Again
-              </Button>
-            </div>
-          )}
+          </div>
         </div>
       </CardContent>
     </Card>

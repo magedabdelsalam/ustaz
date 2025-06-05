@@ -1,21 +1,15 @@
 'use client'
 
+import React from 'react'
 import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, Brain, RotateCcw, Target, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
-
-interface MultipleChoiceContent {
-  question: string
-  options: string[]
-  correctAnswer: number
-  explanation: string
-  difficulty?: 'beginner' | 'intermediate' | 'advanced'
-  hints?: string[]
-  category?: string
-}
+import type { MultipleChoiceContent } from '@/types'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 export const MultipleChoice = memo(function MultipleChoice({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
@@ -30,13 +24,30 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
   
   const mcContent = content as MultipleChoiceContent
 
+  // Defensive: If choices is missing or not an array, render a fallback
+  if (!Array.isArray(mcContent.choices) || mcContent.choices.length === 0) {
+    return (
+      <Card className="w-full mb-6">
+        <CardHeader>
+          <CardTitle className="text-xl font-bold text-gray-900">{mcContent.title || 'Multiple Choice'}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-red-600">No choices available for this question.</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Find the index of the correct answer
+  const correctIndex = mcContent.choices.findIndex(choice => choice.isCorrect)
+
   const handleSubmit = async () => {
     if (selectedOption === null) return
     
     setButtonLoadingStates(prev => ({ ...prev, submit: true }))
     try {
       setShowResult(true)
-      const isCorrect = selectedOption === mcContent.correctAnswer
+      const isCorrect = selectedOption === correctIndex
       
       onInteraction('answer_submitted', {
         componentId: id,
@@ -45,6 +56,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
         question: mcContent.question,
         score: isCorrect ? 1 : 0
       })
+      showFeedback(isCorrect)
     } finally {
       setTimeout(() => {
         setButtonLoadingStates(prev => ({ ...prev, submit: false }))
@@ -66,45 +78,6 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     }
   }
 
-  const handleExplainMore = async () => {
-    setButtonLoadingStates(prev => ({ ...prev, explainMore: true }))
-    try {
-      onInteraction('explain_more', {
-        componentId: id,
-        topic: mcContent.category,
-        question: mcContent.question
-      })
-    } finally {
-      setTimeout(() => {
-        setButtonLoadingStates(prev => ({ ...prev, explainMore: false }))
-      }, 1000)
-    }
-  }
-
-  const handleNextQuestion = async () => {
-    setButtonLoadingStates(prev => ({ ...prev, nextQuestion: true }))
-    console.log('🔵 ==========================================')
-    console.log('🔵 MULTIPLE CHOICE: NEXT QUESTION CLICKED!')
-    
-    try {
-      console.log('🔵 CALLING onInteraction NOW...')
-      onInteraction('next_question', {
-        componentId: id,
-        category: mcContent.category,
-        difficulty: mcContent.difficulty
-      })
-      console.log('🔵 onInteraction call completed successfully!')
-    } catch (error) {
-      console.error('🔵 ERROR calling onInteraction:', error)
-    } finally {
-      setTimeout(() => {
-        setButtonLoadingStates(prev => ({ ...prev, nextQuestion: false }))
-      }, 1000)
-    }
-    
-    console.log('🔵 handleNextQuestion function completed!')
-  }
-
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'beginner': return 'bg-green-100 text-green-800'
@@ -114,73 +87,41 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     }
   }
 
-  const isCorrect = showResult && selectedOption === mcContent.correctAnswer
+  const isCorrect = showResult && selectedOption === correctIndex
+
+  // Show feedback with animation and toast
+  const showFeedback = (isCorrect: boolean) => {
+    toast[isCorrect ? 'success' : 'error'](isCorrect ? 'Correct!' : 'Try again!')
+    setShowResult(true)
+  }
 
   return (
     <Card className="w-full mb-6">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900">
-            {mcContent.category}
+            {mcContent.title}
           </CardTitle>
-          {mcContent.difficulty && (
-            <Badge className={getDifficultyColor(mcContent.difficulty)}>
-              <span className="text-xs font-semibold capitalize tracking-wide">{mcContent.difficulty}</span>
-            </Badge>
-          )}
         </div>
         <p className="text-gray-600 text-base leading-relaxed mt-1">{mcContent.question}</p>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Hints section */}
-        {mcContent.hints && mcContent.hints.length > 0 && !showResult && (
-          <div className="space-y-3">
-            <Button
-              variant="outline"
-              size="default"
-              onClick={() => setShowHints(!showHints)}
-              className="flex items-center text-sm font-medium"
-            >
-              <Brain className="h-4 w-4 mr-2" />
-              {showHints ? 'Hide Hints' : 'Show Hints'}
-            </Button>
-            
-            {showHints && (
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <h4 className="text-base font-bold text-blue-900 mb-3 flex items-center">
-                  💡 Hints:
-                </h4>
-                <ul className="text-blue-800 space-y-2">
-                  {mcContent.hints.map((hint, index) => (
-                    <li key={index} className="flex items-start text-base leading-relaxed">
-                      <span className="flex-shrink-0 w-5 h-5 bg-blue-200 rounded-full text-xs flex items-center justify-center mr-3 mt-0.5 font-semibold">
-                        {index + 1}
-                      </span>
-                      {hint}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Options */}
         <div className="space-y-3">
           <h4 className="text-base font-semibold text-gray-800 mb-3">Choose your answer:</h4>
-          {mcContent.options.map((option, index) => (
+          {mcContent.choices.map((choice, index) => (
             <button
-              key={index}
+              key={choice.id}
               onClick={() => !showResult && setSelectedOption(index)}
               disabled={showResult}
               className={`w-full p-5 text-left rounded-lg border-2 transition-all duration-200 ${
                 selectedOption === index
                   ? showResult
-                    ? index === mcContent.correctAnswer
+                    ? index === correctIndex
                       ? 'bg-green-50 border-green-400 shadow-lg transform scale-[1.01]'
                       : 'bg-red-50 border-red-400 shadow-lg'
                     : 'bg-purple-50 border-purple-400 shadow-md'
-                  : showResult && index === mcContent.correctAnswer
+                  : showResult && index === correctIndex
                   ? 'bg-green-50 border-green-400 shadow-lg'
                   : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
               }`}
@@ -189,20 +130,20 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 <span className={`flex-shrink-0 w-10 h-10 rounded-full text-base flex items-center justify-center font-bold transition-colors ${
                   selectedOption === index
                     ? showResult
-                      ? index === mcContent.correctAnswer
+                      ? index === correctIndex
                         ? 'bg-green-500 text-white'
                         : 'bg-red-500 text-white'
                       : 'bg-purple-500 text-white'
-                    : showResult && index === mcContent.correctAnswer
+                    : showResult && index === correctIndex
                     ? 'bg-green-500 text-white'
                     : 'bg-gray-200 text-gray-600'
                 }`}>
                   {String.fromCharCode(65 + index)}
                 </span>
-                <span className="flex-1 font-medium text-base leading-relaxed">{option}</span>
+                <span className="flex-1 font-medium text-base leading-relaxed">{choice.text}</span>
                 {showResult && (
                   <span className="flex-shrink-0">
-                    {index === mcContent.correctAnswer ? (
+                    {index === correctIndex ? (
                       <CheckCircle className="h-6 w-6 text-green-600" />
                     ) : selectedOption === index ? (
                       <XCircle className="h-6 w-6 text-red-600" />
@@ -229,10 +170,19 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 {isCorrect ? '🎉 Correct!' : '❌ Not quite right'}
               </h4>
             </div>
-            <div className="bg-white p-4 rounded-md border shadow-sm">
-              <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
-              <p className="text-gray-700 text-base leading-relaxed">{mcContent.explanation}</p>
-            </div>
+            {mcContent.explanation && (
+              <div className="bg-white p-4 rounded-md border shadow-sm">
+                <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
+                <p className="text-gray-700 text-base leading-relaxed">{mcContent.explanation}</p>
+              </div>
+            )}
+            {/* Show explanation for the selected choice if available */}
+            {showResult && selectedOption !== null && mcContent.choices[selectedOption]?.explanation && (
+              <div className="bg-white p-4 rounded-md border shadow-sm mt-2">
+                <h5 className="text-base font-semibold text-gray-900 mb-2">Choice Explanation:</h5>
+                <p className="text-gray-700 text-base leading-relaxed">{mcContent.choices[selectedOption].explanation}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -254,47 +204,44 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
               )}
             </Button>
           ) : (
-            <>
-              <Button 
-                onClick={handleReset} 
-                variant="outline" 
-                className="flex items-center text-sm font-medium h-11"
-                disabled={buttonLoadingStates.reset || isLoading}
-              >
-                {buttonLoadingStates.reset ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                )}
-                {buttonLoadingStates.reset ? 'Resetting...' : 'Try Again'}
-              </Button>
-              <Button 
-                onClick={handleExplainMore} 
-                variant="outline"
-                className="flex items-center text-sm font-medium h-11"
-                disabled={buttonLoadingStates.explainMore || isLoading}
-              >
-                {buttonLoadingStates.explainMore ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Brain className="h-4 w-4 mr-2" />
-                )}
-                {buttonLoadingStates.explainMore ? 'Loading...' : 'Explain More'}
-              </Button>
-              <Button 
-                onClick={handleNextQuestion}
-                className="flex items-center bg-green-600 hover:bg-green-700 text-sm font-medium h-11"
-                disabled={buttonLoadingStates.nextQuestion || isLoading}
-              >
-                {buttonLoadingStates.nextQuestion ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Target className="h-4 w-4 mr-2" />
-                )}
-                {buttonLoadingStates.nextQuestion ? 'Processing...' : 'Next Question'}
-              </Button>
-            </>
+            <Button 
+              onClick={handleReset} 
+              variant="outline" 
+              className="flex items-center text-sm font-medium h-11"
+              disabled={buttonLoadingStates.reset || isLoading}
+            >
+              {buttonLoadingStates.reset ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4 mr-2" />
+              )}
+              {buttonLoadingStates.reset ? 'Resetting...' : 'Try Again'}
+            </Button>
           )}
+        </div>
+
+        <AnimatePresence>
+          {showResult && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              transition={{ duration: 0.18 }}
+              className={`mt-4 text-center font-semibold ${isCorrect ? 'text-green-600' : 'text-red-600'}`}
+            >
+              {isCorrect ? 'Correct!' : 'Try again!'}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <div className="flex justify-end mt-4">
+          <Button
+            onClick={handleSubmit}
+            disabled={buttonLoadingStates.submit || isLoading}
+            className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
+            aria-label="Submit answer"
+          >
+            {buttonLoadingStates.submit ? <Loader2 className="animate-spin h-5 w-5" /> : 'Submit'}
+          </Button>
         </div>
       </CardContent>
     </Card>

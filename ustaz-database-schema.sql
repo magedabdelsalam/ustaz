@@ -79,6 +79,16 @@ CREATE TABLE content_feed (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Table for persisting full TutorContext per user and subject
+CREATE TABLE IF NOT EXISTS tutor_contexts (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  subject_id VARCHAR(255) NOT NULL,
+  context_json JSONB NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE (user_id, subject_id)
+);
+
 -- ============================================================
 -- INDEXES
 -- ============================================================

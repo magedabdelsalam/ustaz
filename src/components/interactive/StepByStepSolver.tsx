@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ArrowRight, CheckCircle, Play, RotateCcw, Calculator, Brain, Target, Pause } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
+import type { StepByStepContent } from '@/types'
 
 interface StepData {
   id: string
@@ -14,15 +15,6 @@ interface StepData {
   calculation?: string
   result: string
   explanation: string
-}
-
-interface StepByStepContent {
-  problem: string
-  steps: StepData[]
-  finalAnswer: string
-  problemType: string
-  difficulty?: 'beginner' | 'intermediate' | 'advanced'
-  category?: string
 }
 
 export const StepByStepSolver = memo(function StepByStepSolver({ onInteraction, content, id }: InteractiveComponentProps) {

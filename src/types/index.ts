@@ -11,6 +11,7 @@ export interface Message {
   content: string
   timestamp: Date
   hasGeneratedContent?: boolean
+  isLocalOnly?: boolean // Messages that shouldn't be saved to the database
 }
 
 // ============================================================
@@ -36,6 +37,8 @@ export interface Subject {
     }>
     currentLessonIndex: number
   }
+  userGoals?: string
+  userLevel?: 'beginner' | 'intermediate' | 'advanced' | string
 }
 
 // ============================================================
@@ -91,6 +94,7 @@ export interface Lesson {
   content?: LessonContent
   concepts?: ConceptInfo[]
   currentConceptIndex?: number
+  usedPracticeTypes?: string[]
 }
 
 export interface LessonContent {
@@ -726,6 +730,8 @@ export interface InteractiveContent {
   type: ComponentType
   data: unknown
   onInteraction?: (action: string, data: unknown) => void
+  title?: string
+  timestamp?: Date
 }
 
 // Error Handling Components

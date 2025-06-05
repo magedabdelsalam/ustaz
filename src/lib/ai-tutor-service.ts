@@ -79,6 +79,7 @@ export interface ReviewRequestParams {
 export interface SummaryRequestParams {
   content_type: 'lesson' | 'concept' | 'progress';
   scope?: string;
+  includeNextSteps?: boolean;
 }
 
 export interface RephraseRequestParams {
@@ -122,6 +123,8 @@ export interface TutorContext {
     preferInteractiveContent: boolean;
     interactiveContentGuidelines?: string;
   };
+  userGoals?: string;
+  userLevel?: 'beginner' | 'intermediate' | 'advanced' | string;
 }
 
 // Tool definitions for OpenAI Assistant API
@@ -470,6 +473,43 @@ const TUTOR_TOOLS: OpenAI.Beta.AssistantTool[] = [
   }
 ];
 
+// Learning stage to interactive component type mapping
+const LEARNING_STAGE_COMPONENT_MAP = {
+  explainer: 'explainer',
+  interactiveExample: 'interactive-example',
+  // Practice now includes all interactive types except 'placeholder'
+  practice: [
+    'multiple-choice',
+    'fill-blank',
+    'drag-drop',
+    'step-solver',
+    'concept-card',
+    'interactive-example',
+    'formula-explorer',
+    'graph-visualizer',
+    'text-highlighter'
+  ],
+  // Assessment includes quiz, step-solver, and other assessment types
+  assessment: [
+    'progress-quiz',
+    'step-solver',
+    'formula-explorer',
+    'graph-visualizer',
+    'text-highlighter'
+  ]
+} as const;
+
+// Helper to get a component type for a given stage (rotates for practice/assessment)
+function getComponentTypeForStage(stage: keyof typeof LEARNING_STAGE_COMPONENT_MAP, usedTypes: string[] = []): ComponentType {
+  const types = LEARNING_STAGE_COMPONENT_MAP[stage];
+  if (Array.isArray(types)) {
+    // Pick a type not used yet, or rotate
+    const unused = types.filter(t => !usedTypes.includes(t));
+    return (unused.length > 0 ? unused[0] : types[0]) as ComponentType;
+  }
+  return types as ComponentType;
+}
+
 // Main AI Tutor Service Class
 export class AITutorService {
   private openai: OpenAI | null = null;
@@ -567,11 +607,25 @@ export class AITutorService {
         console.log(`📝 No existing assistant found for subject: ${subjectName}`);
       }
 
-      // Create new assistant for this subject
-      console.log(`🔄 Creating new OpenAI Assistant for subject: ${subjectName}...`);
-      const assistant = await this.openai.beta.assistants.create({
-        name: `Ustaz AI Tutor - ${subjectName}`,
-        instructions: `You are Ustaz, an intelligent and adaptive AI tutor specialized in teaching ${subjectName}. Your core responsibilities:
+      // Define models to try in order of preference
+      const modelsToTry = [
+        OPENAI_MODEL,
+        'gpt-4o-mini',
+      ];
+      
+      let assistant = null;
+      let usedModel = '';
+      
+      // Try each model until one works
+      for (const model of modelsToTry) {
+        try {
+          console.log(`🔄 Attempting to create assistant with model: ${model}`);
+          
+          // Create new assistant for this subject
+          console.log(`🔄 Creating new OpenAI Assistant for subject: ${subjectName}...`);
+          assistant = await this.openai.beta.assistants.create({
+            name: `Ustaz AI Tutor - ${subjectName}`,
+            instructions: `You are Ustaz, an intelligent and adaptive AI tutor specialized in teaching ${subjectName}. Your core responsibilities:
 
 TEACHING PHILOSOPHY:
 - Focus specifically on ${subjectName} concepts and skills
@@ -614,9 +668,25 @@ CONVERSATION FLOW:
 - Offer help and alternative explanations when students are stuck with ${subjectName}
 
 Remember: You are exclusively focused on teaching ${subjectName}. All your interactions, examples, and guidance should be relevant to this subject. You are building a deep, focused learning experience for this specific subject.`,
-        model: OPENAI_MODEL,
-        tools: TUTOR_TOOLS
-      });
+            model: model,
+            tools: TUTOR_TOOLS
+          });
+          
+          // If successful, break the loop
+          usedModel = model;
+          console.log(`✅ Successfully created assistant with model: ${model}`);
+          break;
+          
+        } catch (modelError) {
+          console.log(`⚠️ Failed to create assistant with model ${model}:`, modelError);
+          // Continue to the next model
+        }
+      }
+      
+      // If all models failed, throw an error
+      if (!assistant) {
+        throw new Error('Failed to create assistant with any available model');
+      }
       
       this.assistants.set(subjectId, assistant);
       console.log(`✅ New OpenAI Assistant created for ${subjectName}:`, assistant.id);
@@ -626,7 +696,7 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       const savedSettings = await persistenceService.saveAssistantForSubject({
         assistant_id: assistant.id,
         subject_id: subjectId,
-        model: OPENAI_MODEL,
+        model: usedModel,
         name: `Ustaz AI Tutor - ${subjectName}`
       });
       
@@ -778,6 +848,93 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
         tool_calls: toolCalls
       });
 
+      // --- Auditing: Track interactive component usage rate ---
+      let totalResponses = 0;
+      let responsesWithInteractiveComponent = 0;
+      // --- End auditing logic ---
+      // Check if an interactive_component tool call was made
+      const hasInteractiveComponent = toolCalls.some(tc => tc.name === 'interactive_component');
+      // --- Auditing logic ---
+      totalResponses++;
+      if (hasInteractiveComponent) responsesWithInteractiveComponent++;
+      const usageRate = ((responsesWithInteractiveComponent / totalResponses) * 100).toFixed(1);
+      console.log(`📊 Interactive component usage rate: ${usageRate}% (${responsesWithInteractiveComponent}/${totalResponses})`);
+      // --- End auditing logic ---
+      if (!hasInteractiveComponent && this.context.lessonPlan?.lessons[this.context.lessonPlan.currentLessonIndex]?.title) {
+        // Fallback: generate a default explainer interactive component
+        const lessonTitle = this.context.lessonPlan?.lessons[this.context.lessonPlan.currentLessonIndex]?.title || ''
+        const lessonDescription = this.context.lessonPlan?.lessons[this.context.lessonPlan.currentLessonIndex]?.description || ''
+        const lessonDifficulty = (this.context.userLevel === 'beginner' || this.context.userLevel === 'intermediate' || this.context.userLevel === 'advanced') ? this.context.userLevel : 'beginner'
+        const explainerType = getComponentTypeForStage('explainer') as ComponentType;
+        const explainerToolCall = await this.handleInteractiveComponent({
+          type: explainerType,
+          content: {
+            title: lessonTitle,
+            overview: `Overview of ${lessonTitle}`,
+            sections: [
+              {
+                heading: `Introduction to ${lessonTitle}`,
+                paragraphs: [lessonDescription]
+              }
+            ],
+            conclusion: `Summary of ${lessonTitle}`,
+            difficulty: lessonDifficulty
+          },
+          learning_objective: lessonTitle,
+          difficulty: lessonDifficulty
+        });
+        toolCalls.push({
+          name: 'interactive_component',
+          parameters: {
+            type: explainerType,
+            content: {
+              title: lessonTitle,
+              overview: `Overview of ${lessonTitle}`,
+              sections: [
+                {
+                  heading: `Introduction to ${lessonTitle}`,
+                  paragraphs: [lessonDescription]
+                }
+              ],
+              conclusion: `Summary of ${lessonTitle}`,
+              difficulty: lessonDifficulty
+            },
+            learning_objective: lessonTitle,
+            difficulty: lessonDifficulty
+          },
+          result: explainerToolCall
+        });
+      }
+      // --- End new logic ---
+
+      // In generateResponse, after parsing the user message, if intent is unclear, trigger clarifying question
+      // Example: If userMessage is too short, vague, or doesn't match known patterns, call handleClarifyingQuestion
+      if (userMessage.trim().length < 5 || /\b(what|help|explain|how)\b/i.test(userMessage.trim())) {
+        const clarifying = await this.handleClarifyingQuestion({
+          question: 'Can you clarify what you want to learn or practice?',
+          context: 'The request was too short or ambiguous.'
+        })
+        return {
+          response: typeof clarifying.question === 'string' ? clarifying.question : 'Can you clarify your request?',
+          toolCalls: [{ name: 'clarifying_question', parameters: { question: clarifying.question, context: clarifying.context }, result: clarifying }],
+          updatedContext: this.context
+        }
+      }
+
+      // Update context with new message
+      this.context = {
+        ...this.context,
+        messages: [...this.context.messages, userMessage, response],
+        lastUpdated: new Date().toISOString()
+      };
+
+      // Save context to server if userId and subjectId are available
+      const userId = this.context.userProfile?.userId;
+      const subjectId = this.context.subject?.id;
+      if (userId && subjectId) {
+        await persistenceService.saveTutorContext(userId, subjectId, this.context);
+      }
+
       return {
         response,
         toolCalls,
@@ -789,8 +946,37 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       if (error instanceof Error) {
         console.error('Error message:', error.message);
         console.error('Error stack:', error.stack);
+        
+        // Add more detailed error analysis
+        if (error.message.includes('401')) {
+          console.error('🔑 API KEY ERROR: Authentication failed - check your OpenAI API key validity');
+        } else if (error.message.includes('429')) {
+          console.error('⏱️ RATE LIMIT ERROR: Too many requests - you may need to upgrade your OpenAI plan');
+        } else if (error.message.includes('model')) {
+          console.error('🤖 MODEL ERROR: Problem with the specified model - may be deprecated or unavailable');
+        } else if (error.message.includes('context_length_exceeded')) {
+          console.error('📝 CONTEXT LENGTH ERROR: The conversation history is too long for the model');
+        } else if (error.message.includes('assistant')) {
+          console.error('👨‍🏫 ASSISTANT ERROR: Issue with the OpenAI assistant - may need to recreate it');
+        } else if (error.message.includes('thread')) {
+          console.error('🧵 THREAD ERROR: Problem with the conversation thread - may need to create a new one');
+        }
+        
+        console.error('💡 DEBUGGING INFO:');
+        console.error('Subject ID:', this.context.subject?.id);
+        console.error('Subject Name:', this.context.subject?.name);
+        console.error('Thread ID:', this.context.subject?.id ? this.subjectThreads.get(this.context.subject.id) : 'none');
+        console.error('Assistant ID:', this.context.subject?.id ? this.assistants.get(this.context.subject.id)?.id : 'none');
+        console.error('Conversation History:', this.context.conversationHistory.length, 'messages');
       }
-      return this.generateFallbackResponse(userMessage);
+      
+      // Try to use a more helpful fallback response based on the error
+      const fallbackResponse = this.generateFallbackResponse(userMessage);
+      
+      // Log the error for debugging but don't add to return type
+      console.error('🚨 Using fallback response due to error:', error instanceof Error ? error.message : String(error));
+      
+      return fallbackResponse;
     }
   }
 
@@ -824,7 +1010,23 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     
     // Add instructions for interactive content if specified
     if (this.context.instructionOverrides && this.context.instructionOverrides.preferInteractiveContent) {
-      instructions.push(this.context.instructionOverrides.interactiveContentGuidelines || '');
+      instructions.push(`IMPORTANT - ALWAYS use the interactive_component tool call for ANY educational topic:`);
+      instructions.push(`1. MUST use tool calls when explaining concepts, NOT just text responses`);
+      instructions.push(`2. Create interactive components for ALL educational topics using the interactive_component tool`);
+      instructions.push(`3. Every educational response REQUIRES an interactive component`);
+      instructions.push(`4. Keep chat responses BRIEF and focus on creating rich interactive components`);
+      instructions.push(`5. For ANY topic, create an appropriate interactive component type (explainer, interactive-example, etc.)`);
+      
+      if (this.context.instructionOverrides.interactiveContentGuidelines) {
+        instructions.push(this.context.instructionOverrides.interactiveContentGuidelines);
+      }
+    }
+
+    if (this.context.userGoals) {
+      instructions.push(`Learning goals: ${this.context.userGoals}`);
+    }
+    if (this.context.userLevel) {
+      instructions.push(`Self-assessed level: ${this.context.userLevel}`);
     }
 
     return instructions.length > 0 
@@ -918,6 +1120,13 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       }
     }
 
+    // Add prompt for user goals and level
+    this.context.conversationHistory.push({
+      role: 'assistant',
+      content: `To personalize your learning, what are your main goals for ${params.name}? How would you rate your current level (beginner, intermediate, advanced)?`,
+      timestamp: new Date(),
+    });
+
     return {
       success: true,
       subject: newSubject,
@@ -926,8 +1135,14 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
   }
 
   private async handleNewLessonPlan(params: NewLessonPlanParams): Promise<Record<string, unknown>> {
+    // If learning_goals or difficulty_level are missing, use from context
+    const learningGoals = params.learning_goals && params.learning_goals.length > 0
+      ? params.learning_goals
+      : (this.context.userGoals ? [this.context.userGoals] : []);
+    const difficultyLevel = params.difficulty_level || this.context.userLevel || 'beginner';
+
     // Generate lesson plan based on subject and goals
-    const lessons: Lesson[] = params.learning_goals.map((goal, index) => ({
+    const lessons: Lesson[] = learningGoals.map((goal, index) => ({
       id: `lesson_${index + 1}`,
       title: `Lesson ${index + 1}: ${goal}`,
       description: `Learn about ${goal} with interactive examples and practice exercises.`,
@@ -1051,7 +1266,15 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       return { error: 'No active lesson plan' };
     }
 
-    if (this.context.lessonPlan.currentLessonIndex >= this.context.lessonPlan.lessons.length - 1) {
+    const currentIdx = this.context.lessonPlan.currentLessonIndex;
+    const currentLesson = this.context.lessonPlan.lessons[currentIdx];
+    if (!currentLesson.completed) {
+      return {
+        error: 'Current lesson is not yet completed. Please demonstrate understanding (e.g., pass the assessment or practice) before advancing to the next lesson.'
+      };
+    }
+
+    if (currentIdx >= this.context.lessonPlan.lessons.length - 1) {
       return { 
         completed: true, 
         message: 'Congratulations! You have completed all lessons in this subject.' 
@@ -1061,11 +1284,57 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     this.context.lessonPlan.currentLessonIndex++;
     const nextLesson = this.context.lessonPlan.lessons[this.context.lessonPlan.currentLessonIndex];
 
+    // --- New logic: Always generate an explainer interactive component for the new lesson ---
+    const lessonTitle = nextLesson.title || ''
+    const lessonDescription = nextLesson.description || ''
+    const lessonDifficulty = (this.context.userLevel === 'beginner' || this.context.userLevel === 'intermediate' || this.context.userLevel === 'advanced') ? this.context.userLevel : 'beginner'
+    const explainerType = getComponentTypeForStage('explainer') as ComponentType;
+    const explainerToolCall = await this.handleInteractiveComponent({
+      type: explainerType,
+      content: {
+        title: lessonTitle,
+        overview: `Overview of ${lessonTitle}`,
+        sections: [
+          {
+            heading: `Introduction to ${lessonTitle}`,
+            paragraphs: [lessonDescription]
+          }
+        ],
+        conclusion: `Summary of ${lessonTitle}`,
+        difficulty: lessonDifficulty
+      },
+      learning_objective: lessonTitle,
+      difficulty: lessonDifficulty
+    })
+    // --- End new logic ---
+
+    // Track which types have been used for this lesson in context
+    let usedTypes = this.context.lessonPlan.lessons[this.context.lessonPlan.currentLessonIndex].usedPracticeTypes
+    if (!usedTypes) {
+      usedTypes = []
+      this.context.lessonPlan.lessons[this.context.lessonPlan.currentLessonIndex].usedPracticeTypes = usedTypes
+    }
+    const practiceType = getComponentTypeForStage('practice', usedTypes) as ComponentType;
+    usedTypes.push(practiceType)
+    // Generate a basic practice component for the current lesson
+    const practiceComponent = await this.handleInteractiveComponent({
+      type: practiceType,
+      content: {
+        title: `Practice: ${lessonTitle}`,
+        question: `Test your understanding of ${lessonTitle}`,
+        // The rest of the content will be filled in by the AI or left as default
+      },
+      learning_objective: lessonTitle,
+      difficulty: lessonDifficulty
+    })
+
     return {
       success: true,
       nextLesson,
       lessonNumber: this.context.lessonPlan.currentLessonIndex + 1,
-      totalLessons: this.context.lessonPlan.lessons.length
+      totalLessons: this.context.lessonPlan.lessons.length,
+      explainerComponent: explainerToolCall,
+      practiceComponent
     };
   }
 
@@ -1500,4 +1769,77 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     const assistant = this.assistants.get(subjectId);
     return assistant?.id;
   }
+
+  // Helper: Get adaptive mastery threshold based on userLevel and lesson difficulty
+  getAdaptiveMasteryThreshold(userLevel: string | undefined, lessonDifficulty: string | undefined): number {
+    // Example logic: beginners need 70%, intermediate 80%, advanced 90%
+    if (lessonDifficulty === 'advanced' || userLevel === 'advanced') return 0.9
+    if (lessonDifficulty === 'intermediate' || userLevel === 'intermediate') return 0.8
+    return 0.7 // default for beginner or undefined
+  }
+
+  // Place this method inside the AITutorService class:
+  // ---
+  public processAssessmentResult({ lessonId, score, total, difficulty }: { lessonId: string, score: number, total: number, difficulty?: string }) {
+    const lesson = this.context.lessonPlan?.lessons.find(l => l.id === lessonId)
+    if (!lesson) return { error: 'Lesson not found' }
+    const userLevel = this.context.userLevel
+    const threshold = this.getAdaptiveMasteryThreshold(userLevel, difficulty)
+    const percent = total > 0 ? score / total : 0
+    let summary = null
+    let subjectSummary = null
+    if (percent >= threshold) {
+      lesson.completed = true
+      // Optionally update subject progress
+      if (this.context.subject && this.context.lessonPlan) {
+        const completedLessons = this.context.lessonPlan.lessons.filter(l => l.completed).length
+        this.context.subject.progress = (completedLessons / this.context.lessonPlan.lessons.length) * 100
+      }
+      // --- New logic: Trigger lesson summary ---
+      summary = this.handleSummaryRequest({ content_type: 'lesson', scope: lesson.title })
+      // If this was the last lesson, trigger subject summary
+      if (this.context.lessonPlan && this.context.lessonPlan.lessons.every(l => l.completed)) {
+        subjectSummary = this.handleSummaryRequest({ content_type: 'progress', scope: this.context.subject?.name })
+      }
+      return { success: true, message: 'Lesson mastered! You can advance to the next lesson.', summary, subjectSummary }
+    } else {
+      lesson.completed = false
+      return { success: false, message: `You scored ${Math.round(percent * 100)}%. Mastery requires ${(threshold * 100).toFixed(0)}%. Try again or review the material.` }
+    }
+  }
+  // ---
+
+  /**
+   * Load TutorContext from the server for a given subject
+   */
+  async loadContextForSubject(userId: string, subjectId: string): Promise<void> {
+    const loadedContext = await persistenceService.loadTutorContext(userId, subjectId);
+    if (loadedContext) {
+      this.context = loadedContext;
+    }
+  }
+}
+
+// Helper: List of all interactive practice/assessment types
+const PRACTICE_COMPONENT_TYPES: ComponentType[] = [
+  'multiple-choice',
+  'fill-blank',
+  'drag-drop',
+  'step-solver',
+  'concept-card',
+  'interactive-example',
+  'progress-quiz',
+  'graph-visualizer',
+  'formula-explorer',
+  'text-highlighter',
+]
+
+// Helper: Randomly select a practice component type, ensuring variety
+function getNextPracticeType(usedTypes: string[]): ComponentType {
+  const unused = PRACTICE_COMPONENT_TYPES.filter(t => !usedTypes.includes(t))
+  if (unused.length > 0) {
+    return unused[Math.floor(Math.random() * unused.length)]
+  }
+  // If all used, reset
+  return PRACTICE_COMPONENT_TYPES[Math.floor(Math.random() * PRACTICE_COMPONENT_TYPES.length)]
 } 

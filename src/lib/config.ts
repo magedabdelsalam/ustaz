@@ -11,5 +11,5 @@ export function getOptionalEnv(name: string): string | undefined {
 }
 
 export const OPENAI_API_KEY = getOptionalEnv('OPENAI_API_KEY');
-export const OPENAI_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-4o-mini';
+export const OPENAI_MODEL = process.env.NEXT_PUBLIC_OPENAI_MODEL || 'gpt-4-turbo';
 

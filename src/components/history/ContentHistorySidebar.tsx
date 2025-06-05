@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ChevronUp } from 'lucide-react'
-import { InteractiveContent } from '../ContentPane'
+import { InteractiveContent } from '@/types'
 
 interface ContentHistorySidebarProps {
   open: boolean
@@ -73,9 +73,11 @@ export const ContentHistorySidebar = memo(function ContentHistorySidebar({
                         )}
                       </div>
                       <p className="text-sm text-gray-900 font-medium truncate">{content.title}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {content.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      {content.timestamp && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {content.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
                     </motion.div>
                   )
                 })}
