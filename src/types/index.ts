@@ -29,16 +29,9 @@ export interface Subject {
   topicKeywords: string[]
   messageCount: number
   lastActive: Date
-  lessonPlan?: {
-    lessons: Array<{
-      id: string
-      title: string
-      description: string
-    }>
-    currentLessonIndex: number
-  }
+  lessonPlan?: LessonPlan
   userGoals?: string
-  userLevel?: 'beginner' | 'intermediate' | 'advanced' | string
+  userLevel?: 'beginner' | 'intermediate' | 'advanced' | undefined
 }
 
 // ============================================================
@@ -49,12 +42,12 @@ export type ComponentType =
   | 'multiple-choice'
   | 'fill-blank'
   | 'drag-drop'
-  | 'formula-explorer'
   | 'step-solver'
   | 'concept-card'
   | 'interactive-example'
   | 'progress-quiz'
   | 'graph-visualizer'
+  | 'formula-explorer'
   | 'text-highlighter'
   | 'explainer'
   | 'placeholder'
@@ -91,6 +84,9 @@ export interface Lesson {
   title: string
   description: string
   completed?: boolean
+  objectives?: string[]
+  progress?: number
+  achievement?: string
   content?: LessonContent
   concepts?: ConceptInfo[]
   currentConceptIndex?: number
@@ -177,21 +173,16 @@ export interface PersistedSubject {
 // ERROR HANDLING TYPES
 // ============================================================
 
-export type ErrorType = 
-  | 'network'
-  | 'database'
-  | 'permission'
-  | 'validation'
-  | 'unknown'
+export type ErrorType = 'validation' | 'network' | 'server' | 'auth' | 'database' | 'permission' | 'unknown'
 
 export interface AppError {
   type: ErrorType
   message: string
   userMessage: string
-  originalError: unknown
+  originalError?: Error
   canRetry: boolean
   timestamp: Date
-  operation?: string
+  severity: 'error' | 'warning' | 'info'
 }
 
 export interface RetryOptions {
@@ -407,8 +398,15 @@ export interface MultipleChoiceContent {
 
 // Step by Step Solver Component
 export interface StepData {
+  id?: string
   title: string
   content: string
+  description?: string
+  formula?: string
+  code?: string
+  explanation?: string
+  calculation?: string
+  result?: string
   isVisible?: boolean
   showHint?: boolean
   hint?: string
@@ -418,8 +416,12 @@ export interface StepByStepContent {
   title: string
   description: string
   problem: string
+  problemType?: string
   steps: StepData[]
   solution?: string
+  finalAnswer?: string
+  category?: string
+  difficulty?: 'easy' | 'medium' | 'hard'
 }
 
 // Text Highlighter Component
@@ -620,17 +622,21 @@ export interface QuizContent {
   timeLimit?: number
   passingScore?: number
   explanation?: string
+  category?: string
+  showExplanations?: boolean
+  allowRetry?: boolean
 }
 
 export interface QuizQuestion {
   id: string
-  text: string
-  options: Array<{
-    id: string
-    text: string
-    isCorrect: boolean
-  }>
+  question: string
+  type: 'multiple-choice' | 'true-false' | 'fill-blank' | 'text_input'
+  options?: string[]
+  correctAnswer: string | number
   explanation?: string
+  points?: number
+  placeholder?: string
+  category?: string
   difficulty?: 'easy' | 'medium' | 'hard'
 }
 
@@ -749,4 +755,95 @@ export interface ErrorProviderProps {
 export interface ErrorBoundaryState {
   hasError: boolean
   error: Error | null
+}
+
+export interface CurrentLesson {
+  id: string
+  title: string
+  description: string
+  progress: number
+  objectives: string[]
+  completedObjectives: string[]
+  achievement?: string
+}
+
+export type BadgeVariant = 'default' | 'destructive' | 'outline' | 'secondary' | 'success'
+
+export interface UseAITutorOptions {
+  onInteractiveContent?: (content: StreamInteractiveContent) => void
+  onLessonPlanCreated?: (plan: LessonPlan) => void
+  onLessonProgress?: (progress: number) => void
+  onLessonChange?: (lessonIndex: number) => void
+  onError?: (error: AppError) => void
+  onLoadingChange?: (loading: boolean) => void
+  onContextLoaded?: (context: TutorContext) => void
+}
+
+export interface AITutorService {
+  generateResponse: (message: string, subject: Subject) => Promise<{
+    response: string
+    toolCalls: {
+      name: TutorToolName
+      parameters: Record<string, unknown>
+      result: Record<string, unknown>
+    }[]
+    updatedContext: TutorContext
+  }>
+  updateContext: (context: Partial<TutorContext>) => void
+  getContext: () => TutorContext
+  setCurrentUser: (user: User) => void
+  sendMessage: (message: string) => Promise<void>
+  handleInteraction: (type: string, data: any) => Promise<void>
+  getLessonPlan: () => Promise<LessonPlan>
+  getCurrentLesson: () => Promise<CurrentLesson>
+}
+
+export type TutorToolName = 
+  | 'new_lesson_plan'
+  | 'explainer'
+  | 'multiple-choice'
+  | 'fill-blank'
+  | 'drag-drop'
+  | 'step-solver'
+  | 'concept-card'
+  | 'interactive-example'
+  | 'progress-quiz'
+  | 'graph-visualizer'
+  | 'formula-explorer'
+  | 'text-highlighter'
+  | 'clarifying_question'
+  | 'lesson_complete'
+  | 'next_lesson'
+
+export interface TutorContext {
+  subject?: Subject
+  lessonPlan?: LessonPlan
+  conversationHistory: Message[]
+}
+
+export interface StreamInteractiveContent {
+  id: string
+  streamType: 'interactive'
+  content: InteractiveContent
+  onInteraction: (type: string, data: any) => void
+  role?: 'assistant' | 'user'
+}
+
+export interface StreamMessage {
+  id: string
+  streamType: 'message'
+  role: 'assistant' | 'user'
+  content: string
+  timestamp: Date
+}
+
+export type StreamItem = StreamMessage | StreamInteractiveContent 
+
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: 'student' | 'teacher' | 'admin'
+  createdAt: Date
+  updatedAt: Date
 } 

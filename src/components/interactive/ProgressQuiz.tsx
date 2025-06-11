@@ -14,18 +14,6 @@ interface InteractiveComponentProps {
   id: string
 }
 
-interface QuizQuestion {
-  id: string
-  question: string
-  type: 'multiple-choice' | 'true-false' | 'fill-blank' | 'text_input'
-  options?: string[]
-  correctAnswer: string | number
-  explanation?: string
-  points?: number
-  placeholder?: string
-  category?: string
-}
-
 export const ProgressQuiz = memo(function ProgressQuiz({ 
   onInteraction, 
   content, 

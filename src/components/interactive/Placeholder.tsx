@@ -8,12 +8,12 @@ import { InteractiveComponentProps } from './index'
 import type { PlaceholderContent } from '@/types'
 
 export const Placeholder = memo(function Placeholder({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
-  const { message = 'Content failed to load. Please try again.', retryType } = content as PlaceholderContent
+  const { message = 'Content failed to load. Please try again.' } = content as PlaceholderContent
   const [retrying, setRetrying] = useState(false)
 
   const handleRetry = async () => {
     setRetrying(true)
-    onInteraction('retry_content', { componentId: id, retryType })
+    onInteraction('retry_content', { componentId: id })
   }
 
   return (

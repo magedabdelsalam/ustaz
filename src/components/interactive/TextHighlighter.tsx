@@ -132,7 +132,11 @@ export const TextHighlighter = memo(function TextHighlighter({
 
   const calculateResults = () => {
     // TODO: Add support for grading if targets are provided via props or context
-    return null
+    return {
+      score: 0,
+      correctHighlights: [] as string[],
+      incorrectHighlights: [] as string[]
+    }
   }
 
   const renderTextWithHighlights = () => {

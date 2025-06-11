@@ -1,17 +1,20 @@
 export type ErrorType = 
-  | 'network'
+  | 'validation'
+  | 'network' 
+  | 'server'
+  | 'auth'
   | 'database'
   | 'permission'
-  | 'validation'
   | 'unknown'
 
 export interface AppError {
   type: ErrorType
   message: string
   userMessage: string
-  originalError: unknown
+  originalError?: Error
   canRetry: boolean
   timestamp: Date
+  severity: 'error' | 'warning' | 'info'
   operation?: string
 }
 
@@ -96,21 +99,23 @@ export class ErrorHandler {
           type = 'network'
           userMessage = 'Connection problem. Check your internet and try again.'
         }
-        // Supabase/Database errors
+        // Supabase/Database/Server errors
         else if (message.includes('supabase') || 
                  message.includes('database') ||
                  message.includes('sql') ||
                  message.includes('constraint') ||
-                 message.includes('postgrest')) {
-          type = 'database'
-          userMessage = 'Database error. Please try again in a moment.'
+                 message.includes('postgrest') ||
+                 message.includes('server') ||
+                 message.includes('internal')) {
+          type = 'server'
+          userMessage = 'Server error. Please try again in a moment.'
         }
         // Permission/Auth errors
         else if (message.includes('permission') || 
                  message.includes('unauthorized') ||
                  message.includes('forbidden') ||
                  message.includes('auth')) {
-          type = 'permission'
+          type = 'auth'
           userMessage = 'Permission denied. Please check your login status.'
           canRetry = false
         }
@@ -141,9 +146,10 @@ export class ErrorHandler {
       type,
       message: error instanceof Error ? error.message : String(error),
       userMessage,
-      originalError: error,
+      originalError: error instanceof Error ? error : undefined,
       canRetry,
       timestamp: new Date(),
+      severity: 'error' as const,
       operation
     }
   }

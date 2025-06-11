@@ -33,7 +33,7 @@ export function ErrorProvider({ children }: ErrorProviderProps) {
     const unsubscribe = errorHandler.subscribeToErrors((error) => {
       // Check if we're offline and this is a network/database error
       const isOffline = typeof window !== 'undefined' && !navigator.onLine
-      const isNetworkError = error.type === 'network' || error.type === 'database'
+      const isNetworkError = error.type === 'network' || error.type === 'server'
       
       if (isOffline && isNetworkError) {
         // Handle offline errors differently
@@ -109,7 +109,7 @@ export function ErrorProvider({ children }: ErrorProviderProps) {
   const showError = (error: AppError, onRetry?: () => void) => {
     // Check if we're offline and this is a network error
     const isOffline = typeof window !== 'undefined' && !navigator.onLine
-    const isNetworkError = error.type === 'network' || error.type === 'database'
+    const isNetworkError = error.type === 'network' || error.type === 'server'
     
     if (isOffline && isNetworkError) {
       setOfflineErrorCount(prev => prev + 1)

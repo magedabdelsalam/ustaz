@@ -1,10 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { TutorContext, TutorToolName } from '@/lib/ai-tutor-service';
-import { Subject, LessonPlan, LearningProgress, ComponentType, InteractiveContent } from '@/types';
-import { errorHandler } from '@/lib/errorHandler';
+import { Subject, LessonPlan, UseAITutorOptions, CurrentLesson, AppError } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { persistenceService } from '@/lib/persistenceService';
 
-// Default instructions for interactive content generation
-const DEFAULT_INTERACTIVE_CONTENT_GUIDELINES = `
+// Default instructions for interactive content generation (currently unused)
+const _DEFAULT_INTERACTIVE_CONTENT_GUIDELINES = `
   When explaining educational concepts, prefer creating rich interactive components with detailed content instead of just responding in chat.
   For educational responses:
   1. Create interactive components with comprehensive content appropriate to the learning objective
@@ -341,219 +342,117 @@ const DEFAULT_INTERACTIVE_CONTENT_GUIDELINES = `
   Do NOT include text like "Here's an explainer:" in your chat response. The content should be directly created as structured JSON in the tool call, not parsed from your text response.
 `;
 
-interface ToolCallResult {
+interface _ToolCallResult {
   name: TutorToolName;
   parameters: Record<string, unknown>;
   result: Record<string, unknown>;
 }
 
-interface AITutorResponse {
+interface _AITutorResponse {
   response: string;
-  toolCalls: ToolCallResult[];
+  toolCalls: _ToolCallResult[];
   context: TutorContext;
   simulated?: boolean;
   message?: string;
 }
 
-interface UseAITutorOptions {
-  subject?: Subject | null;
-  onSubjectCreated?: (subject: Subject) => void;
-  onLessonPlanCreated?: (lessonPlan: LessonPlan) => void;
-  onProgressUpdated?: (progress: LearningProgress) => void;
-  onInteractiveContent?: (content: InteractiveContent) => void;
-  onClarifyingQuestion?: (question: string, context: string, options?: string[]) => void;
-  instructionOverrides?: {
-    preferInteractiveContent: boolean;
-    interactiveContentGuidelines?: string;
-  };
-  userId?: string;
-}
-
-// Helper: Get storage key for context persistence
-function getContextStorageKey(subjectId?: string) {
+// Helper: Get storage key for context persistence (currently unused)
+function _getContextStorageKey(subjectId?: string) {
   return subjectId ? `ustaz_tutor_context_${subjectId}` : 'ustaz_tutor_context_default'
 }
 
 export function useAITutor(options: UseAITutorOptions = {}) {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [tutorContext, setTutorContext] = useState<TutorContext | null>(null);
-  const optionsRef = useRef(options);
+  const [error, setError] = useState<Error | null>(null);
+  const [currentSubject, setCurrentSubject] = useState<Subject | null>(null);
+  const [currentContext, setCurrentContext] = useState<TutorContext>({ conversationHistory: [] });
+  const { user } = useAuth();
 
-  // Update options ref when options change
+  // Load context when subject changes
   useEffect(() => {
-    optionsRef.current = options;
+    if (currentSubject) {
+      loadContextForSubject(currentSubject.id);
+    }
+  }, [currentSubject?.id]);
+
+  // Auto-save context periodically
+  useEffect(() => {
+    const autoSaveInterval = setInterval(() => {
+      if (currentSubject) {
+        saveCurrentContext();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(autoSaveInterval);
+  }, [currentSubject]);
+
+  const handleError = useCallback((error: Error) => {
+    const appError: AppError = {
+      message: error.message,
+      userMessage: 'An error occurred in the AI Tutor.',
+      canRetry: false,
+      timestamp: new Date(),
+      severity: 'error',
+      type: 'unknown',
+    };
+    options.onError?.(appError);
   }, [options]);
 
-  // On mount, try to load context from localStorage
-  useEffect(() => {
-    const subjectId = options.subject?.id
-    const key = getContextStorageKey(subjectId)
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(key) : null
-    if (stored) {
-      try {
-        setTutorContext(JSON.parse(stored))
-      } catch (e) {
-        // Ignore parse errors
-      }
-    }
-  }, [options.subject?.id])
+  const setLoading = useCallback((loading: boolean) => {
+    setIsLoading(loading);
+    options.onLoadingChange?.(loading);
+  }, [options]);
 
-  // Persist context to localStorage after every update
-  useEffect(() => {
-    const subjectId = options.subject?.id
-    const key = getContextStorageKey(subjectId)
-    if (tutorContext && typeof window !== 'undefined') {
-      localStorage.setItem(key, JSON.stringify(tutorContext))
-    }
-  }, [tutorContext, options.subject?.id])
-
-  // Load context from the server on mount
-  useEffect(() => {
-    const loadContext = async () => {
-      const userId = options.userId;
-      const subjectId = options.subject?.id;
-      if (userId && subjectId) {
-        try {
-          const response = await fetch(`/api/tutor-context?userId=${userId}&subjectId=${subjectId}`);
-          if (response.ok) {
-            const { context } = await response.json();
-            if (context) {
-              setTutorContext(context);
-            }
-          } else {
-            console.error('Failed to load context from server:', response.statusText);
-            // Fallback to localStorage if server load fails
-            const localContext = localStorage.getItem(`tutor-context-${userId}-${subjectId}`);
-            if (localContext) {
-              setTutorContext(JSON.parse(localContext));
-            }
-          }
-        } catch (error) {
-          console.error('Error loading context:', error);
-          // Fallback to localStorage if server load fails
-          const localContext = localStorage.getItem(`tutor-context-${userId}-${subjectId}`);
-          if (localContext) {
-            setTutorContext(JSON.parse(localContext));
-          }
-        }
-      }
-    };
-    loadContext();
-  }, [options.userId, options.subject?.id]);
-
-  // Save context to the server after updates
-  const saveContext = async (updatedContext: TutorContext) => {
-    const userId = options.userId;
-    const subjectId = options.subject?.id;
-    if (userId && subjectId) {
-      try {
-        const response = await fetch('/api/tutor-context', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, subjectId, context: updatedContext })
-        });
-        if (!response.ok) {
-          console.error('Failed to save context to server:', response.statusText);
-          // Fallback to localStorage if server save fails
-          localStorage.setItem(`tutor-context-${userId}-${subjectId}`, JSON.stringify(updatedContext));
-        }
-      } catch (error) {
-        console.error('Error saving context:', error);
-        // Fallback to localStorage if server save fails
-        localStorage.setItem(`tutor-context-${userId}-${subjectId}`, JSON.stringify(updatedContext));
-      }
-    }
-  };
-
-  const sendMessage = useCallback(async (message: string): Promise<string> => {
-    setIsLoading(true);
-    setError(null);
-
+  const loadContextForSubject = useCallback(async (subjectId: string) => {
     try {
-      // Enhance the message with instructions for interactive content
-      const enhancedMessage = message.trim();
-      const sessionId = optionsRef.current.subject?.id;
-      
-      // Call our API endpoint
-      const response = await fetch('/api/openai', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: enhancedMessage,
-          context: {
-            ...tutorContext,
-            // Use instructionOverrides from options or set defaults for interactive content
-            instructionOverrides: optionsRef.current.instructionOverrides || {
-              preferInteractiveContent: true,
-              interactiveContentGuidelines: DEFAULT_INTERACTIVE_CONTENT_GUIDELINES
-            }
-          },
-          sessionId
-        }),
-      });
+      setLoading(true);
+      setError(null);
 
-      if (!response.ok) {
-        throw new Error(`API call failed: ${response.statusText}`);
+      // Load context from persistence directly since we don't have service on client
+      if (user?.id) {
+        const loadedContext = await persistenceService.loadTutorContext(user.id, subjectId);
+        if (loadedContext) {
+          setCurrentContext(loadedContext);
+          // Notify parent component
+          if (options.onContextLoaded) {
+            options.onContextLoaded(loadedContext);
+          }
+        }
       }
-
-      const data: AITutorResponse = await response.json();
-
-      // Update our local context
-      setTutorContext(data.context);
-
-      // Process any tool calls that were made
-      await processToolCalls(data.toolCalls);
-
-      // If it's a simulated response, show the simulation message
-      if (data.simulated && data.message) {
-        console.log('🔧 Simulated response:', data.message);
-      }
-
-      await saveContext(data.context);
-
-      return data.response;
-
     } catch (err) {
-      const appError = errorHandler.handleError(err, 'send_message');
-      setError(appError.userMessage);
-      console.error('AI Tutor Error:', err);
-      return `Error: ${appError.userMessage}`;
+      const error = err instanceof Error ? err : new Error('Failed to load context');
+      setError(error);
+      handleError(error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tutorContext]); // processToolCalls intentionally excluded to avoid circular dependency
+  }, [user?.id, options, handleError, setLoading]);
 
-  const sendMessageWithMetadata = useCallback(async (message: string): Promise<{
-    response: string;
-    hasGeneratedInteractiveContent: boolean;
-    newSubjectCreated?: boolean;
-    newSubjectData?: Subject;
-  }> => {
-    setIsLoading(true);
-    setError(null);
+  const saveCurrentContext = useCallback(async () => {
+    if (!currentSubject || !user?.id) return;
 
     try {
-      // Get the current user ID for subject creation
-      const userIdForSubjectCreation = optionsRef.current.userId;
+      await persistenceService.saveTutorContext(
+        user.id,
+        currentSubject.id,
+        currentContext
+      );
+    } catch (err) {
+      console.error('Failed to save context:', err);
+      // Don't set error state for auto-save failures
+    }
+  }, [currentContext, currentSubject, user?.id]);
+
+  const setSubject = useCallback((subject: Subject | null) => {
+    setCurrentSubject(subject);
+  }, []);
+
+  // Generate response via API call instead of direct service call
+  const generateResponse = useCallback(async (message: string, subject?: Subject) => {
+    try {
+      setLoading(true);
+      setError(null);
       
-      // Ensure subject is included in the context
-      const currentSubject = optionsRef.current.subject;
-      let contextWithSubject = { ...tutorContext };
-      
-      // Add subject to context explicitly to avoid "No subject context available" errors
-      if (currentSubject && (!contextWithSubject || !contextWithSubject.subject)) {
-        console.log('📝 Adding subject to context explicitly:', currentSubject.name);
-        contextWithSubject = {
-          ...contextWithSubject,
-          subject: currentSubject
-        };
-      }
-      
-      // Call our API endpoint
       const response = await fetch('/api/openai', {
         method: 'POST',
         headers: {
@@ -561,241 +460,142 @@ export function useAITutor(options: UseAITutorOptions = {}) {
         },
         body: JSON.stringify({
           message,
-          context: {
-            ...contextWithSubject,
-            // Use instructionOverrides from options or set defaults for interactive content
-            instructionOverrides: optionsRef.current.instructionOverrides || {
-              preferInteractiveContent: true,
-              interactiveContentGuidelines: DEFAULT_INTERACTIVE_CONTENT_GUIDELINES
-            }
-          },
-          sessionId: optionsRef.current.subject?.id,
-          userId: userIdForSubjectCreation // Include userId for subject creation
+          context: currentContext,
+          userId: user?.id,
+          sessionId: `session-${Date.now()}`,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`API call failed: ${response.statusText}`);
+        throw new Error(`API request failed: ${response.statusText}`);
       }
 
-      const data: AITutorResponse & {
-        newSubjectCreated?: boolean;
-        newSubjectData?: Subject;
-      } = await response.json();
-
-      // Enhanced logging for debugging
-      console.log('🔄 AI Response received:', {
-        responsePreview: data.response.substring(0, 200) + '...',
-        toolCallsCount: data.toolCalls.length,
-        toolCallTypes: data.toolCalls.map(tc => tc.name),
-        hasInteractiveComponent: data.toolCalls.some(tc => tc.name === 'interactive_component'),
-        newSubjectCreated: data.newSubjectCreated || false
-      });
+      const result = await response.json();
       
-      if (data.toolCalls.length === 0) {
-        console.warn('⚠️ No tool calls made by AI - interactive content cannot be generated without tool calls!');
-      } else {
-        console.log('🔧 Tool calls made:', data.toolCalls.map(tc => ({
-          name: tc.name,
-          paramsPreview: JSON.stringify(tc.parameters).substring(0, 100) + '...'
-        })));
-      }
-
-      // Update our local context
-      setTutorContext(data.context);
-
-      // Check if interactive content was generated
-      const hasGeneratedInteractiveContent = data.toolCalls.some(
-        toolCall => toolCall.name === 'interactive_component'
-      );
-
-      // Process any tool calls that were made
-      await processToolCalls(data.toolCalls);
-
-      // If it's a simulated response, show the simulation message
-      if (data.simulated && data.message) {
-        console.log('🔧 Simulated response:', data.message);
-      }
-
-      // Check if a new subject was created
-      if (data.newSubjectCreated && data.newSubjectData) {
-        console.log('🎯 New subject created in useAITutor:', data.newSubjectData.name);
+      // Update context with new information
+      if (result.context) {
+        setCurrentContext(result.context);
         
-        // If there's a subject creation handler, call it directly
-        if (optionsRef.current.onSubjectCreated) {
-          optionsRef.current.onSubjectCreated(data.newSubjectData);
+        // Check for lesson progress updates
+        if (result.context.lessonPlan) {
+          const currentLesson = result.context.lessonPlan.lessons[result.context.lessonPlan.currentLessonIndex];
+          if (currentLesson && options.onLessonProgress) {
+            options.onLessonProgress(currentLesson.progress || 0);
+          }
         }
       }
-
-      await saveContext(data.context);
-
+      
       return {
-        response: data.response,
-        hasGeneratedInteractiveContent,
-        newSubjectCreated: data.newSubjectCreated,
-        newSubjectData: data.newSubjectData
+        response: result.response,
+        toolCalls: result.toolCalls || [],
+        updatedContext: result.context,
       };
-
     } catch (err) {
-      const appError = errorHandler.handleError(err, 'send_message_with_metadata');
-      setError(appError.userMessage);
-      console.error('AI Tutor Error:', err);
-      return {
-        response: `Error: ${appError.userMessage}`,
-        hasGeneratedInteractiveContent: false
-      };
+      const error = err instanceof Error ? err : new Error('Failed to generate response');
+      setError(error);
+      handleError(error);
+      throw error;
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tutorContext]); // processToolCalls intentionally excluded to avoid circular dependency
+  }, [currentContext, user?.id, options, handleError, setLoading]);
 
-  const handleToolCall = useCallback(async (toolCall: ToolCallResult) => {
-    const { name, parameters, result } = toolCall;
-    const currentOptions = optionsRef.current;
-
-    console.log(`🔧 Processing tool call: ${name}`, { 
-      parameters: JSON.stringify(parameters).substring(0, 200) + '...',
-      resultPreview: JSON.stringify(result).substring(0, 200) + '...'
-    });
-
-    switch (name) {
-      case 'new_subject':
-        if (result.success && result.subject && currentOptions.onSubjectCreated) {
-          currentOptions.onSubjectCreated(result.subject as Subject);
-        }
-        break;
-
-      case 'new_lesson_plan':
-        if (result.success && result.lessonPlan && currentOptions.onLessonPlanCreated) {
-          currentOptions.onLessonPlanCreated(result.lessonPlan as LessonPlan);
-        }
-        break;
-
-      case 'lesson_complete':
-      case 'next_lesson':
-        if (result.success && currentOptions.onProgressUpdated) {
-          // Create a progress object based on the results
-          const progress: LearningProgress = {
-            correctAnswers: result.correctAnswers as number || 0,
-            totalAttempts: result.totalAttempts as number || 0,
-            currentLessonIndex: result.lessonNumber as number || 0,
-            readyForNext: result.success as boolean || false
-          };
-          currentOptions.onProgressUpdated(progress);
-        }
-        break;
-
-      case 'interactive_component':
-        if (result.type === 'interactive_component' && currentOptions.onInteractiveContent) {
-          const content: InteractiveContent = {
-            id: `interactive_${Date.now()}`,
-            type: result.componentType as ComponentType,
-            data: result.content,
-            onInteraction: async (action: string, data: unknown) => {
-              // Handle interactions with the component
-              await sendMessage(`User interacted with ${result.componentType}: ${action} - ${JSON.stringify(data)}`);
-            }
-          };
-          
-          // Call the callback
-          currentOptions.onInteractiveContent(content);
-          
-          // Also dispatch the contentGenerated event that ContentPane expects
-          const contentData = {
-            id: content.id,
-            type: content.type,
-            data: content.data,
-            title: result.learningObjective || `${result.componentType} Activity`.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            subjectId: currentOptions.subject?.id
-          };
-          
-          console.log('📤 Dispatching contentGenerated event:', contentData);
-          const event = new CustomEvent('contentGenerated', { detail: contentData });
-          window.dispatchEvent(event);
-        }
-        break;
-
-      case 'clarifying_question':
-        if (result.type === 'clarifying_question' && currentOptions.onClarifyingQuestion) {
-          currentOptions.onClarifyingQuestion(
-            result.question as string,
-            result.context as string,
-            result.options as string[]
-          );
-        }
-        break;
-
-      case 'subject_complete':
-        console.log('🎉 Subject completed!', result);
-        break;
-
-      case 'review_request':
-        console.log('📚 Review session started:', result);
-        break;
-
-      case 'summary_request':
-        console.log('📝 Summary generated:', result);
-        break;
-
-      case 'rephrase_request':
-        console.log('🔄 Content rephrased:', result);
-        break;
-
-      case 'feedback_log':
-        console.log('📊 Feedback logged:', result);
-        break;
-
-      case 'update_lesson_plan':
-        console.log('📋 Lesson plan updated:', result);
-        break;
-
-      default:
-        console.log(`⚠️ Unknown tool call: ${name}`, result);
+  // Handle lesson change
+  const onLessonChange = useCallback((lessonIndex: number) => {
+    if (currentContext.lessonPlan) {
+      const updatedPlan = {
+        ...currentContext.lessonPlan,
+        currentLessonIndex: lessonIndex
+      };
+      setCurrentContext({
+        ...currentContext,
+        lessonPlan: updatedPlan
+      });
     }
-  }, [sendMessage]);
+  }, [currentContext]);
 
-  const processToolCalls = useCallback(async (toolCalls: ToolCallResult[]) => {
-    for (const toolCall of toolCalls) {
-      try {
-        await handleToolCall(toolCall);
-      } catch (error) {
-        console.error(`Error processing tool call ${toolCall.name}:`, error);
-      }
+  const sendMessage = useCallback(async (message: string) => {
+    try {
+      setLoading(true);
+      const result = await generateResponse(message);
+      return result;
+    } catch (error) {
+      handleError(error as Error);
+      throw error;
+    } finally {
+      setLoading(false);
     }
-  }, [handleToolCall]);
+  }, [generateResponse, handleError, setLoading]);
 
-  // Method to update context (for when external state changes)
-  const updateContext = useCallback((updates: Partial<TutorContext>) => {
-    setTutorContext(prev => {
-      const newContext = prev ? { ...prev, ...updates } : { conversationHistory: [], ...updates }
-      // If userGoals or userLevel are set and no lesson plan, trigger lesson plan generation
-      if ((updates.userGoals || updates.userLevel) && !newContext.lessonPlan && newContext.subject) {
-        // Fire and forget: ask AI to generate a lesson plan
-        sendMessageWithMetadata('Generate a lesson plan for this subject.')
+  const handleInteraction = useCallback(async (type: string, data: unknown) => {
+    try {
+      setLoading(true);
+      const result = await generateResponse(`User interacted: ${type} - ${JSON.stringify(data)}`);
+      return result;
+    } catch (error) {
+      handleError(error as Error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  }, [generateResponse, handleError, setLoading]);
+
+  const getLessonPlan = useCallback(async (): Promise<LessonPlan> => {
+    try {
+      const lessonPlan = currentContext.lessonPlan;
+      if (!lessonPlan) {
+        throw new Error('No lesson plan available');
       }
-      // Persist to localStorage
-      const subjectId = newContext.subject?.id
-      const key = getContextStorageKey(subjectId)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(key, JSON.stringify(newContext))
+      return lessonPlan;
+    } catch (error) {
+      handleError(error as Error);
+      throw error;
+    }
+  }, [handleError]); // Remove currentContext dependency to prevent infinite loops
+
+  const getCurrentLesson = useCallback(async (): Promise<CurrentLesson> => {
+    try {
+      const lessonPlan = currentContext.lessonPlan;
+      if (!lessonPlan) {
+        throw new Error('No lesson plan available');
       }
-      return newContext
-    })
-  }, [sendMessageWithMetadata])
+      
+      const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex];
+      if (!currentLesson) {
+        throw new Error('No current lesson found');
+      }
+      
+      return {
+        id: currentLesson.id,
+        title: currentLesson.title,
+        description: currentLesson.description,
+        progress: currentLesson.progress || 0,
+        objectives: currentLesson.objectives || [],
+        completedObjectives: [], // This could be calculated based on progress
+        achievement: currentLesson.achievement
+      };
+    } catch (error) {
+      handleError(error as Error);
+      throw error;
+    }
+  }, [handleError]); // Remove currentContext dependency to prevent infinite loops
 
   return {
-    sendMessage,
-    sendMessageWithMetadata,
-    updateContext,
+    generateResponse,
+    setSubject,
+    currentSubject,
     isLoading,
     error,
-    context: tutorContext
+    onLessonChange,
+    sendMessage,
+    handleInteraction,
+    getLessonPlan,
+    getCurrentLesson
   };
 }
 
-// Add a helper to detect and parse user goals/level
-function parseGoalsAndLevel(message: string): { userGoals?: string; userLevel?: string } {
+// Add a helper to detect and parse user goals/level (currently unused)
+function _parseGoalsAndLevel(message: string): { userGoals?: string; userLevel?: string } {
   // Simple heuristic: look for level keywords and treat the rest as goals
   const levelMatch = message.match(/\b(beginner|intermediate|advanced)\b/i)
   const userLevel = levelMatch && levelMatch[1] ? levelMatch[1].toLowerCase() : undefined

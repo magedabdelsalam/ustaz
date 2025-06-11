@@ -6,10 +6,8 @@ import { User } from '@supabase/supabase-js'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Tabs, TabsList } from '@/components/ui/tabs'
 import { Subject } from '@/types'
 import { GraduationCap, LogOut, BookOpen, Loader2, PlusCircle } from 'lucide-react'
-import { SubjectItem } from './history/SubjectItem'
 import { DeleteConfirmationDialog } from './history/DeleteConfirmationDialog'
 import { getUserInitials } from '@/lib/userUtils'
 import { Input } from '@/components/ui/input'
@@ -39,11 +37,11 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
   const [showGoalsModal, setShowGoalsModal] = useState(false)
   const [pendingSubjectId, setPendingSubjectId] = useState<string | null>(null)
   const [goalsInput, setGoalsInput] = useState('')
-  const [levelInput, setLevelInput] = useState('beginner')
+  const [levelInput, setLevelInput] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
   const [savingGoals, setSavingGoals] = useState(false)
   const [goalsError, setGoalsError] = useState<string | null>(null)
 
-  const handleDeleteClick = useCallback((subject: Subject) => {
+  const _handleDeleteClick = useCallback((subject: Subject) => {
     setConfirmDeleteSubject(subject)
   }, [])
 
@@ -63,7 +61,7 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
     setConfirmDeleteSubject(null)
   }, [])
 
-  const handleTabChange = useCallback((subjectId: string) => {
+  const _handleTabChange = useCallback((subjectId: string) => {
     const subject = subjects.find(s => s.id === subjectId)
     if (subject && onSubjectSelect) {
       onSubjectSelect(subject)
@@ -99,9 +97,9 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
           }
         }, 100)
       }
-    } catch (e) {
-      setError('Failed to create subject')
-      toast.error('Failed to create subject')
+          } catch (_e) {
+        setError('Failed to create subject')
+        toast.error('Failed to create subject')
     } finally {
       setCreating(false)
     }
@@ -282,7 +280,7 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
                 id="level-input"
                 className="w-full border rounded p-2 mt-1"
                 value={levelInput}
-                onChange={e => setLevelInput(e.target.value)}
+                onChange={e => setLevelInput(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
               >
                 <option value="beginner">Beginner</option>
                 <option value="intermediate">Intermediate</option>

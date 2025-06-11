@@ -1,263 +1,315 @@
 import React from 'react'
-import { useState } from 'react'
-import { Message, InteractiveContent } from '@/types'
-import { MessageCircle } from 'lucide-react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { StreamItem, StreamMessage, StreamInteractiveContent, LessonPlan, CurrentLesson } from '@/types'
+import { MessageCircle, BookOpen, Target, Award, Loader2, AlertTriangle, Send, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import * as Interactive from '@/components/interactive'
-import { motion, AnimatePresence } from 'framer-motion'
-import { Loader2 } from 'lucide-react'
-
-// TODO: Move these types to src/types/index.ts
-export type StreamItemType = 'message' | 'interactive'
-export interface StreamMessage extends Message { streamType: 'message'; timestamp: Date }
-export interface StreamInteractiveContent extends InteractiveContent { streamType: 'interactive'; timestamp: Date }
-export type StreamItem = StreamMessage | StreamInteractiveContent
-
-function getTimestamp(item: StreamItem): number {
-  // Accept both Date and string for robustness
-  if (item.timestamp instanceof Date) return item.timestamp.getTime()
-  if (typeof item.timestamp === 'string') return new Date(item.timestamp).getTime()
-  return 0
-}
-
-// Map ComponentType to Interactive export
-const componentTypeMap: Record<string, React.ComponentType<any>> = {
-  'multiple-choice': Interactive.MultipleChoice,
-  'fill-blank': Interactive.FillInTheBlank,
-  'drag-drop': Interactive.DragAndDrop,
-  'step-solver': Interactive.StepByStepSolver,
-  'concept-card': Interactive.ConceptCard,
-  'interactive-example': Interactive.InteractiveExample,
-  'progress-quiz': Interactive.ProgressQuiz,
-  'graph-visualizer': Interactive.GraphVisualizer,
-  'formula-explorer': Interactive.FormulaExplorer,
-  'text-highlighter': Interactive.TextHighlighter,
-  'explainer': Interactive.Explainer,
-  'placeholder': Interactive.Placeholder,
-}
+import { Badge } from '@/components/ui/badge'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { renderInteractiveComponent } from '@/lib/interactive-components'
+import { LoadingSpinner } from '@/components/ui/loading-spinner'
+import { ErrorAlert } from '@/components/ui/error-alert'
+import { AppError } from '@/types'
+import { AnalyticsService } from '@/lib/analyticsService'
+import { useToast } from '@/components/ui/use-toast'
+import { FeedbackTrigger } from '@/components/feedback/FeedbackTrigger'
 
 interface StreamPaneProps {
   stream: StreamItem[]
-  onInteraction: (action: string, data: unknown) => void
+  onInteraction: (type: string, data: any) => void
   onSendMessage: (message: string) => void
+  lessonPlan?: LessonPlan
+  currentLesson?: CurrentLesson
   isLoading?: boolean
-  lessonPlan?: import('@/types').LessonPlan | null
+  error?: AppError | null
+  onRetry?: () => void
+  onLessonComplete?: () => void
+  onLessonProgress?: (progress: number) => void
 }
 
-// Helper: Detect if a message is a clarifying question
-const isClarifyingQuestion = (content: string) => {
-  return /can you clarify|clarify|unclear|ambiguous|what do you mean|please specify/i.test(content)
-}
-
-export const StreamPane: React.FC<StreamPaneProps> = ({ stream, onInteraction, onSendMessage, isLoading, lessonPlan }) => {
-  // Sort stream by timestamp ascending
-  const sortedStream = [...stream].sort((a, b) => getTimestamp(a) - getTimestamp(b))
-
-  // Input state
-  const [inputValue, setInputValue] = useState('')
+export function StreamPane({ 
+  stream, 
+  onInteraction, 
+  onSendMessage, 
+  lessonPlan, 
+  currentLesson,
+  isLoading = false,
+  error = null,
+  onRetry,
+  onLessonComplete,
+  onLessonProgress
+}: StreamPaneProps) {
+  const [message, setMessage] = useState('')
+  const [isClarifying, setIsClarifying] = useState(false)
+  const [clarificationMessage, setClarificationMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const parentRef = useRef<HTMLDivElement>(null)
+  const { toast } = useToast()
+  const analyticsService = AnalyticsService.getInstance()
+  const interactionStartTimes = useRef<Map<string, number>>(new Map())
 
-  // Scroll to bottom when stream changes
-  const bottomRef = React.useRef<HTMLDivElement>(null)
-  React.useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [sortedStream.length])
+  // Virtualization setup
+  const rowVirtualizer = useVirtualizer({
+    count: stream.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 100, // Estimated height of each message
+    overscan: 5, // Number of items to render outside of the visible area
+  })
 
-  // Helper to determine if an interactive is the first explainer for the current lesson
-  const isFirstLessonExplainer = (item: StreamItem, idx: number) => {
-    if (!lessonPlan || item.streamType !== 'interactive' || item.type !== 'explainer') return false
-    // Find the first explainer for the current lesson in the stream
-    const currentLesson = lessonPlan.lessons[lessonPlan.currentLessonIndex]
-    let found = false
-    for (let i = 0; i <= idx; i++) {
-      const s = sortedStream[i]
-      if (s.streamType === 'interactive' && s.type === 'explainer') {
-        // Type guard: check if s.data is an object and has a title property
-        const data = s.data as { title?: string } | undefined
-        if (!found && data && typeof data.title === 'string' && currentLesson && data.title === currentLesson.title) {
-          found = true
-          if (i === idx) return true
-        }
-      }
-    }
-    return false
-  }
-
-  // Render a chat message (user or assistant)
-  const renderMessage = (item: StreamMessage) => (
-    <div
-      key={item.id}
-      role="article"
-      aria-label={item.role === 'user' ? 'Your message' : 'AI message'}
-      tabIndex={0}
-      className={`my-2 flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}
-    >
-      <div
-        className={`rounded-lg px-4 py-2 max-w-[70%] text-sm shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 transition-colors duration-100 ${
-          item.role === 'user'
-            ? 'bg-blue-700 text-white self-end'
-            : 'bg-gray-100 text-gray-900 self-start'
-        }`}
-        tabIndex={-1}
-      >
-        {item.content}
-      </div>
-    </div>
-  )
-
-  // Render an interactive component
-  const renderInteractive = (item: StreamInteractiveContent, idx: number) => {
-    const { type, data, id } = item
-    const Component = componentTypeMap[type]
-    if (!Component) {
-      return (
-        <div key={id} className="my-4 p-4 bg-yellow-100 text-yellow-800 rounded">
-          Unknown interactive type: {type}
-        </div>
-      )
-    }
-    const firstExplainer = isFirstLessonExplainer(item, idx)
-    return (
-      <div key={id} className={`my-4 ${firstExplainer ? 'border-2 border-blue-400 rounded-lg shadow-lg bg-blue-50' : ''}`}> 
-        {firstExplainer && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded font-semibold">Lesson Start</span>
-            <span className="text-xs text-blue-700 font-medium">First Explainer for this Lesson</span>
-          </div>
-        )}
-        <Component onInteraction={onInteraction} content={data} id={id} />
-      </div>
-    )
-  }
-
-  // Handle send
-  const handleSend = async () => {
-    const trimmed = inputValue.trim()
-    if (!trimmed || sending) return
-    setSending(true)
-    try {
-      await onSendMessage(trimmed)
-      setInputValue('')
-    } finally {
-      setSending(false)
-    }
-  }
-
-  // Handle Enter key
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      if (isClarifying) {
+        handleClarificationSubmit()
+      } else {
+        handleSendMessage()
+      }
+    }
+  }
+
+  const handleClarificationSubmit = async () => {
+    if (clarificationMessage.trim() && !sending) {
+      setSending(true)
+      try {
+        await onSendMessage(clarificationMessage)
+        setClarificationMessage('')
+        setIsClarifying(false)
+      } finally {
+        setSending(false)
+      }
+    }
+  }
+
+  const handleSendMessage = async () => {
+    if (message.trim() && !sending) {
+      setSending(true)
+      try {
+        await onSendMessage(message)
+        setMessage('')
+      } finally {
+        setSending(false)
+      }
+    }
+  }
+
+  // Add focus management
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [stream])
+
+  // Add keyboard focus trap for interactive components
+  const handleInteractiveKeyDown = (e: React.KeyboardEvent, componentId: string) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      inputRef.current?.focus()
+    }
+  }
+
+  const handleInteraction = (action: string, data: unknown) => {
+    const componentId = (data as Record<string, unknown>).componentId as string
+    const startTime = interactionStartTimes.current.get(componentId)
+    const engagementTime = startTime ? (Date.now() - startTime) / 1000 : 0
+
+    // Track component usage
+    if ((data as Record<string, unknown>).success !== undefined) {
+      analyticsService.trackInteractiveComponentUsage(
+        'current-user', // TODO: Get actual user ID
+        componentId,
+        action,
+        (data as Record<string, unknown>).success as boolean,
+        engagementTime
+      )
+    }
+
+    // Clear the start time
+    interactionStartTimes.current.delete(componentId)
+
+    // Call the original interaction handler
+    onInteraction(action, data)
+  }
+
+  const renderStreamItem = (item: StreamItem) => {
+    if (item.streamType === 'message') {
+      const message = item as StreamMessage
+      return (
+        <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}>
+          <div className={`max-w-[80%] rounded-lg p-3 ${
+            message.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100'
+          }`}>
+            {message.content}
+          </div>
+        </div>
+      )
+    } else {
+      const interactiveContent = item as StreamInteractiveContent
+      // Record start time for this interaction
+      interactionStartTimes.current.set(interactiveContent.id, Date.now())
+      
+      return (
+        <div className="mb-4">
+          {renderInteractiveComponent(interactiveContent, handleInteraction)}
+        </div>
+      )
     }
   }
 
   return (
-    <div className="flex flex-col h-full bg-white" role="feed" aria-live="polite" aria-busy={isLoading} tabIndex={0}>
-      <div className="flex-1 overflow-y-auto p-4">
-        {isLoading && (
-          <div className="flex justify-center py-8">
-            <Loader2 className="animate-spin h-8 w-8 text-blue-500" />
-          </div>
-        )}
-        {sortedStream.length === 0 && !isLoading && (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-            <MessageCircle className="h-12 w-12 mb-2" />
-            <div className="text-lg font-medium">No messages yet</div>
-            <div className="text-sm">Start a conversation or lesson to see content here.</div>
-          </div>
-        )}
-        <AnimatePresence initial={false}>
-          {sortedStream.map((item, idx) => {
-            if (item.streamType === 'message') {
-              // Render clarifying question as an interactive prompt
-              if (item.role === 'assistant' && isClarifyingQuestion(item.content)) {
-                return (
-                  <motion.div
-                    key={item.id}
-                    role="form"
-                    aria-label="Clarifying question"
-                    tabIndex={0}
-                    className="my-4 flex flex-col items-start"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ duration: 0.18 }}
-                  >
-                    <div className="mb-2 px-4 py-2 bg-yellow-50 border-l-4 border-yellow-400 text-yellow-900 rounded">
-                      <span className="font-semibold">AI needs clarification:</span> {item.content}
-                    </div>
-                    <form
-                      className="flex gap-2 w-full"
-                      onSubmit={e => {
-                        e.preventDefault()
-                        const form = e.target as HTMLFormElement
-                        const input = form.elements.namedItem('clarification') as HTMLInputElement
-                        if (input && input.value.trim()) {
-                          onSendMessage(input.value.trim())
-                          input.value = ''
-                        }
-                      }}
-                    >
-                      <Input
-                        name="clarification"
-                        placeholder="Type your clarification..."
-                        className="flex-1"
-                        aria-label="Clarification input"
-                        autoFocus
-                      />
-                      <Button type="submit" className="bg-yellow-500 hover:bg-yellow-600 text-white">Send</Button>
-                    </form>
-                  </motion.div>
-                )
-              }
-              return renderMessage(item as StreamMessage)
-            } else if (item.streamType === 'interactive') {
-              return (
-                <motion.div
-                  key={item.id}
-                  role="article"
-                  aria-label="Interactive lesson"
-                  tabIndex={0}
-                  className="my-4"
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 20 }}
-                  transition={{ duration: 0.18 }}
-                >
-                  {renderInteractive(item as StreamInteractiveContent, idx)}
-                </motion.div>
-              )
-            }
-            return null
-          })}
-        </AnimatePresence>
-        <div ref={bottomRef} />
-      </div>
-      {/* User input pinned at bottom */}
-      <div className="shrink-0 p-4 border-t bg-white" role="form" aria-label="Send a message">
-        <div className="flex space-x-2">
-          <Input
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your message..."
-            className="flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-150"
-            disabled={sending || isLoading}
-            aria-label="Message input"
-            autoFocus
+    <div className="flex flex-col h-full" role="region" aria-label="Chat conversation">
+      {/* Error Alert */}
+      {error && (
+        <div className="p-4 border-b">
+          <ErrorAlert
+            error={error}
+            onRetry={onRetry}
+            onDismiss={() => {}}
+            className="mb-4"
           />
-          <Button
-            onClick={handleSend}
-            disabled={!inputValue.trim() || sending || isLoading}
-            aria-label="Send message"
-            className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
-          >
-            {sending ? <Loader2 className="animate-spin h-5 w-5" /> : 'Send'}
-          </Button>
         </div>
+      )}
+
+      {/* Lesson Progress Section */}
+      {currentLesson && (
+        <div className="p-4 border-b" role="region" aria-label="Current lesson progress">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold">{currentLesson.title}</h3>
+            <Badge variant="default" className="ml-2">
+              {Math.round(currentLesson.progress * 100)}% Complete
+            </Badge>
+            <FeedbackTrigger
+              lessonId={currentLesson.id}
+              subjectId={lessonPlan?.subject}
+              triggerAfter={600000} // Show feedback after 10 minutes
+              onFeedbackSubmitted={() => {
+                // Update lesson progress after feedback
+                if (onLessonProgress) {
+                  onLessonProgress(currentLesson.progress || 0)
+                }
+              }}
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span>Learning Objectives:</span>
+              <span>{currentLesson.completedObjectives?.length || 0} of {currentLesson.objectives?.length || 0} completed</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {currentLesson.objectives?.map((objective, index) => (
+                <Badge
+                  key={index}
+                  variant={currentLesson.completedObjectives?.includes(objective) ? "default" : "outline"}
+                  className="text-xs"
+                  aria-label={`Objective ${index + 1}: ${objective} - ${currentLesson.completedObjectives?.includes(objective) ? 'Completed' : 'Not completed'}`}
+                >
+                  {objective}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Messages Section with Virtualization */}
+      <div 
+        ref={parentRef}
+        className="flex-1 overflow-y-auto p-4"
+        role="log"
+        aria-label="Chat messages"
+      >
+        {isLoading && stream.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <LoadingSpinner size="lg" message="Loading conversation..." />
+          </div>
+        ) : stream.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+            <MessageCircle className="h-12 w-12 mb-2" />
+            <p className="text-lg font-medium">No messages yet</p>
+            <p className="text-sm">Start a conversation to see messages here.</p>
+          </div>
+        ) : (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const item = stream[virtualRow.index]
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                  className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}
+                  role="listitem"
+                >
+                  {renderStreamItem(item)}
+                </div>
+              )
+            })}
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Section */}
+      <div className="p-4 border-t" role="region" aria-label="Message input">
+        {isClarifying ? (
+          <div className="flex gap-2">
+            <Input
+              ref={inputRef}
+              value={clarificationMessage}
+              onChange={(e) => setClarificationMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your clarification..."
+              className="flex-1"
+              aria-label="Clarification input"
+              disabled={sending || isLoading}
+            />
+            <Button
+              onClick={handleClarificationSubmit}
+              disabled={!clarificationMessage.trim() || sending || isLoading}
+              aria-label="Submit clarification"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Submit
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <Input
+              ref={inputRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your message..."
+              className="flex-1"
+              aria-label="Message input"
+              disabled={sending || isLoading}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!message.trim() || sending || isLoading}
+              aria-label="Send message"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Send
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

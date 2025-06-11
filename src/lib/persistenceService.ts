@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { PersistedMessage, PersistedContentItem, PersistedSubject } from '@/types'
+import { TutorContext } from '@/lib/ai-tutor-service'
 import { errorHandler, RetryOptions } from '@/lib/errorHandler'
 import { logger } from './logger'
 
@@ -479,7 +480,7 @@ export class PersistenceService {
           subject_id: subjectId,
           context_json: context,
           updated_at: new Date().toISOString()
-        }, { onConflict: ['user_id', 'subject_id'] });
+        }, { onConflict: 'user_id,subject_id' });
       if (error) {
         if (error.code === '42501') {
           console.error('RLS policy violation when saving tutor context:', error.message);

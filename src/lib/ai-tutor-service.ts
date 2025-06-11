@@ -8,6 +8,17 @@ export type TutorToolName =
   | 'new_subject'
   | 'new_lesson_plan'
   | 'update_lesson_plan'
+  | 'explainer'
+  | 'multiple-choice'
+  | 'fill-blank'
+  | 'drag-drop'
+  | 'step-solver'
+  | 'concept-card'
+  | 'interactive-example'
+  | 'progress-quiz'
+  | 'graph-visualizer'
+  | 'formula-explorer'
+  | 'text-highlighter'
   | 'clarifying_question'
   | 'lesson_complete'
   | 'next_lesson'
@@ -97,34 +108,35 @@ export interface FeedbackLogParams {
   [key: string]: unknown;
 }
 
-// Assistant context for maintaining conversation state
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  id: string;
+  hasGeneratedContent: boolean;
+}
+
+interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: 'student' | 'teacher' | 'admin';
+  learningStyle?: 'visual' | 'auditory' | 'kinesthetic' | 'reading';
+  preferredPace?: 'slow' | 'medium' | 'fast';
+  previousSubjects?: string[];
+  strengths?: string[];
+  challenges?: string[];
+}
+
 export interface TutorContext {
   subject?: Subject;
   lessonPlan?: LessonPlan;
+  conversationHistory: Message[];
+  userProfile?: UserProfile;
+  userLevel?: 'beginner' | 'intermediate' | 'advanced';
+  instructionOverrides?: Record<string, unknown>;
   learningProgress?: LearningProgress;
-  conversationHistory: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-    timestamp: Date;
-    tool_calls?: Array<{
-      name: TutorToolName;
-      parameters: Record<string, unknown>;
-      result: Record<string, unknown>;
-    }>;
-  }>;
-  userProfile?: {
-    learningStyle?: 'visual' | 'auditory' | 'kinesthetic' | 'reading';
-    preferredPace?: 'slow' | 'medium' | 'fast';
-    previousSubjects?: string[];
-    strengths?: string[];
-    challenges?: string[];
-  };
-  instructionOverrides?: {
-    preferInteractiveContent: boolean;
-    interactiveContentGuidelines?: string;
-  };
   userGoals?: string;
-  userLevel?: 'beginner' | 'intermediate' | 'advanced' | string;
 }
 
 // Tool definitions for OpenAI Assistant API
@@ -512,16 +524,17 @@ function getComponentTypeForStage(stage: keyof typeof LEARNING_STAGE_COMPONENT_M
 
 // Main AI Tutor Service Class
 export class AITutorService {
-  private openai: OpenAI | null = null;
-  private assistants: Map<string, OpenAI.Beta.Assistant> = new Map(); // Map subject ID to assistant                                                                                              
+  private openai?: OpenAI;
+  private assistants: Map<string, OpenAI.Beta.Assistant> = new Map(); // Map subject ID to assistant
   private context: TutorContext;
   private subjectThreads: Map<string, string> = new Map(); // Map subject ID to thread ID
   private initializationPromises: Map<string, Promise<void>> = new Map(); // Map subject ID to initialization promise
+  private currentUserId: string | null = null;
+  private autoSaveInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     console.log('🤖 Initializing AI Tutor Service...');
     
-    // Initialize empty context
     this.context = {
       conversationHistory: [],
       instructionOverrides: {
@@ -545,12 +558,23 @@ export class AITutorService {
       }
     };
     
-    // Initialize OpenAI client if API key is available
-    if (OPENAI_API_KEY) {
+    // Only initialize OpenAI on server side (when we have access to environment variables)
+    if (typeof window === 'undefined' && OPENAI_API_KEY) {
       this.openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-      console.log('✅ OpenAI client initialized successfully');
+      console.log('✅ OpenAI client initialized successfully (server-side)');
+      
+      // Initialize OpenAI client
+      this.initializeOpenAI();
     } else {
-      console.log('⚠️ No OPENAI_API_KEY found - AI features will be limited');
+      console.log('⚠️ OpenAI client not initialized (client-side or missing API key)');
+    }
+  }
+
+  private async initializeOpenAI() {
+    if (!this.openai) {
+      this.openai = new OpenAI({
+        apiKey: OPENAI_API_KEY,
+      });
     }
   }
 
@@ -739,7 +763,9 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     this.context.conversationHistory.push({
       role: 'user',
       content: userMessage,
-      timestamp: new Date()
+      timestamp: new Date(),
+      id: `user-${Date.now()}`,
+      hasGeneratedContent: false
     });
 
     if (!this.openai) {
@@ -757,20 +783,20 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     try {
       // Get or create thread for this subject
       let threadId: string;
-      const subjectId = this.context.subject.id;
+      const currentSubjectId = this.context.subject.id;
       
-      if (subjectId && this.subjectThreads.has(subjectId)) {
+      if (currentSubjectId && this.subjectThreads.has(currentSubjectId)) {
         // Use existing thread for this subject
-        threadId = this.subjectThreads.get(subjectId)!;
-        console.log('🔄 Using existing thread for subject:', subjectId, 'threadId:', threadId);
+        threadId = this.subjectThreads.get(currentSubjectId)!;
+        console.log('🔄 Using existing thread for subject:', currentSubjectId, 'threadId:', threadId);
       } else {
         // Create a new thread for new subject or when no subject context
         const thread = await this.openai.beta.threads.create();
         threadId = thread.id;
         
-        if (subjectId) {
-          this.subjectThreads.set(subjectId, threadId);
-          console.log('🆕 Created new thread for subject:', subjectId, 'threadId:', threadId);
+        if (currentSubjectId) {
+          this.subjectThreads.set(currentSubjectId, threadId);
+          console.log('🆕 Created new thread for subject:', currentSubjectId, 'threadId:', threadId);
         } else {
           console.log('🆕 Created temporary thread (no subject context):', threadId);
         }
@@ -783,7 +809,7 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       });
 
       // Get or create assistant for this subject
-      const assistant = await this.getOrCreateAssistantForSubject(subjectId, this.context.subject.name);
+      const assistant = await this.getOrCreateAssistantForSubject(currentSubjectId, this.context.subject.name);
       if (!assistant) {
         console.log('❌ Assistant not available for subject:', this.context.subject.name);
         return this.generateFallbackResponse(userMessage);
@@ -845,7 +871,8 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
         role: 'assistant',
         content: response,
         timestamp: new Date(),
-        tool_calls: toolCalls
+        id: `assistant-${Date.now()}`,
+        hasGeneratedContent: toolCalls.some(tc => tc.name === 'interactive_component')
       });
 
       // --- Auditing: Track interactive component usage rate ---
@@ -921,19 +948,37 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
         }
       }
 
+      // Save context to server if userId and subjectId are available
+      const userId = this.context.userProfile?.id;
+      const contextSubjectId = this.context.subject?.id;
+      if (userId && contextSubjectId) {
+        await persistenceService.saveTutorContext(userId, contextSubjectId, this.context);
+      }
+
       // Update context with new message
-      this.context = {
-        ...this.context,
-        messages: [...this.context.messages, userMessage, response],
-        lastUpdated: new Date().toISOString()
+      const userMessageObj: Message = {
+        role: 'user',
+        content: userMessage,
+        timestamp: new Date(),
+        id: `user-${Date.now()}`,
+        hasGeneratedContent: false
       };
 
-      // Save context to server if userId and subjectId are available
-      const userId = this.context.userProfile?.userId;
-      const subjectId = this.context.subject?.id;
-      if (userId && subjectId) {
-        await persistenceService.saveTutorContext(userId, subjectId, this.context);
-      }
+      const assistantMessageObj: Message = {
+        role: 'assistant',
+        content: response,
+        timestamp: new Date(),
+        id: `assistant-${Date.now()}`,
+        hasGeneratedContent: toolCalls.some(tc => tc.name === 'interactive_component')
+      };
+
+      this.context = {
+        ...this.context,
+        conversationHistory: [...this.context.conversationHistory, userMessageObj, assistantMessageObj]
+      };
+
+      // Save context after generating response
+      await this.saveCurrentContext();
 
       return {
         response,
@@ -975,6 +1020,9 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
       
       // Log the error for debugging but don't add to return type
       console.error('🚨 Using fallback response due to error:', error instanceof Error ? error.message : String(error));
+      
+      // Save context after generating response
+      await this.saveCurrentContext();
       
       return fallbackResponse;
     }
@@ -1121,11 +1169,12 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     }
 
     // Add prompt for user goals and level
-    this.context.conversationHistory.push({
-      role: 'assistant',
-      content: `To personalize your learning, what are your main goals for ${params.name}? How would you rate your current level (beginner, intermediate, advanced)?`,
-      timestamp: new Date(),
-    });
+    this.context.conversationHistory.push(
+      this.createMessage(
+        'assistant',
+        `To personalize your learning, what are your main goals for ${params.name}? How would you rate your current level (beginner, intermediate, advanced)?`
+      )
+    );
 
     return {
       success: true,
@@ -1159,6 +1208,7 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     
     if (this.context.subject) {
       this.context.subject.lessonPlan = {
+        subject: params.subject,
         lessons: lessons.map(lesson => ({
           id: lesson.id,
           title: lesson.title,
@@ -1617,24 +1667,13 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
   }
 
   private async handleFeedbackLog(params: FeedbackLogParams): Promise<Record<string, unknown>> {
-    // Store feedback for adaptive learning
-    this.context.conversationHistory.push({
-      role: 'assistant',
-      content: `Logged feedback: ${params.interaction_type}`,
-      timestamp: new Date(),
-      tool_calls: [{
-        name: 'feedback_log',
-        parameters: params,
-        result: { logged: true }
-      }]
-    });
-
+    const response = await this.getOpenAIResponse(`Logged feedback: ${params.interaction_type}`);
+    const message = this.createMessage('assistant', response, false);
+    this.context.conversationHistory.push(message);
     return {
       success: true,
-      logged: true,
-      interactionType: params.interaction_type,
-      engagementLevel: params.engagement_level,
-      successRate: params.success_rate
+      message: response,
+      logged: true
     };
   }
 
@@ -1739,6 +1778,8 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
     this.subjectThreads.clear();
     this.assistants.clear();
     this.initializationPromises.clear();
+    this.stopAutoSave();
+    this.currentUserId = null;
   }
 
   // Clear thread and assistant for a specific subject (useful when subject is deleted)
@@ -1810,13 +1851,144 @@ Remember: You are exclusively focused on teaching ${subjectName}. All your inter
   // ---
 
   /**
-   * Load TutorContext from the server for a given subject
+   * Set the current user ID and start auto-saving context
    */
-  async loadContextForSubject(userId: string, subjectId: string): Promise<void> {
-    const loadedContext = await persistenceService.loadTutorContext(userId, subjectId);
-    if (loadedContext) {
-      this.context = loadedContext;
+  setCurrentUser(userId: string): void {
+    this.currentUserId = userId;
+    this.startAutoSave();
+  }
+
+  /**
+   * Start auto-saving context every 5 minutes
+   */
+  private startAutoSave(): void {
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
     }
+
+    this.autoSaveInterval = setInterval(async () => {
+      await this.saveCurrentContext();
+    }, 5 * 60 * 1000); // 5 minutes
+  }
+
+  /**
+   * Stop auto-saving context
+   */
+  private stopAutoSave(): void {
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
+      this.autoSaveInterval = null;
+    }
+  }
+
+  /**
+   * Save the current context if we have a user and subject
+   */
+  private async saveCurrentContext(): Promise<void> {
+    if (!this.currentUserId || !this.context.subject?.id) {
+      return;
+    }
+
+    try {
+      await persistenceService.saveTutorContext(
+        this.currentUserId,
+        this.context.subject.id,
+        this.context
+      );
+      console.log('✅ Auto-saved tutor context');
+    } catch (error) {
+      console.error('❌ Failed to auto-save tutor context:', error);
+    }
+  }
+
+  /**
+   * Load context for a specific subject
+   */
+  async loadContextForSubject(subjectId: string): Promise<void> {
+    if (!this.currentUserId) {
+      console.warn('⚠️ Cannot load context: No current user ID');
+      return;
+    }
+
+    try {
+      const loadedContext = await persistenceService.loadTutorContext(
+        this.currentUserId,
+        subjectId
+      );
+
+      if (loadedContext) {
+        this.context = loadedContext;
+        console.log('✅ Loaded tutor context for subject:', subjectId);
+
+        // Restore OpenAI threads if needed
+        if (this.openai && this.context.subject?.id) {
+          const threadId = this.subjectThreads.get(this.context.subject.id);
+          if (!threadId) {
+            try {
+              const thread = await this.openai.beta.threads.create();
+              this.subjectThreads.set(this.context.subject.id, thread.id);
+              console.log('🆕 Created new thread for restored context:', thread.id);
+            } catch (error) {
+              console.error('❌ Failed to create thread for restored context:', error);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to load tutor context:', error);
+    }
+  }
+
+  private createMessage(role: 'user' | 'assistant', content: string, hasGeneratedContent = false): Message {
+    return {
+      role,
+      content,
+      timestamp: new Date(),
+      id: crypto.randomUUID(),
+      hasGeneratedContent,
+    };
+  }
+
+  async processUserMessage(userMessage: string): Promise<string> {
+    await this.initializeOpenAI();
+    
+    // Create user message
+    const userMessageObj = this.createMessage('user', userMessage);
+    
+    // Get response from OpenAI
+    const response = await this.getOpenAIResponse(userMessage);
+    
+    // Create assistant message
+    const assistantMessageObj = this.createMessage('assistant', response, true);
+    
+    // Update context
+    this.context = {
+      ...this.context,
+      conversationHistory: [...this.context.conversationHistory, userMessageObj, assistantMessageObj]
+    };
+    
+    return response;
+  }
+
+  private async getOpenAIResponse(userMessage: string): Promise<string> {
+    if (!this.openai) {
+      throw new Error('OpenAI client not available. This method should only be called on the server side.');
+    }
+
+    const completion = await this.openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages: [
+        ...this.context.conversationHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content
+        })),
+        { role: 'user', content: userMessage }
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
+    });
+
+    return completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.';
   }
 }
 
