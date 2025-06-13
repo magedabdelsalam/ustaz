@@ -233,10 +233,12 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
 
         {/* Results explanation */}
         {showResult && (
-          <div className="bg-blue-50 p-5 rounded-lg border border-blue-200">
-            <h4 className="text-base font-semibold text-blue-900 mb-3">Explanation:</h4>
-            <p className="text-blue-800 text-base leading-relaxed">{dragContent.explanation}</p>
-          </div>
+          <Card className="bg-[--blue-50] border-[--blue-200]">
+            <CardContent className="p-5">
+              <h4 className="text-base font-semibold text-blue-900 mb-3">Explanation:</h4>
+              <p className="text-muted-foreground text-base leading-relaxed mt-1">{dragContent.explanation}</p>
+            </CardContent>
+          </Card>
         )}
 
         {/* Action buttons */}
@@ -258,7 +260,7 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
             <Button
               onClick={handleSubmit}
               disabled={submitting}
-              className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
+              className=""
               aria-label="Submit answer"
             >
               {submitting ? <Loader2 className="animate-spin h-5 w-5" /> : 'Submit'}

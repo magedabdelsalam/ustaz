@@ -395,20 +395,20 @@ export const GraphVisualizer = memo(function GraphVisualizer({
             </Button>
           </div>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{graphContent.description}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{graphContent.description}</p>
       </CardHeader>
 
       <CardContent className="space-y-6">
         {/* Controls */}
         {graphContent.controls && graphContent.controls.length > 0 && (
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">Parameters</h4>
+            <h4 className="font-medium">Parameters</h4>
             <div className="grid gap-4 p-4 bg-gray-50 rounded-lg">
               {graphContent.controls.map(control => (
                 <div key={control.id} className="space-y-2">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium">{control.label}</label>
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-muted-foreground">
                       {controlValues[control.id]}
                     </span>
                   </div>
@@ -430,14 +430,14 @@ export const GraphVisualizer = memo(function GraphVisualizer({
 
         {/* Graph Canvas */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Visualization</h4>
-          <div className="bg-white border rounded-lg overflow-hidden">
+          <h4 className="font-medium">Visualization</h4>
+          <Card className="overflow-hidden">
             <canvas
               ref={canvasRef}
               className="w-full h-96 block"
               style={{ width: '100%', height: '384px' }}
             />
-          </div>
+          </Card>
         </div>
 
         {/* Explanation */}

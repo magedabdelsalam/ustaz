@@ -40,8 +40,9 @@ export const SubjectItem = memo(function SubjectItem({
         disabled={isDeleting}
         onClick={handleSelect}
         className={cn(
-          'w-full justify-start px-4 py-3 h-auto data-[state=active]:border-2 data-[state=active]:border-blue-500 data-[state=active]:bg-blue-50/50',
-          'hover:bg-gray-100 transition-colors border-2 border-transparent',
+          'w-full justify-start px-4 py-3 h-auto',
+          'data-[state=active]:bg-accent data-[state=active]:text-accent-foreground',
+          'hover:bg-muted/50 transition-colors',
           isDeleting && 'opacity-50'
         )}
       >
@@ -50,7 +51,7 @@ export const SubjectItem = memo(function SubjectItem({
             className={cn(
               'w-3 h-3 rounded-full flex-shrink-0',
               subject.color,
-              subject.isActive && 'ring-2 ring-blue-500 ring-offset-1'
+              subject.isActive && 'ring-2 ring-ring ring-offset-1'
             )}
           />
           <div className="flex-1 min-w-0 text-left">
@@ -59,25 +60,20 @@ export const SubjectItem = memo(function SubjectItem({
                 <span className="text-sm font-medium truncate capitalize">{subject.name}</span>
                 {isRecentlyActive(subject.lastActive) && (
                   <div
-                    className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"
+                    className="w-2 h-2 bg-primary rounded-full flex-shrink-0"
                     title="Recently active (last 24 hours)"
                   />
                 )}
               </div>
               <Badge
                 variant={subject.progress === 100 ? 'default' : 'secondary'}
-                className={cn(
-                  'text-xs font-medium ml-2 flex-shrink-0',
-                  subject.progress === 100
-                    ? 'bg-green-100 text-green-800 hover:bg-green-100'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-100'
-                )}
+                className="ml-2 flex-shrink-0"
               >
                 {subject.progress}%
               </Badge>
             </div>
             {subject.completedAt && (
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 Completed {subject.completedAt.toLocaleDateString()}
               </span>
             )}
@@ -87,10 +83,13 @@ export const SubjectItem = memo(function SubjectItem({
       {onDelete && (
         <Button
           variant="ghost"
-          size="sm"
+          size="icon"
           onClick={handleDelete}
           disabled={isDeleting}
-          className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 hover:bg-red-50 z-10"
+          className={cn(
+            "absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity",
+            "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          )}
         >
           <Trash2 className="h-3 w-3" />
         </Button>

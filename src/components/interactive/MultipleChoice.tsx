@@ -10,6 +10,7 @@ import { InteractiveComponentProps } from './index'
 import type { MultipleChoiceContent } from '@/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 export const MultipleChoice = memo(function MultipleChoice({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
@@ -78,15 +79,6 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     }
   }
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner': return 'bg-green-100 text-green-800'
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
-      case 'advanced': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   const isCorrect = showResult && selectedOption === correctIndex
 
   // Show feedback with animation and toast
@@ -99,150 +91,110 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     <Card className="w-full mb-6">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-bold text-gray-900">
+          <CardTitle className="text-xl font-bold text-foreground">
             {mcContent.title}
           </CardTitle>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{mcContent.question}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{mcContent.question}</p>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Options */}
         <div className="space-y-3">
-          <h4 className="text-base font-semibold text-gray-800 mb-3">Choose your answer:</h4>
+          <h4 className="text-base font-semibold mb-3">Choose your answer:</h4>
           {mcContent.choices.map((choice, index) => (
             <button
               key={choice.id}
               onClick={() => !showResult && setSelectedOption(index)}
               disabled={showResult}
-              className={`w-full p-5 text-left rounded-lg border-2 transition-all duration-200 ${
+              className={cn(
+                "w-full p-5 text-left rounded-lg border-2 transition-all duration-200",
                 selectedOption === index
                   ? showResult
                     ? index === correctIndex
-                      ? 'bg-green-50 border-green-400 shadow-lg transform scale-[1.01]'
-                      : 'bg-red-50 border-red-400 shadow-lg'
-                    : 'bg-purple-50 border-purple-400 shadow-md'
-                  : showResult && index === correctIndex
-                  ? 'bg-green-50 border-green-400 shadow-lg'
-                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
-              }`}
+                      ? "bg-destructive/10 border-destructive shadow-lg transform scale-[1.01]"
+                      : "bg-destructive/10 border-destructive shadow-lg"
+                  : "bg-accent border-accent shadow-md"
+                : showResult && index === correctIndex
+                ? "bg-destructive/10 border-destructive shadow-lg"
+                : "bg-background border-input hover:border-input/80 hover:shadow-sm"
+              )}
             >
               <div className="flex items-center space-x-4">
-                <span className={`flex-shrink-0 w-10 h-10 rounded-full text-base flex items-center justify-center font-bold transition-colors ${
+                <div className={cn(
+                  "flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium",
                   selectedOption === index
                     ? showResult
                       ? index === correctIndex
-                        ? 'bg-green-500 text-white'
-                        : 'bg-red-500 text-white'
-                      : 'bg-purple-500 text-white'
+                        ? "bg-destructive text-destructive-foreground"
+                        : "bg-destructive text-destructive-foreground"
+                      : "bg-accent text-accent-foreground"
                     : showResult && index === correctIndex
-                    ? 'bg-green-500 text-white'
-                    : 'bg-gray-200 text-gray-600'
-                }`}>
+                    ? "bg-destructive text-destructive-foreground"
+                    : "bg-muted text-muted-foreground"
+                )}>
                   {String.fromCharCode(65 + index)}
+                </div>
+                <span className="flex-1">{choice.text}</span>
+                <span className="flex-shrink-0">
+                  {index === correctIndex ? (
+                    <CheckCircle className="h-6 w-6 text-destructive" />
+                  ) : selectedOption === index ? (
+                    <XCircle className="h-6 w-6 text-destructive" />
+                  ) : null}
                 </span>
-                <span className="flex-1 font-medium text-base leading-relaxed">{choice.text}</span>
-                {showResult && (
-                  <span className="flex-shrink-0">
-                    {index === correctIndex ? (
-                      <CheckCircle className="h-6 w-6 text-green-600" />
-                    ) : selectedOption === index ? (
-                      <XCircle className="h-6 w-6 text-red-600" />
-                    ) : null}
-                  </span>
-                )}
               </div>
             </button>
           ))}
         </div>
 
-        {/* Result and Explanation */}
+        {/* Result */}
         {showResult && (
-          <div className={`p-5 rounded-lg border-2 ${
-            isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-          }`}>
+          <div className={cn(
+            "p-5 rounded-lg border-2",
+            isCorrect ? "bg-destructive/10 border-destructive" : "bg-destructive/10 border-destructive"
+          )}>
             <div className="flex items-center mb-4">
               {isCorrect ? (
-                <CheckCircle className="h-7 w-7 text-green-600 mr-3" />
+                <CheckCircle className="h-7 w-7 text-destructive mr-3" />
               ) : (
-                <XCircle className="h-7 w-7 text-red-600 mr-3" />
+                <XCircle className="h-7 w-7 text-destructive mr-3" />
               )}
-              <h4 className={`font-bold text-lg ${isCorrect ? 'text-green-800' : 'text-red-800'}`}>
+              <h4 className={cn(
+                "font-bold text-lg",
+                isCorrect ? "text-destructive" : "text-destructive"
+              )}>
                 {isCorrect ? '🎉 Correct!' : '❌ Not quite right'}
               </h4>
             </div>
             {mcContent.explanation && (
-              <div className="bg-white p-4 rounded-md border shadow-sm">
-                <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
-                <p className="text-gray-700 text-base leading-relaxed">{mcContent.explanation}</p>
-              </div>
-            )}
-            {/* Show explanation for the selected choice if available */}
-            {showResult && selectedOption !== null && mcContent.choices[selectedOption]?.explanation && (
-              <div className="bg-white p-4 rounded-md border shadow-sm mt-2">
-                <h5 className="text-base font-semibold text-gray-900 mb-2">Choice Explanation:</h5>
-                <p className="text-gray-700 text-base leading-relaxed">{mcContent.choices[selectedOption].explanation}</p>
+              <div className="bg-background p-4 rounded-md border shadow-sm">
+                <h5 className="text-base font-semibold mb-2">Explanation:</h5>
+                <p className="text-muted-foreground text-base leading-relaxed">{mcContent.explanation}</p>
               </div>
             )}
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex space-x-3 pt-4">
-          {!showResult ? (
-            <Button 
-              onClick={handleSubmit} 
-              disabled={selectedOption === null || buttonLoadingStates.submit || isLoading}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-base font-medium h-12"
-            >
-              {buttonLoadingStates.submit ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                'Submit Answer'
-              )}
-            </Button>
-          ) : (
-            <Button 
-              onClick={handleReset} 
-              variant="outline" 
-              className="flex items-center text-sm font-medium h-11"
-              disabled={buttonLoadingStates.reset || isLoading}
-            >
-              {buttonLoadingStates.reset ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RotateCcw className="h-4 w-4 mr-2" />
-              )}
-              {buttonLoadingStates.reset ? 'Resetting...' : 'Try Again'}
-            </Button>
-          )}
-        </div>
+        {/* Show explanation for the selected choice if available */}
+        {showResult && selectedOption !== null && mcContent.choices[selectedOption]?.explanation && (
+          <div className="bg-background p-4 rounded-md border shadow-sm mt-2">
+            <h5 className="text-base font-semibold mb-2">Choice Explanation:</h5>
+            <p className="text-muted-foreground text-base leading-relaxed">{mcContent.choices[selectedOption].explanation}</p>
+          </div>
+        )}
 
-        <AnimatePresence>
-          {showResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.18 }}
-              className={`mt-4 text-center font-semibold ${isCorrect ? 'text-green-600' : 'text-red-600'}`}
-            >
-              {isCorrect ? 'Correct!' : 'Try again!'}
-            </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 10 }}
+          transition={{ duration: 0.18 }}
+          className={cn(
+            "mt-4 text-center font-semibold",
+            isCorrect ? "text-destructive" : "text-destructive"
           )}
-        </AnimatePresence>
-        <div className="flex justify-end mt-4">
-          <Button
-            onClick={handleSubmit}
-            disabled={buttonLoadingStates.submit || isLoading}
-            className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
-            aria-label="Submit answer"
-          >
-            {buttonLoadingStates.submit ? <Loader2 className="animate-spin h-5 w-5" /> : 'Submit'}
-          </Button>
-        </div>
+        >
+          {isCorrect ? 'Correct!' : 'Try again!'}
+        </motion.div>
       </CardContent>
     </Card>
   )

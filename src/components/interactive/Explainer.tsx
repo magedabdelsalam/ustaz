@@ -1,16 +1,16 @@
 'use client'
 
-import React from 'react'
+import React, { memo, useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { memo, useState, useMemo } from 'react'
 import { MessageCircle, BookOpen, ArrowRight, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
 import type { ExplainerContent } from '@/types'
 import { motion } from 'framer-motion'
 import { toast } from 'sonner'
+import { cn } from "@/lib/utils"
 
 export const Explainer = memo(function Explainer({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const explainerContent = content as ExplainerContent
@@ -34,16 +34,14 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
       summary: explainerContent?.summary,
       keywords: explainerContent?.keywords,
       references: explainerContent?.references,
-      // Add local fields for UI compatibility
       difficulty: (explainerContent as any)?.difficulty || 'beginner',
       estimatedReadTime: (explainerContent as any)?.estimatedReadTime,
       overview: (explainerContent as any)?.overview,
       conclusion: (explainerContent as any)?.conclusion,
     }
-    // Handle sections - convert old format or ensure proper structure
+
     if (explainerContent?.sections && Array.isArray(explainerContent.sections)) {
       defaultContent.sections = explainerContent.sections.map((section, index) => {
-        // Support both new and old formats
         const oldSection = section as any
         return {
           heading: oldSection.heading || oldSection.title || `Section ${index + 1}`,
@@ -52,6 +50,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         }
       })
     }
+
     if (defaultContent.sections.length === 0) {
       defaultContent.sections = [
         {
@@ -63,6 +62,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         }
       ]
     }
+
     if (explainerContent?.summary) defaultContent.summary = explainerContent.summary
     if (explainerContent?.keywords) defaultContent.keywords = explainerContent.keywords
     if (explainerContent?.references) defaultContent.references = explainerContent.references
@@ -78,7 +78,6 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         requestType: 'clarification'
       })
     } finally {
-      // Reset loading state after a brief delay to show feedback
       setTimeout(() => {
         setButtonLoadingStates(prev => ({ ...prev, askQuestion: false }))
       }, 1000)
@@ -115,17 +114,16 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     }
   }
 
-  const getDifficultyColor = (difficulty: string) => {
+  const getDifficultyVariant = (difficulty: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (difficulty) {
-      case 'beginner': return 'bg-green-100 text-green-800'
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
-      case 'advanced': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'beginner': return 'secondary'
+      case 'intermediate': return 'outline'
+      case 'advanced': return 'destructive'
+      default: return 'default'
     }
   }
 
   const estimateReadTime = (): number => {
-    // Calculate read time based on content length (200 words per minute average reading speed)
     const overview = sanitizedContent.overview || ''
     const paragraphs = sanitizedContent.sections.flatMap(s => s.paragraphs || []).join(' ')
     const conclusion = sanitizedContent.conclusion || ''
@@ -139,6 +137,16 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
 
   const readTime = estimateReadTime()
 
+  if (isLoading) {
+    return (
+      <Card className="w-full mb-6">
+        <CardContent className="flex items-center justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -150,14 +158,14 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         <CardHeader className="space-y-1">
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <BookOpen className="h-6 w-6 text-blue-600 mr-2" />
-              <CardTitle className="text-xl font-bold text-gray-900">
+              <BookOpen className="h-6 w-6 text-primary mr-2" />
+              <CardTitle className="text-xl font-bold">
                 {sanitizedContent.title}
               </CardTitle>
             </div>
             <div className="flex items-center space-x-2">
-              <Badge className={getDifficultyColor(sanitizedContent.difficulty)}>
-                <span className="text-xs font-semibold capitalize tracking-wide">{sanitizedContent.difficulty}</span>
+              <Badge variant={getDifficultyVariant(sanitizedContent.difficulty)}>
+                <span className="capitalize tracking-wide">{sanitizedContent.difficulty}</span>
               </Badge>
               <Badge variant="outline" className="text-xs font-medium">
                 {readTime} min read
@@ -165,7 +173,7 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
             </div>
           </div>
           {sanitizedContent.description && (
-            <p className="text-gray-700 text-base mt-1">{sanitizedContent.description}</p>
+            <p className="text-muted-foreground text-base mt-1">{sanitizedContent.description}</p>
           )}
           {sanitizedContent.keywords && sanitizedContent.keywords.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
@@ -177,123 +185,92 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         </CardHeader>
         
         <CardContent className="space-y-4">
-          {/* Content Sections - Now collapsible using ShadCN Accordion */}
           {sanitizedContent.sections && Array.isArray(sanitizedContent.sections) && sanitizedContent.sections.length > 0 ? (
             <Accordion type="multiple" className="w-full space-y-2">
               {sanitizedContent.sections.map((section, sectionIndex) => (
                 <AccordionItem 
                   key={sectionIndex} 
                   value={`section-${sectionIndex}`}
-                  className="bg-gray-50 rounded-lg border border-gray-200 px-5"
+                  className="px-0"
                 >
-                  <AccordionTrigger className="text-lg font-bold text-gray-900 hover:no-underline hover:text-indigo-600 transition-colors py-4">
+                  <AccordionTrigger className="text-lg font-bold hover:no-underline hover:text-primary transition-colors py-4">
                     {section?.heading || 'Section'}
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pb-5">
-                    {section?.image && (
-                      <div className="flex flex-col items-center mb-3">
-                        <img src={section.image.url} alt={section.image.alt} className="rounded shadow max-h-64 object-contain" />
-                        {section.image.caption && (
-                          <span className="text-xs text-gray-500 mt-1">{section.image.caption}</span>
+                    <Card className="bg-muted/50">
+                      <CardContent className="px-5">
+                        {section?.image && (
+                          <div className="flex flex-col items-center mb-3">
+                            <img 
+                              src={section.image.url} 
+                              alt={section.image.alt} 
+                              className="rounded shadow max-h-64 object-contain" 
+                            />
+                            {section.image.caption && (
+                              <span className="text-xs text-muted-foreground mt-1">{section.image.caption}</span>
+                            )}
+                          </div>
                         )}
-                      </div>
-                    )}
-                    {section?.paragraphs && Array.isArray(section.paragraphs) ? section.paragraphs
-                      .filter(paragraph => paragraph && typeof paragraph === 'string')
-                      .map((paragraph, paragraphIndex) => (
-                      <p 
-                        key={paragraphIndex} 
-                        className="text-gray-800 text-base leading-relaxed"
-                      >
-                        {paragraph}
-                      </p>
-                    )) : (
-                      <p className="text-gray-600 italic">No content available for this section</p>
-                    )}
+                        {section?.paragraphs && Array.isArray(section.paragraphs) ? section.paragraphs
+                          .filter(paragraph => paragraph && typeof paragraph === 'string')
+                          .map((paragraph, paragraphIndex) => (
+                            <p 
+                              key={paragraphIndex} 
+                              className="text-foreground text-base leading-relaxed"
+                            >
+                              {paragraph}
+                            </p>
+                          )) : null}
+                      </CardContent>
+                    </Card>
                   </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
-          ) : (
-            <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-              <p className="text-gray-600 italic">No sections available</p>
-            </div>
-          )}
+          ) : null}
 
-          {/* Summary */}
-          {sanitizedContent.summary && (
-            <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200">
-              <h4 className="text-base font-bold text-indigo-900 mb-3 flex items-center">
-                <BookOpen className="h-5 w-5 mr-2" />
-                Summary:
-              </h4>
-              <p className="text-indigo-800 text-base leading-relaxed">{sanitizedContent.summary}</p>
-            </div>
-          )}
-
-          {/* References */}
-          {sanitizedContent.references && sanitizedContent.references.length > 0 && (
-            <div className="bg-gray-100 p-4 rounded-lg border border-gray-200 mt-4">
-              <h5 className="text-sm font-semibold text-gray-700 mb-2">References</h5>
-              <ul className="list-disc list-inside space-y-1">
-                {sanitizedContent.references.map((ref, i) => (
-                  <li key={i}>
-                    {ref.url ? (
-                      <a href={ref.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{ref.title}</a>
-                    ) : (
-                      <span>{ref.title}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="grid grid-cols-3 gap-3 pt-4">
-            <Button 
-              onClick={handleAskQuestion} 
-              variant="outline" 
-              size="default" 
-              className="flex items-center justify-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              aria-label="Ask a question about this topic"
-              disabled={buttonLoadingStates.askQuestion || isLoading}
+          <div className="flex flex-wrap gap-2 mt-6">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAskQuestion}
+              disabled={buttonLoadingStates.askQuestion}
+              className="flex items-center gap-2"
             >
               {buttonLoadingStates.askQuestion ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <MessageCircle className="h-4 w-4 mr-2" />
+                <MessageCircle className="h-4 w-4" />
               )}
-              {buttonLoadingStates.askQuestion ? 'Loading...' : 'Ask a Question'}
+              Ask a Question
             </Button>
-            <Button 
-              onClick={handleMoreDetail} 
-              variant="outline" 
-              size="default"
-              className="flex items-center justify-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              aria-label="Request more detail"
-              disabled={buttonLoadingStates.moreDetail || isLoading}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMoreDetail}
+              disabled={buttonLoadingStates.moreDetail}
+              className="flex items-center gap-2"
             >
               {buttonLoadingStates.moreDetail ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <BookOpen className="h-4 w-4 mr-2" />
+                <BookOpen className="h-4 w-4" />
               )}
-              {buttonLoadingStates.moreDetail ? 'Loading...' : 'More Detail'}
+              More Details
             </Button>
-            <Button 
-              onClick={handleNextTopic} 
-              size="default" 
-              className="flex items-center justify-center bg-green-700 hover:bg-green-800 text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
-              aria-label="Next topic"
-              disabled={buttonLoadingStates.nextTopic || isLoading}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleNextTopic}
+              disabled={buttonLoadingStates.nextTopic}
+              className="flex items-center gap-2"
             >
               {buttonLoadingStates.nextTopic ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <BookOpen className="h-4 w-4 mr-2" />
+                <ArrowRight className="h-4 w-4" />
               )}
-              {buttonLoadingStates.nextTopic ? 'Loading...' : 'Next Topic'}
+              Next Topic
             </Button>
           </div>
         </CardContent>

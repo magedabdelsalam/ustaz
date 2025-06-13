@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, memo, useEffect } from 'react'
+import { useState, memo, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle, XCircle, ArrowRight, ArrowLeft, RotateCcw, Trophy } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import type { QuizContent } from '@/types'
+import { cn } from '@/lib/utils'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
@@ -223,7 +224,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       case 'multiple-choice':
         return (
           <div className="space-y-3">
-            <h4 className="text-base font-semibold text-gray-800 mb-3">Choose your answer:</h4>
+            <h4 className="text-base font-semibold mb-3">Choose your answer:</h4>
             {currentQuestion.options?.map((option, index) => (
               <Button
                 key={index}
@@ -241,7 +242,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       case 'true-false':
         return (
           <div className="space-y-3">
-            <h4 className="text-base font-semibold text-gray-800 mb-3">Select true or false:</h4>
+            <h4 className="text-base font-semibold mb-3">Select true or false:</h4>
             <Button
               variant={userAnswer === 'true' ? "default" : "outline"}
               className="w-full justify-start h-auto p-5 text-base font-medium"
@@ -262,10 +263,10 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       case 'fill-blank':
         return (
           <div className="space-y-3">
-            <h4 className="text-base font-semibold text-gray-800 mb-3">Type your answer:</h4>
-            <input
+            <h4 className="text-base font-semibold mb-3">Type your answer:</h4>
+            <Input
               type="text"
-              className="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
+              className="w-full text-base p-4"
               placeholder="Type your answer here..."
               value={userAnswer || ''}
               onChange={(e) => handleAnswerChange(e.target.value)}
@@ -276,7 +277,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       case 'text_input':
         return (
           <div className="space-y-3">
-            <h4 className="text-base font-semibold text-gray-800 mb-3">Type your answer:</h4>
+            <h4 className="text-base font-semibold mb-3">Type your answer:</h4>
             <Input
               value={userAnswer || ''}
               onChange={(e) => handleAnswerChange(e.target.value)}
@@ -301,7 +302,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
       <div className="space-y-8">
         <div className="text-center">
           <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-6 ${
-            results.passed ? 'bg-green-100' : 'bg-red-100'
+            results.passed ? 'bg-[--green-100]' : 'bg-[--red-100]'
           }`}>
             {results.passed ? (
               <Trophy className="h-10 w-10 text-green-600" />
@@ -315,14 +316,14 @@ export const ProgressQuiz = memo(function ProgressQuiz({
               `📚 ${quizContent.category ? `${quizContent.category} ` : ''}Practice More!`
             }
           </h3>
-          <p className="text-gray-700 text-lg leading-relaxed mb-6">
+          <p className="text-muted-foreground text-lg leading-relaxed mb-6">
             You scored {results.correctAnswers} out of {results.totalQuestions} questions correctly
           </p>
           <div className="mt-6">
             <div className={`text-4xl font-bold mb-2 ${results.passed ? 'text-green-600' : 'text-red-600'}`}>
               {Math.round(results.percentage)}%
             </div>
-            <p className="text-base text-gray-600">
+            <p className="text-base text-muted-foreground">
               {quizContent.passingScore && `Passing score: ${quizContent.passingScore}%`}
             </p>
           </div>
@@ -330,7 +331,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
 
         {quizContent.showExplanations && (
           <div className="space-y-5">
-            <h4 className="text-xl font-bold text-gray-900">Review Your Answers:</h4>
+            <h4 className="text-xl font-bold">Review Your Answers:</h4>
             {quizContent.questions.map((question, index) => {
               const result = results.questionResults[index]
               return (
@@ -342,19 +343,21 @@ export const ProgressQuiz = memo(function ProgressQuiz({
                       <XCircle className="h-6 w-6 text-red-600 mt-1 flex-shrink-0" />
                     )}
                     <div className="flex-1">
-                      <h5 className="font-semibold text-base mb-3 text-gray-900 leading-relaxed">{question.question}</h5>
-                      <p className="text-base text-gray-700 mb-2">
+                      <h5 className="font-semibold text-base mb-3 leading-relaxed">{question.question}</h5>
+                      <p className="text-base text-muted-foreground mb-2">
                         <span className="font-medium">Your answer:</span> <span className="font-semibold">{String(result.userAnswer || 'No answer')}</span>
                       </p>
-                      <p className="text-base text-gray-700 mb-3">
+                      <p className="text-base text-muted-foreground mb-3">
                         <span className="font-medium">Correct answer:</span> <span className="font-semibold text-green-600">{String(result.correctAnswer)}</span>
                       </p>
                       {question.explanation && (
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                          <p className="text-blue-800 text-base leading-relaxed">
-                            {question.explanation}
-                          </p>
-                        </div>
+                        <Card className="bg-[--blue-50] border-[--blue-200]">
+                          <CardContent className="p-4">
+                            <p className="text-blue-800 text-base leading-relaxed">
+                              {question.explanation}
+                            </p>
+                          </CardContent>
+                        </Card>
                       )}
                     </div>
                   </div>
@@ -382,7 +385,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
               </Badge>
             )}
           </div>
-          <p className="text-gray-600 text-base leading-relaxed mt-1">{quizContent.description}</p>
+          <p className="text-muted-foreground text-base leading-relaxed mt-1">{quizContent.description}</p>
         </CardHeader>
         <CardContent>
           <Button onClick={handleStartQuiz} className="w-full h-12 text-base font-medium">
@@ -434,13 +437,15 @@ export const ProgressQuiz = memo(function ProgressQuiz({
             </Badge>
           )}
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{quizContent.description}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{quizContent.description}</p>
       </CardHeader>
       <CardContent className="space-y-8">
-        <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
-          <h3 className="font-semibold text-lg mb-6 text-gray-900 leading-relaxed">{currentQuestion.question}</h3>
-          {renderQuestion()}
-        </div>
+        <Card className="bg-[--gray-50] border-[--gray-200]">
+          <CardContent className="p-6">
+            <h3 className="font-semibold text-lg mb-6 leading-relaxed">{currentQuestion.question}</h3>
+            {renderQuestion()}
+          </CardContent>
+        </Card>
 
         <div className="flex justify-between">
           <Button

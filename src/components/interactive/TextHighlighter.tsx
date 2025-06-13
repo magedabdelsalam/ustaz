@@ -1,7 +1,6 @@
 'use client'
 
-import React from 'react'
-import { useState, memo, useRef, useEffect } from 'react'
+import React, { useState, useCallback, memo, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +8,7 @@ import { Highlighter, RotateCcw, CheckCircle, XCircle, Eye, EyeOff } from 'lucid
 import type { HighlighterContent } from '@/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 interface InteractiveComponentProps {
   onInteraction: (action: string, data: unknown) => void
@@ -198,8 +198,10 @@ export const TextHighlighter = memo(function TextHighlighter({
         return (
           <span
             key={index}
-            className="relative inline-block cursor-pointer group"
-            style={{ backgroundColor: category?.color + '40' }}
+            className={cn(
+              'relative inline-block cursor-pointer group',
+              `bg-${category?.color}-100 hover:bg-${category?.color}-200`
+            )}
             onClick={() => removeHighlight(segment.highlight!.id)}
           >
             {segment.text}
@@ -224,7 +226,7 @@ export const TextHighlighter = memo(function TextHighlighter({
 
   const renderResults = () => {
     // Grading is not available for this exercise
-    return <div className="text-gray-500 text-center">No grading available for this exercise.</div>
+    return <div className="text-muted-foreground text-center">No grading available for this exercise.</div>
   }
 
   // Show feedback with animation and toast (if applicable)
@@ -245,32 +247,28 @@ export const TextHighlighter = memo(function TextHighlighter({
             {/* Removed highlighterContent.category badge as it does not exist on type */}
           </div>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{highlighterContent.description}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{highlighterContent.description}</p>
         <span className="sr-only">Select text and press a category to highlight. Click a highlight to remove it.</span>
       </CardHeader>
 
       <CardContent className="space-y-6">
         {/* Categories */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Highlight Categories</h4>
+          <h4 className="font-medium text-foreground">Highlight Categories</h4>
           <div className="flex flex-wrap gap-2">
             {highlighterContent.categories.map(category => (
               <Button
                 key={category.id}
                 variant={selectedCategory === category.id ? "default" : "outline"}
                 size="sm"
-                className="h-auto p-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                 onClick={() => setSelectedCategory(category.id)}
-                style={{
-                  backgroundColor: selectedCategory === category.id ? category.color : 'transparent',
-                  borderColor: category.color,
-                  color: selectedCategory === category.id ? 'white' : category.color
-                }}
                 aria-label={`Select category ${category.name}`}
+                className={cn(
+                  selectedCategory === category.id && "bg-accent hover:bg-accent/80"
+                )}
               >
                 <div className="text-center">
                   <div className="font-medium">{category.name}</div>
-                  {/* Removed shortcut display as shortcut is not in type */}
                 </div>
               </Button>
             ))}
@@ -291,7 +289,7 @@ export const TextHighlighter = memo(function TextHighlighter({
           <h4 className="font-medium text-gray-900">Text to Analyze</h4>
           <div 
             ref={textRef}
-            className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 select-text leading-relaxed text-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            className="p-4 bg-muted rounded-lg border-2 border-dashed border-border select-text leading-relaxed text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             onMouseUp={handleTextSelection}
             style={{ userSelect: 'text' }}
             tabIndex={0}
@@ -299,7 +297,7 @@ export const TextHighlighter = memo(function TextHighlighter({
           >
             {renderTextWithHighlights()}
           </div>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Select text above to highlight it with the chosen category. Click on highlighted text to remove it.
           </p>
         </div>
@@ -307,10 +305,10 @@ export const TextHighlighter = memo(function TextHighlighter({
         {/* Action buttons */}
         {showResults && (
           <div className="flex space-x-3 justify-center">
-            <Button onClick={handleNewText} className="flex-1 max-w-48 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2" aria-label="New text">
+            <Button onClick={handleNewText} className="flex-1 max-w-48" aria-label="New text">
               New Text
             </Button>
-            <Button onClick={handleReset} variant="outline" className="flex-1 max-w-48 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2" aria-label="Try again">
+            <Button onClick={handleReset} variant="outline" className="flex-1 max-w-48" aria-label="Try again">
               <RotateCcw className="h-4 w-4 mr-2" />
               Try Again
             </Button>
@@ -326,10 +324,12 @@ export const TextHighlighter = memo(function TextHighlighter({
 
         {/* Explanation */}
         {highlighterContent.explanation && (
-          <div className="bg-pink-50 p-4 rounded-lg">
-            <p className="text-sm text-pink-800 font-medium mb-2">Analysis Guide:</p>
-            <p className="text-sm text-pink-700">{highlighterContent.explanation}</p>
-          </div>
+          <Card className="bg-[--pink-50]">
+            <CardContent className="p-4">
+              <p className="text-sm text-pink-800 font-medium mb-2">Analysis Guide:</p>
+              <p className="text-sm text-pink-700">{highlighterContent.explanation}</p>
+            </CardContent>
+          </Card>
         )}
 
         <AnimatePresence>
@@ -339,7 +339,7 @@ export const TextHighlighter = memo(function TextHighlighter({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
               transition={{ duration: 0.18 }}
-              className="mt-4 text-center font-semibold text-gray-600"
+              className="mt-4 text-center font-semibold text-muted-foreground"
             >
               No grading available for this exercise.
             </motion.div>

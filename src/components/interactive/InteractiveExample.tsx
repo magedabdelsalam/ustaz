@@ -157,7 +157,7 @@ export const InteractiveExample = memo(function InteractiveExample({
           <div key={control.id} className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium">{control.label}</label>
-              <span className="text-sm text-gray-600 font-mono">{typeof value === 'number' ? value.toFixed(1) : value}</span>
+              <span className="text-sm text-muted-foreground font-mono">{typeof value === 'number' ? value.toFixed(1) : value}</span>
             </div>
             <Slider
               value={[value as number]}
@@ -235,12 +235,12 @@ export const InteractiveExample = memo(function InteractiveExample({
         return (
           <div key={element.id} className="space-y-4">
             <div className="text-center">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">The current color based on your adjustments</h4>
+              <h4 className="text-sm font-medium text-muted-foreground mb-2">The current color based on your adjustments</h4>
               <div 
-                className="w-full h-32 rounded-lg border-2 border-gray-300 shadow-inner transition-all duration-300"
+                className="w-full h-32 rounded-lg border-2 border-input shadow-inner transition-all duration-300"
                 style={{ backgroundColor: currentColor }}
               />
-              <div className="mt-3 p-3 bg-gray-50 rounded text-sm space-y-1">
+              <div className="mt-3 p-3 bg-muted/50 rounded text-sm space-y-1">
                 <div className="flex justify-between">
                   <span>HSL:</span>
                   <span className="font-mono">hsl({hue.toFixed(0)}°, {saturation.toFixed(0)}%, {brightness.toFixed(0)}%)</span>
@@ -257,7 +257,6 @@ export const InteractiveExample = memo(function InteractiveExample({
       case 'shape':
         const size = Number(controlValues.size || controlValues.amplitude || 50)
         const rotation = isPlaying ? animationFrame * 2 : 0
-        const color = controlValues.color ? '#10b981' : '#3b82f6'
         
         return (
           <div 
@@ -270,7 +269,7 @@ export const InteractiveExample = memo(function InteractiveExample({
               style={{
                 width: `${Math.max(size, 10)}px`,
                 height: `${Math.max(size, 10)}px`,
-                backgroundColor: color,
+                backgroundColor: controlValues.color ? 'var(--primary)' : 'var(--accent)',
                 borderRadius: evaluatedContent.includes('circle') ? '50%' : '8px',
                 transform: `rotate(${rotation}deg)`,
               }}
@@ -292,7 +291,7 @@ export const InteractiveExample = memo(function InteractiveExample({
         }
         
         return (
-          <div key={element.id} className="p-4 bg-white border rounded-lg">
+          <Card key={element.id} className="p-4">
             <svg width="200" height="100" className="border">
               <polyline
                 fill="none"
@@ -302,7 +301,7 @@ export const InteractiveExample = memo(function InteractiveExample({
               />
               <line x1="0" y1="50" x2="200" y2="50" stroke="#e5e7eb" strokeWidth="1" />
             </svg>
-          </div>
+          </Card>
         )
       
       case 'visualization':
@@ -316,7 +315,7 @@ export const InteractiveExample = memo(function InteractiveExample({
               <div className="text-lg font-semibold text-gray-800">
                 {evaluatedContent}
               </div>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-muted-foreground">
                 Adjust the sliders to see how changes affect the result.
               </div>
             </div>
@@ -326,7 +325,7 @@ export const InteractiveExample = memo(function InteractiveExample({
       default:
         return (
           <div key={element.id} className="p-4 bg-gray-100 rounded-lg border">
-            <span className="text-sm text-gray-600">{evaluatedContent}</span>
+            <span className="text-sm text-muted-foreground">{evaluatedContent}</span>
           </div>
         )
     }
@@ -346,7 +345,7 @@ export const InteractiveExample = memo(function InteractiveExample({
             </Badge>
           )}
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{exampleContent.description}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{exampleContent.description}</p>
       </CardHeader>
       
       <CardContent className="space-y-6">
@@ -363,17 +362,19 @@ export const InteractiveExample = memo(function InteractiveExample({
 
         {/* Display Area */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Interactive Display</h4>
-          <div className="min-h-[200px] p-4 bg-white border rounded-lg space-y-4">
+          <h4 className="font-medium">Interactive Display</h4>
+          <Card className="min-h-[200px] p-4 space-y-4">
             {exampleContent.display.map(renderDisplayElement)}
-          </div>
+          </Card>
         </div>
 
         {/* Explanation */}
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <p className="text-sm text-blue-800 font-medium mb-2">How it works:</p>
-          <p className="text-sm text-blue-700 leading-relaxed">{exampleContent.explanation}</p>
-        </div>
+        <Card className="bg-[--blue-50] border-[--blue-200]">
+          <CardContent className="p-4">
+            <p className="text-sm text-blue-800 font-medium mb-2">How it works:</p>
+            <p className="text-sm text-blue-700 leading-relaxed">{exampleContent.explanation}</p>
+          </CardContent>
+        </Card>
       </CardContent>
     </Card>
   )

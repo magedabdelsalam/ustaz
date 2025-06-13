@@ -2014,4 +2014,7 @@ function getNextPracticeType(usedTypes: string[]): ComponentType {
   }
   // If all used, reset
   return PRACTICE_COMPONENT_TYPES[Math.floor(Math.random() * PRACTICE_COMPONENT_TYPES.length)]
-} 
+}
+
+// Create and export a singleton instance
+export const aiTutorService = new AITutorService(); 

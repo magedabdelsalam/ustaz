@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AppError, networkMonitor } from '@/lib/errorHandler'
 import { cn } from '@/lib/utils'
+import { getOperationErrorMessage } from '@/lib/errorMessages'
 import { 
   ErrorAlertProps as TypedErrorAlertProps,
   SuccessAlertProps,
@@ -14,193 +15,284 @@ import {
   ErrorToastProps as TypedErrorToastProps,
   LoadingAlertProps
 } from '@/types'
+import * as React from 'react'
+import { cva, type VariantProps } from 'class-variance-authority'
+import { AlertCircle } from 'lucide-react'
 
 // Custom ErrorAlertProps that extends the centralized one
 interface ErrorAlertProps extends Omit<TypedErrorAlertProps, 'message' | 'title'> {
   error: AppError | null
   showNetworkStatus?: boolean
+  onRetry?: () => void
+  onDismiss?: () => void
+}
+
+const errorAlertVariants = cva(
+  'relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground',
+  {
+    variants: {
+      variant: {
+        default: 'bg-background text-foreground',
+        destructive:
+          'border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive',
+        warning:
+          'border-warning/50 text-warning dark:border-warning [&>svg]:text-warning',
+        info: 'border-info/50 text-info dark:border-info [&>svg]:text-info'
+      }
+    },
+    defaultVariants: {
+      variant: 'default'
+    }
+  }
+)
+
+interface BaseErrorAlertProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof errorAlertVariants> {
+  children?: React.ReactNode
+}
+
+const BaseErrorAlert = React.forwardRef<HTMLDivElement, BaseErrorAlertProps>(
+  ({ className, variant, children, ...props }, ref) => {
+    const Icon = {
+      default: AlertCircle,
+      destructive: AlertCircle,
+      warning: AlertTriangle,
+      info: Info
+    }[variant || 'default']
+
+    return (
+      <div
+        ref={ref}
+        role="alert"
+        className={cn(errorAlertVariants({ variant }), className)}
+        {...props}
+      >
+        <Icon className="h-4 w-4" />
+        <div>{children}</div>
+      </div>
+    )
+  }
+)
+BaseErrorAlert.displayName = 'BaseErrorAlert'
+
+const ErrorAlertTitle = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLHeadingElement>
+>(({ className, ...props }, ref) => (
+  <h5
+    ref={ref}
+    className={cn('mb-1 font-medium leading-none tracking-tight', className)}
+    {...props}
+  />
+))
+ErrorAlertTitle.displayName = 'ErrorAlertTitle'
+
+const ErrorAlertDescription = React.forwardRef<
+  HTMLParagraphElement,
+  React.HTMLAttributes<HTMLParagraphElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('text-sm [&_p]:leading-relaxed', className)}
+    {...props}
+  />
+))
+ErrorAlertDescription.displayName = 'ErrorAlertDescription'
+
+const ErrorAlertGroup = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn('space-y-4', className)}
+    {...props}
+  />
+))
+ErrorAlertGroup.displayName = 'ErrorAlertGroup'
+
+const ErrorAlertToast = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof errorAlertVariants>
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'fixed bottom-4 right-4 z-50 max-w-md rounded-lg border bg-background p-4 shadow-lg',
+      className
+    )}
+    {...props}
+  />
+))
+ErrorAlertToast.displayName = 'ErrorAlertToast'
+
+const ErrorAlertPopover = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof errorAlertVariants>
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'absolute z-50 max-w-md rounded-lg border bg-background p-4 shadow-lg',
+      className
+    )}
+    {...props}
+  />
+))
+ErrorAlertPopover.displayName = 'ErrorAlertPopover'
+
+const ErrorAlertStatus = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof errorAlertVariants>
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+      {
+        'bg-destructive/15 text-destructive hover:bg-destructive/25':
+          variant === 'destructive',
+        'bg-warning/15 text-warning hover:bg-warning/25':
+          variant === 'warning',
+        'bg-info/15 text-info hover:bg-info/25': variant === 'info'
+      },
+      className
+    )}
+    {...props}
+  />
+))
+ErrorAlertStatus.displayName = 'ErrorAlertStatus'
+
+const ErrorAlertDialog = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof errorAlertVariants>
+>(({ className, variant, ...props }, ref) => (
+  <div
+    ref={ref}
+    className={cn(
+      'fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm',
+      className
+    )}
+    {...props}
+  />
+))
+ErrorAlertDialog.displayName = 'ErrorAlertDialog'
+
+interface ErrorMessage {
+  title: string
+  description: string
+  severity: 'error' | 'warning' | 'info'
+  action?: string
+  details?: string
 }
 
 export function ErrorAlert({ 
-  error, 
-  onRetry, 
-  onDismiss, 
+  error,
+  className,
   showNetworkStatus = true,
-  className 
+  onRetry,
+  onDismiss,
+  ...props
 }: ErrorAlertProps) {
-  const [isOnline, setIsOnline] = useState(true)
-  const [isRetrying, setIsRetrying] = useState(false)
+  const [isOnline, setIsOnline] = React.useState(true)
+  const [isLoading, setIsLoading] = React.useState(false)
 
-  useEffect(() => {
-    const unsubscribe = networkMonitor.subscribe(setIsOnline)
-    return unsubscribe
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true)
+    const handleOffline = () => setIsOnline(false)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    setIsOnline(navigator.onLine)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
   }, [])
 
-  if (!error && (!showNetworkStatus || isOnline)) {
+  if (!error) {
     return null
   }
 
-  const handleRetry = async () => {
-    if (!onRetry || isRetrying) return
-    
-    setIsRetrying(true)
-    try {
-      await onRetry()
-    } finally {
-      setIsRetrying(false)
-    }
-  }
-
-  // Show offline message if offline (even without error)
-  if (!isOnline && showNetworkStatus) {
-    return (
-      <Alert className={cn("border-yellow-200 bg-yellow-50", className)}>
-        <WifiOff className="h-4 w-4 text-yellow-600" />
-        <AlertTitle className="text-yellow-900">Connection Issue</AlertTitle>
-        <AlertDescription className="text-yellow-800">
-          You&apos;re currently offline. Some features may not work until you reconnect.
-        </AlertDescription>
-      </Alert>
-    )
-  }
-
-  if (!error) return null
-
-  const getAlertProps = () => {
-    switch (error.type) {
-      case 'network':
-        return {
-          variant: 'default' as const,
-          className: "border-yellow-200 bg-yellow-50",
-          icon: <WifiOff className="h-4 w-4 text-yellow-600" />,
-          title: "Connection Problem",
-          titleClass: "text-yellow-900",
-          descClass: "text-yellow-800",
-          badgeVariant: "secondary" as const,
-          badgeClass: "bg-yellow-100 text-yellow-800 border-yellow-200"
-        }
-      case 'database':
-        return {
-          variant: 'default' as const,
-          className: "border-orange-200 bg-orange-50",
-          icon: <AlertTriangle className="h-4 w-4 text-orange-600" />,
-          title: "Database Error",
-          titleClass: "text-orange-900",
-          descClass: "text-orange-800",
-          badgeVariant: "secondary" as const,
-          badgeClass: "bg-orange-100 text-orange-800 border-orange-200"
-        }
-      case 'permission':
-        return {
-          variant: 'destructive' as const,
-          className: "",
-          icon: <AlertTriangle className="h-4 w-4" />,
-          title: "Permission Denied",
-          titleClass: "",
-          descClass: "",
-          badgeVariant: "destructive" as const,
-          badgeClass: ""
-        }
-      case 'validation':
-        return {
-          variant: 'default' as const,
-          className: "border-blue-200 bg-blue-50",
-          icon: <Info className="h-4 w-4 text-blue-600" />,
-          title: "Invalid Input",
-          titleClass: "text-blue-900",
-          descClass: "text-blue-800",
-          badgeVariant: "secondary" as const,
-          badgeClass: "bg-blue-100 text-blue-800 border-blue-200"
-        }
-      default:
-        return {
-          variant: 'default' as const,
-          className: "border-gray-200 bg-gray-50",
-          icon: <AlertTriangle className="h-4 w-4 text-gray-600" />,
-          title: "Something Went Wrong",
-          titleClass: "text-gray-900",
-          descClass: "text-gray-800",
-          badgeVariant: "secondary" as const,
-          badgeClass: "bg-gray-100 text-gray-800 border-gray-200"
-        }
-    }
-  }
-
-  const alertProps = getAlertProps()
+  const errorMessage: ErrorMessage = typeof error.message === 'string' 
+    ? {
+        title: 'An error occurred',
+        description: error.message,
+        severity: 'error'
+      }
+    : error.message || {
+        title: 'An error occurred',
+        description: 'Please try again later.',
+        severity: 'error'
+      }
 
   return (
-    <Alert 
-      variant={alertProps.variant} 
-      className={cn(alertProps.className, "border shadow-sm", className)}
+    <BaseErrorAlert 
+      variant={errorMessage.severity === 'error' ? 'destructive' : errorMessage.severity === 'warning' ? 'warning' : 'info'} 
+      className={className}
+      {...props}
     >
-      {alertProps.icon}
-      <div className="flex-1">
-        <div className="flex items-center justify-between mb-2">
-          <AlertTitle className={cn("text-sm font-medium", alertProps.titleClass)}>
-            {alertProps.title}
-          </AlertTitle>
-          {error.operation && (
-            <Badge 
-              variant={alertProps.badgeVariant}
-              className={cn("text-xs", alertProps.badgeClass)}
-            >
-              {error.operation.replace(/_/g, ' ')}
-            </Badge>
-          )}
-        </div>
-        
-        <AlertDescription className={cn("text-sm mb-3", alertProps.descClass)}>
-          {error.userMessage}
-        </AlertDescription>
-
-        {!isOnline && (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
-            <WifiOff className="h-3 w-3" />
-            Currently offline
-          </div>
+      <ErrorAlertTitle>
+        {errorMessage.title}
+      </ErrorAlertTitle>
+      <ErrorAlertDescription>
+        {errorMessage.description}
+        {errorMessage.action && (
+          <p className="mt-2">
+            <strong>Action:</strong> {errorMessage.action}
+          </p>
         )}
-        
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {error.canRetry && onRetry && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleRetry}
-                disabled={isRetrying}
-                className="h-8 px-3 text-xs"
-              >
-                <RefreshCw className={cn("h-3 w-3 mr-1", isRetrying && "animate-spin")} />
-                {isRetrying ? 'Retrying...' : 'Retry'}
-              </Button>
-            )}
-          </div>
-          
-          {onDismiss && (
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onDismiss}
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-3 w-3" />
-              <span className="sr-only">Dismiss</span>
-            </Button>
+        {errorMessage.details && (
+          <p className="mt-2">
+            <strong>Details:</strong> {errorMessage.details}
+          </p>
+        )}
+      </ErrorAlertDescription>
+      {!isOnline && (
+        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-3">
+          <AlertCircle className="h-3 w-3" />
+          <span>You are currently offline</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {error.type && (
+            <span className="text-xs text-muted-foreground">
+              Type: {error.type}
+            </span>
+          )}
+          {error.timestamp && (
+            <span className="text-xs text-muted-foreground">
+              Time: {error.timestamp.toLocaleTimeString()}
+            </span>
           )}
         </div>
+        {error.canRetry && (
+          <button
+            onClick={() => {
+              setIsLoading(true)
+              // Handle retry logic here
+              setIsLoading(false)
+            }}
+            disabled={isLoading}
+            className="text-xs text-primary hover:underline disabled:opacity-50"
+          >
+            {isLoading ? 'Retrying...' : 'Retry'}
+          </button>
+        )}
       </div>
-    </Alert>
+    </BaseErrorAlert>
   )
 }
 
 // Success alert for positive feedback
 export function SuccessAlert({ message, onDismiss, className }: SuccessAlertProps) {
   return (
-    <Alert className={cn("border-green-200 bg-green-50 border shadow-sm", className)}>
-      <CheckCircle className="h-4 w-4 text-green-600" />
+    <Alert className={className}>
+      <CheckCircle className="h-4 w-4" />
       <div className="flex-1">
-        <AlertTitle className="text-sm font-medium text-green-900">Success</AlertTitle>
-        <AlertDescription className="text-sm text-green-800 mt-1">
+        <AlertTitle>Success</AlertTitle>
+        <AlertDescription className="mt-1">
           {message}
         </AlertDescription>
         {onDismiss && (
@@ -209,9 +301,9 @@ export function SuccessAlert({ message, onDismiss, className }: SuccessAlertProp
               size="sm"
               variant="ghost"
               onClick={onDismiss}
-              className="h-8 w-8 p-0 text-green-700 hover:text-green-900 hover:bg-green-100"
+              className="h-8 w-8 p-0"
             >
-              <X className="h-3 w-3" />
+              <X className="h-4 w-4" />
               <span className="sr-only">Dismiss</span>
             </Button>
           </div>
@@ -240,7 +332,6 @@ export function NetworkStatus({ isOnline, className, onReconnect }: NetworkStatu
               size="sm"
               variant="ghost"
               onClick={onReconnect}
-              className="text-green-600 hover:text-green-700"
             >
               Reconnect
             </Button>
@@ -254,7 +345,6 @@ export function NetworkStatus({ isOnline, className, onReconnect }: NetworkStatu
               size="sm"
               variant="ghost"
               onClick={onReconnect}
-              className="text-red-600 hover:text-red-700"
             >
               Reconnect
             </Button>
@@ -265,7 +355,7 @@ export function NetworkStatus({ isOnline, className, onReconnect }: NetworkStatu
   )
 }
 
-// Simple network status badge
+// Network status badge
 export function NetworkStatusBadge({ className }: { className?: string }) {
   const [isOnline, setIsOnline] = useState(true)
 
@@ -277,19 +367,9 @@ export function NetworkStatusBadge({ className }: { className?: string }) {
   return (
     <Badge 
       variant={isOnline ? "default" : "destructive"}
-      className={cn(
-        "text-xs font-medium",
-        isOnline 
-          ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-100" 
-          : "bg-red-100 text-red-700 border-red-200 hover:bg-red-100",
-        className
-      )}
+      className={cn("text-xs", className)}
     >
-      <div className={cn(
-        "w-1.5 h-1.5 rounded-full mr-1.5",
-        isOnline ? "bg-green-500 animate-pulse" : "bg-red-500"
-      )} />
-      {isOnline ? 'Online' : 'Offline'}
+      {isOnline ? "Online" : "Offline"}
     </Badge>
   )
 }
@@ -317,17 +397,11 @@ export function ErrorToast({ error, onRetry, onDismiss, duration = 6000 }: Error
   if (!isVisible) return null
 
   return (
-    <div className={cn(
-      "w-96 max-w-[calc(100vw-2rem)]",
-      "transform transition-all duration-300 ease-in-out",
-      "animate-in slide-in-from-top-2",
-      isVisible ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"
-    )}>
+    <div className="w-96 max-w-[calc(100vw-2rem)]">
       <ErrorAlert
         error={error}
         onRetry={onRetry}
         onDismiss={onDismiss}
-        className="shadow-lg backdrop-blur-sm"
         showNetworkStatus={false}
       />
     </div>
@@ -337,14 +411,20 @@ export function ErrorToast({ error, onRetry, onDismiss, duration = 6000 }: Error
 // Loading alert for in-progress operations
 export function LoadingAlert({ message, className }: LoadingAlertProps) {
   return (
-    <Alert className={cn("border-blue-200 bg-blue-50 border shadow-sm", className)}>
-      <RefreshCw className="h-4 w-4 text-blue-600 animate-spin" />
-      <div className="flex-1">
-        <AlertTitle className="text-sm font-medium text-blue-900">Processing</AlertTitle>
-        <AlertDescription className="text-sm text-blue-800 mt-1">
-          {message}
-        </AlertDescription>
-      </div>
-    </Alert>
+    <BaseErrorAlert variant="info" className={className}>
+      <ErrorAlertTitle>Loading</ErrorAlertTitle>
+      <ErrorAlertDescription>{message}</ErrorAlertDescription>
+    </BaseErrorAlert>
   )
+}
+
+export {
+  BaseErrorAlert,
+  ErrorAlertTitle,
+  ErrorAlertDescription,
+  ErrorAlertGroup,
+  ErrorAlertToast,
+  ErrorAlertPopover,
+  ErrorAlertStatus,
+  ErrorAlertDialog
 } 

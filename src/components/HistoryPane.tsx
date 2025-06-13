@@ -5,212 +5,195 @@ import { useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Subject } from '@/types'
-import { GraduationCap, LogOut, BookOpen, Loader2, PlusCircle } from 'lucide-react'
+import { GraduationCap, LogOut, BookOpen, Loader2, PlusCircle, Settings, HelpCircle } from 'lucide-react'
 import { DeleteConfirmationDialog } from './history/DeleteConfirmationDialog'
 import { getUserInitials } from '@/lib/userUtils'
 import { Input } from '@/components/ui/input'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
+import { SubjectContextMenu } from './history/SubjectContextMenu'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 
 interface HistoryPaneProps {
   subjects: Subject[]
   selectedSubject: Subject | null
-  user: User | null
-  onSubjectSelect?: (subject: Subject) => void
-  onSubjectDelete?: (subjectId: string) => Promise<boolean>
-  onSubjectCreate?: (name: string) => Promise<void>
-  showCloseButton?: boolean
+  onSelectSubject: (subject: Subject) => void
+  onDeleteSubject: (subject: Subject) => Promise<void>
   onClose?: () => void
-  onGoalsAndLevelSet?: (subjectId: string, goals: string, level: string) => void
+  showCloseButton?: boolean
+  user?: {
+    email?: string
+    name?: string
+  }
 }
 
-export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, onSubjectDelete, onSubjectCreate, showCloseButton, onClose, onGoalsAndLevelSet }: HistoryPaneProps) {
+export function HistoryPane({ subjects, selectedSubject, onSelectSubject, onDeleteSubject, onClose, showCloseButton, user }: HistoryPaneProps) {
   const { signOut } = useAuth()
   const [deletingSubject, setDeletingSubject] = useState<string | null>(null)
   const [confirmDeleteSubject, setConfirmDeleteSubject] = useState<Subject | null>(null)
-  const [newSubject, setNewSubject] = useState('')
+  const [newSubjectName, setNewSubjectName] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showGoalsModal, setShowGoalsModal] = useState(false)
-  const [pendingSubjectId, setPendingSubjectId] = useState<string | null>(null)
-  const [goalsInput, setGoalsInput] = useState('')
-  const [levelInput, setLevelInput] = useState<'beginner' | 'intermediate' | 'advanced'>('beginner')
-  const [savingGoals, setSavingGoals] = useState(false)
+  const [currentSubjectForModal, setCurrentSubjectForModal] = useState<Subject | null>(null)
+  const [goals, setGoals] = useState('')
+  const [level, setLevel] = useState<string>('')
   const [goalsError, setGoalsError] = useState<string | null>(null)
+  const [savingGoals, setSavingGoals] = useState(false)
 
   const _handleDeleteClick = useCallback((subject: Subject) => {
     setConfirmDeleteSubject(subject)
   }, [])
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!confirmDeleteSubject || !onSubjectDelete) return
+    if (!confirmDeleteSubject || !onDeleteSubject) return
     
     setDeletingSubject(confirmDeleteSubject.id)
-    const success = await onSubjectDelete(confirmDeleteSubject.id)
-    
-    if (success) {
+    try {
+      await onDeleteSubject(confirmDeleteSubject)
+      
       setConfirmDeleteSubject(null)
+    } catch (error) {
+      console.error('Failed to delete subject:', error)
+      toast.error('An unexpected error occurred while deleting the subject.')
+      setDeletingSubject(null)
     }
-    setDeletingSubject(null)
-  }, [confirmDeleteSubject, onSubjectDelete])
+  }, [confirmDeleteSubject, onDeleteSubject])
 
   const handleCancelDelete = useCallback(() => {
     setConfirmDeleteSubject(null)
+    setDeletingSubject(null)
   }, [])
 
-  const _handleTabChange = useCallback((subjectId: string) => {
-    const subject = subjects.find(s => s.id === subjectId)
-    if (subject && onSubjectSelect) {
-      onSubjectSelect(subject)
-    }
-  }, [subjects, onSubjectSelect])
-
   const handleCreateSubject = async () => {
-    const trimmed = newSubject.trim()
-    if (!trimmed) {
-      setError('Subject name cannot be empty')
-      setNewSubject('')
-      toast.error('Subject name cannot be empty')
-      return
-    }
-    if (subjects.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) {
-      setError('Subject name must be unique')
-      setNewSubject('')
-      toast.error('Subject name must be unique')
-      return
-    }
+    if (!newSubjectName.trim()) return
+
     setCreating(true)
     setError(null)
+
     try {
-      if (onSubjectCreate) {
-        await onSubjectCreate(trimmed)
-        setNewSubject('')
-        toast.success('Subject created!')
-        setTimeout(() => {
-          const newSubj = subjects.find(s => s.name.toLowerCase() === trimmed.toLowerCase())
-          if (newSubj) {
-            setPendingSubjectId(newSubj.id)
-            setShowGoalsModal(true)
-          }
-        }, 100)
+      const newSubject: Subject = {
+        id: Date.now().toString(),
+        name: newSubjectName.trim(),
+        progress: 0,
+        color: 'bg-blue-500',
+        isActive: true,
+        startedAt: new Date(),
+        topicKeywords: [],
+        messageCount: 0,
+        lastActive: new Date()
       }
-          } catch (_e) {
-        setError('Failed to create subject')
-        toast.error('Failed to create subject')
+      onSelectSubject(newSubject)
+      setNewSubjectName('')
+      setShowGoalsModal(true)
+      setCurrentSubjectForModal(newSubject)
+    } catch (err) {
+      console.error('Failed to create subject:', err)
+      setError('Failed to create subject. Please try again.')
     } finally {
       setCreating(false)
     }
   }
 
-  const handleSaveGoals = async () => {
-    setGoalsError(null)
-    if (!goalsInput.trim() || goalsInput.trim().length < 10) {
-      setGoalsError('Please enter at least 10 characters for your goals.')
-      return
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleCreateSubject()
     }
-    setSavingGoals(true)
-    if (pendingSubjectId) {
-      const subjIdx = subjects.findIndex(s => s.id === pendingSubjectId)
-      if (subjIdx !== -1) {
-        subjects[subjIdx].userGoals = goalsInput
-        subjects[subjIdx].userLevel = levelInput
-      }
-      if (typeof onGoalsAndLevelSet === 'function') {
-        onGoalsAndLevelSet(pendingSubjectId, goalsInput, levelInput)
-      }
-    }
-    setShowGoalsModal(false)
-    setGoalsInput('')
-    setLevelInput('beginner')
-    setPendingSubjectId(null)
-    setSavingGoals(false)
-    toast.success('Learning goals saved!')
   }
 
-  const currentSubjectForModal = subjects.find(s => s.id === pendingSubjectId)
+  const handleSaveGoals = async () => {
+    if (!goals.trim() || !level || !currentSubjectForModal) return
+
+    setSavingGoals(true)
+    setGoalsError(null)
+
+    try {
+      // Update the subject with goals and level
+      const updatedSubject = {
+        ...currentSubjectForModal,
+        userGoals: goals.trim(),
+        userLevel: level as 'beginner' | 'intermediate' | 'advanced'
+      }
+      onSelectSubject(updatedSubject)
+      setShowGoalsModal(false)
+      setGoals('')
+      setLevel('')
+      setCurrentSubjectForModal(null)
+    } catch (err) {
+      console.error('Failed to save goals:', err)
+      setGoalsError('Failed to save goals. Please try again.')
+    } finally {
+      setSavingGoals(false)
+    }
+  }
 
   return (
-    <div className="flex flex-col bg-gray-50 h-full overflow-hidden" role="navigation" aria-label="Subject history sidebar">
-      {/* App Header */}
-      <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
-        <div className="flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center space-x-2">
-            <GraduationCap className="h-5 w-5 text-blue-600" />
-            <span className="font-semibold text-gray-900">Ustaz</span>
-          </div>
-          {/* User Profile and Close Button */}
-          <div className="flex items-center space-x-2">
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="bg-gray-100 text-gray-600 text-xs">
-                {user?.email ? getUserInitials(user.email) : 'U'}
-              </AvatarFallback>
-            </Avatar>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={signOut}
-              className="text-gray-500 hover:text-gray-700 h-6 w-6 p-0"
-              title="Sign out"
-              aria-label="Sign out"
-            >
-              <LogOut className="h-3 w-3" />
-            </Button>
-            {showCloseButton && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClose}
-                className="text-gray-500 hover:text-gray-700 h-6 w-6 p-0 ml-1"
-                title="Close"
-                aria-label="Close sidebar"
-              >
-                ✕
+    <div className="flex flex-col bg-muted/50 h-full overflow-hidden" role="navigation" aria-label="Subject history sidebar">
+      {/* Header */}
+      <Card className="rounded-none border-x-0 border-t-0">
+        <CardHeader className="p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <GraduationCap className="h-5 w-5 text-primary" />
+              <span className="font-semibold text-foreground">Ustaz</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Avatar>
+                <AvatarFallback className="bg-muted text-muted-foreground text-xs">
+                  {user?.name?.[0] || user?.email?.[0] || 'U'}
+                </AvatarFallback>
+              </Avatar>
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-6 w-6 p-0">
+                <Settings className="h-4 w-4" />
               </Button>
-            )}
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground h-6 w-6 p-0 ml-1">
+                <HelpCircle className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
-      {/* Subject Creation Input */}
-      <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0">
-        <div className="flex items-center space-x-2">
-          <Input
-            value={newSubject}
-            onChange={e => setNewSubject(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreateSubject()}
-            placeholder="Create new subject..."
-            className="flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-150"
-            disabled={creating}
-            aria-label="New subject name"
-            autoFocus
-          />
-          <Button
-            onClick={handleCreateSubject}
-            disabled={!newSubject.trim() || creating}
-            aria-label="Add subject"
-            className="transition-all duration-150 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 hover:bg-blue-800 active:scale-95"
-          >
-            {creating ? <Loader2 className="animate-spin h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
-          </Button>
-        </div>
-        {error && (
-          <div className="text-red-600 text-sm mt-2" role="alert">
-            {error}
+        </CardHeader>
+      </Card>
+
+      {/* Subject Creation */}
+      <Card className="rounded-none border-x-0">
+        <CardContent className="p-4">
+          <div className="flex items-center space-x-2">
+            <Input
+              value={newSubjectName}
+              onChange={(e) => setNewSubjectName(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Create a new subject..."
+              className="flex-1"
+            />
+            <Button
+              onClick={handleCreateSubject}
+              disabled={!newSubjectName.trim() || creating}
+              className="flex items-center gap-2"
+            >
+              {creating ? <Loader2 className="animate-spin h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
+              <span>Create</span>
+            </Button>
           </div>
-        )}
-      </div>
-      {/* Subject Tabs */}
+          {error && <div className="text-destructive text-sm mt-2" role="alert">{error}</div>}
+        </CardContent>
+      </Card>
+
+      {/* Subject List */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {subjects.length === 0 ? (
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center max-w-sm">
-              <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No subjects yet</h3>
-              <p className="text-gray-600">
-                Start chatting to create your first subject and begin your learning journey.
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">No subjects yet</h3>
+              <p className="text-muted-foreground">
+                Create your first subject to start learning!
               </p>
             </div>
           </div>
@@ -225,21 +208,36 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
                   exit={{ opacity: 0, y: 10 }}
                   transition={{ duration: 0.18 }}
                 >
-                  <button
-                    className={`w-full flex flex-col items-start justify-between px-4 py-2 rounded-lg mb-2 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 hover:bg-blue-50 active:scale-95 ${selectedSubject?.id === subject.id ? 'bg-blue-100 text-blue-900 font-semibold' : 'bg-white text-gray-900'}`}
-                    onClick={() => onSubjectSelect && onSubjectSelect(subject)}
-                    aria-current={selectedSubject?.id === subject.id ? 'page' : undefined}
-                    title={subject.userGoals ? `Goals: ${subject.userGoals}\nLevel: ${subject.userLevel}` : undefined}
+                  <SubjectContextMenu
+                    subject={subject}
+                    onDelete={_handleDeleteClick}
                   >
-                    <span className="truncate w-full">{subject.name}</span>
-                    {subject.userGoals && (
-                      <span className="text-xs text-gray-500 mt-1 w-full truncate">🎯 {subject.userGoals}</span>
-                    )}
-                    {subject.userLevel && (
-                      <span className="text-xs text-gray-400 mt-0.5 w-full truncate">Level: {subject.userLevel}</span>
-                    )}
-                    <span className="ml-auto text-xs text-gray-400">{subject.messageCount} msgs</span>
-                  </button>
+                    <Card
+                      className={cn(
+                        "w-full mb-2 transition-colors cursor-pointer",
+                        "hover:bg-accent hover:text-accent-foreground",
+                        selectedSubject?.id === subject.id 
+                          ? "bg-accent text-accent-foreground font-semibold" 
+                          : "bg-background text-foreground"
+                      )}
+                      onClick={() => onSelectSubject(subject)}
+                      aria-current={selectedSubject?.id === subject.id ? 'page' : undefined}
+                      title={subject.userGoals ? `Goals: ${subject.userGoals}\nLevel: ${subject.userLevel}` : undefined}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex flex-col items-start justify-between">
+                          <span className="truncate w-full">{subject.name}</span>
+                          {subject.userGoals && (
+                            <span className="text-xs text-muted-foreground mt-1 w-full truncate">🎯 {subject.userGoals}</span>
+                          )}
+                          {subject.userLevel && (
+                            <span className="text-xs text-muted-foreground mt-0.5 w-full truncate">Level: {subject.userLevel}</span>
+                          )}
+                          <span className="ml-auto text-xs text-muted-foreground">{subject.messageCount} msgs</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </SubjectContextMenu>
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -253,45 +251,73 @@ export function HistoryPane({ subjects, selectedSubject, user, onSubjectSelect, 
         onCancel={handleCancelDelete}
         onConfirm={handleConfirmDelete}
       />
-      {/* Modal for learning goals and level */}
+      {/* Subject Goals Modal */}
       <Dialog open={showGoalsModal} onOpenChange={setShowGoalsModal}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Set Your Learning Goals</DialogTitle>
-            {currentSubjectForModal && (
-              <div className="text-sm text-gray-500 mt-1">Subject: <span className="font-semibold">{currentSubjectForModal.name}</span></div>
-            )}
+            <DialogDescription>
+              Tell us about your learning goals and current level to help us personalize your experience.
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="goals-input" className="block text-sm font-medium text-gray-700 mb-1">What are your main goals for this subject?</label>
-              <Input
-                id="goals-input"
-                value={goalsInput}
-                onChange={e => setGoalsInput(e.target.value)}
-                placeholder="e.g. Master algebra basics, prepare for an exam..."
-                autoFocus
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="goals" className="text-sm font-medium">
+                What are your learning goals?
+              </label>
+              <Textarea
+                id="goals"
+                value={goals}
+                onChange={(e) => setGoals(e.target.value)}
+                placeholder="e.g., I want to master basic conversation skills..."
+                className="min-h-[100px]"
               />
-              {goalsError && <div className="text-red-600 text-xs mt-1">{goalsError}</div>}
             </div>
-            <div>
-              <label htmlFor="level-input" className="block text-sm font-medium text-gray-700 mb-1">How would you rate your current level?</label>
-              <select
-                id="level-input"
-                className="w-full border rounded p-2 mt-1"
-                value={levelInput}
-                onChange={e => setLevelInput(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
-              >
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
+            <div className="space-y-2">
+              <label htmlFor="level" className="text-sm font-medium">
+                What is your current level?
+              </label>
+              <Select value={level} onValueChange={setLevel}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select your level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="beginner">Beginner</SelectItem>
+                  <SelectItem value="intermediate">Intermediate</SelectItem>
+                  <SelectItem value="advanced">Advanced</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {goalsError && (
+              <div className="text-destructive text-sm" role="alert">
+                {goalsError}
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button onClick={handleSaveGoals} disabled={savingGoals || !goalsInput.trim()}>
-              {savingGoals ? <Loader2 className="animate-spin h-5 w-5 mr-2" /> : null}
-              Save
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowGoalsModal(false)
+                setGoals('')
+                setLevel('')
+                setCurrentSubjectForModal(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveGoals}
+              disabled={!goals.trim() || !level || savingGoals}
+            >
+              {savingGoals ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Goals'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

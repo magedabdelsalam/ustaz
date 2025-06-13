@@ -3,6 +3,7 @@ import { TutorContext, TutorToolName } from '@/lib/ai-tutor-service';
 import { Subject, LessonPlan, UseAITutorOptions, CurrentLesson, AppError } from '@/types';
 import { useAuth } from '@/hooks/useAuth';
 import { persistenceService } from '@/lib/persistenceService';
+import { errorHandler } from '@/lib/errorHandler';
 
 // Default instructions for interactive content generation (currently unused)
 const _DEFAULT_INTERACTIVE_CONTENT_GUIDELINES = `
@@ -386,15 +387,9 @@ export function useAITutor(options: UseAITutorOptions = {}) {
     return () => clearInterval(autoSaveInterval);
   }, [currentSubject]);
 
-  const handleError = useCallback((error: Error) => {
-    const appError: AppError = {
-      message: error.message,
-      userMessage: 'An error occurred in the AI Tutor.',
-      canRetry: false,
-      timestamp: new Date(),
-      severity: 'error',
-      type: 'unknown',
-    };
+  const handleError = useCallback((error: Error, operation?: string) => {
+    // Use the enhanced error handler to get proper error classification and messaging
+    const appError = errorHandler.handleError(error, operation || 'ai_tutor');
     options.onError?.(appError);
   }, [options]);
 
@@ -422,7 +417,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to load context');
       setError(error);
-      handleError(error);
+      handleError(error, 'load_tutor_context');
     } finally {
       setLoading(false);
     }
@@ -493,7 +488,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Failed to generate response');
       setError(error);
-      handleError(error);
+      handleError(error, 'generate_ai_response');
       throw error;
     } finally {
       setLoading(false);
@@ -520,7 +515,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
       const result = await generateResponse(message);
       return result;
     } catch (error) {
-      handleError(error as Error);
+      handleError(error as Error, 'send_message');
       throw error;
     } finally {
       setLoading(false);
@@ -533,7 +528,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
       const result = await generateResponse(`User interacted: ${type} - ${JSON.stringify(data)}`);
       return result;
     } catch (error) {
-      handleError(error as Error);
+      handleError(error as Error, 'handle_interaction');
       throw error;
     } finally {
       setLoading(false);
@@ -548,7 +543,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
       }
       return lessonPlan;
     } catch (error) {
-      handleError(error as Error);
+      handleError(error as Error, 'get_lesson_plan');
       throw error;
     }
   }, [handleError]); // Remove currentContext dependency to prevent infinite loops
@@ -575,7 +570,7 @@ export function useAITutor(options: UseAITutorOptions = {}) {
         achievement: currentLesson.achievement
       };
     } catch (error) {
-      handleError(error as Error);
+      handleError(error as Error, 'get_current_lesson');
       throw error;
     }
   }, [handleError]); // Remove currentContext dependency to prevent infinite loops

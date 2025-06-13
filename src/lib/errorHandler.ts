@@ -1,3 +1,5 @@
+import { getOperationErrorMessage } from './errorMessages'
+
 export type ErrorType = 
   | 'validation'
   | 'network' 
@@ -72,7 +74,7 @@ export class ErrorHandler {
   // Classify error type and create user-friendly message
   private classifyError(error: unknown, operation?: string): AppError {
     let type: ErrorType = 'unknown'
-    let userMessage = 'Something went wrong. Please try again.'
+    let userMessage = 'An unexpected error occurred. Please try again.'
     let canRetry = true
 
     try {
@@ -86,10 +88,10 @@ export class ErrorHandler {
             message.includes('hook') ||
             operation === 'react_render') {
           type = 'unknown'
-          userMessage = 'A display issue occurred. The app should recover automatically.'
+          userMessage = 'A display issue occurred. The page will refresh automatically.'
           canRetry = false
         }
-        // Network errors
+        // Network errors - more specific messaging
         else if (message.includes('network') || 
             message.includes('fetch') || 
             message.includes('connection') ||
@@ -97,48 +99,114 @@ export class ErrorHandler {
             message.includes('failed to fetch') ||
             error.name === 'NetworkError') {
           type = 'network'
-          userMessage = 'Connection problem. Check your internet and try again.'
+          if (message.includes('timeout')) {
+            userMessage = 'Request timed out. Check your internet connection and try again.'
+          } else if (message.includes('fetch')) {
+            userMessage = 'Unable to reach the server. Please check your connection.'
+          } else {
+            userMessage = 'Network error. Verify your internet connection and retry.'
+          }
         }
-        // Supabase/Database/Server errors
+        // Database/Storage errors - more specific messaging
         else if (message.includes('supabase') || 
                  message.includes('database') ||
                  message.includes('sql') ||
                  message.includes('constraint') ||
                  message.includes('postgrest') ||
-                 message.includes('server') ||
-                 message.includes('internal')) {
-          type = 'server'
-          userMessage = 'Server error. Please try again in a moment.'
+                 message.includes('storage')) {
+          type = 'database'
+          if (message.includes('constraint')) {
+            userMessage = 'Data validation failed. Please check your input and try again.'
+            canRetry = false
+          } else if (message.includes('storage')) {
+            userMessage = 'Storage error. Please wait a moment and try again.'
+          } else {
+            userMessage = 'Database error. Please try again in a few moments.'
+          }
         }
-        // Permission/Auth errors
+        // Server errors - more specific messaging
+        else if (message.includes('server') ||
+                 message.includes('internal') ||
+                 message.includes('500') ||
+                 message.includes('502') ||
+                 message.includes('503')) {
+          type = 'server'
+          if (message.includes('500')) {
+            userMessage = 'Server error (500). Our team has been notified. Please try again later.'
+          } else if (message.includes('502') || message.includes('503')) {
+            userMessage = 'Service temporarily unavailable. Please try again in a few minutes.'
+          } else {
+            userMessage = 'Server error. Please try again shortly.'
+          }
+        }
+        // Permission/Auth errors - more specific messaging
         else if (message.includes('permission') || 
                  message.includes('unauthorized') ||
                  message.includes('forbidden') ||
-                 message.includes('auth')) {
-          type = 'auth'
-          userMessage = 'Permission denied. Please check your login status.'
+                 message.includes('auth') ||
+                 message.includes('401') ||
+                 message.includes('403')) {
+          type = 'permission'
+          if (message.includes('401') || message.includes('unauthorized')) {
+            userMessage = 'Authentication required. Please sign in and try again.'
+          } else if (message.includes('403') || message.includes('forbidden')) {
+            userMessage = 'Access denied. You don\'t have permission for this action.'
+          } else {
+            userMessage = 'Permission error. Please check your access rights.'
+          }
           canRetry = false
         }
-        // Validation errors
+        // Validation errors - more specific messaging
         else if (message.includes('validation') || 
                  message.includes('invalid') ||
-                 message.includes('required')) {
+                 message.includes('required') ||
+                 message.includes('400')) {
           type = 'validation'
-          userMessage = 'Invalid data. Please check your input.'
+          if (message.includes('required')) {
+            userMessage = 'Required fields are missing. Please fill in all required information.'
+          } else if (message.includes('invalid')) {
+            userMessage = 'Invalid input detected. Please check your data and try again.'
+          } else {
+            userMessage = 'Data validation failed. Please review your input.'
+          }
           canRetry = false
+        }
+        // AI/OpenAI specific errors
+        else if (message.includes('openai') ||
+                 message.includes('api key') ||
+                 message.includes('rate limit') ||
+                 message.includes('model') ||
+                 message.includes('assistant')) {
+          type = 'server'
+          if (message.includes('rate limit') || message.includes('429')) {
+            userMessage = 'AI service is busy. Please wait a moment and try again.'
+          } else if (message.includes('api key')) {
+            userMessage = 'AI service configuration error. Please contact support.'
+            canRetry = false
+          } else if (message.includes('model')) {
+            userMessage = 'AI model temporarily unavailable. Please try again later.'
+          } else {
+            userMessage = 'AI service error. Please try again in a moment.'
+          }
         }
       }
 
       // Check if we're offline (only on client side)
       if (typeof window !== 'undefined' && !navigator.onLine) {
         type = 'network'
-        userMessage = 'You appear to be offline. Please check your connection.'
+        userMessage = 'You appear to be offline. Please check your internet connection.'
       }
+
+      // Apply operation-specific context if available
+      if (operation) {
+        userMessage = this.getContextualErrorMessage(operation, type, userMessage)
+      }
+
     } catch (classificationError) {
       // If error classification itself fails, use safe defaults
       console.error('Error in error classification:', classificationError)
       type = 'unknown'
-      userMessage = 'An unexpected error occurred.'
+      userMessage = 'An unexpected error occurred. Please refresh the page.'
       canRetry = false
     }
 
@@ -237,21 +305,16 @@ export class ErrorHandler {
     return new Promise(resolve => setTimeout(resolve, ms))
   }
 
+  // Get contextual error message based on operation and error type
+  private getContextualErrorMessage(operation: string, errorType: ErrorType, baseMessage: string): string {
+    const errorMessage = getOperationErrorMessage(operation, errorType)
+    return `${errorMessage.description} ${errorMessage.action || ''}`
+  }
+
   // Get user-friendly error message for specific operation
   getOperationErrorMessage(operation: string, error: AppError): string {
-    const operationMessages: Record<string, string> = {
-      'save_message': 'Failed to save your message',
-      'load_messages': 'Failed to load conversation history', 
-      'save_subject': 'Failed to save subject',
-      'load_subjects': 'Failed to load your subjects',
-      'save_content': 'Failed to save content',
-      'load_content': 'Failed to load content',
-      'delete_subject': 'Failed to delete subject',
-      'update_subject': 'Failed to update subject'
-    }
-
-    const baseMessage = operationMessages[operation] || 'Operation failed'
-    return `${baseMessage}. ${error.userMessage}`
+    const errorMessage = getOperationErrorMessage(operation, error.type)
+    return `${errorMessage.title}: ${errorMessage.description}`
   }
 }
 

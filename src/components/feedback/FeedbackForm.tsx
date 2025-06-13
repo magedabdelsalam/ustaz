@@ -6,21 +6,32 @@ import { Slider } from '@/components/ui/slider'
 import { Star, StarHalf } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { AnalyticsService } from '@/lib/analyticsService'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 interface FeedbackFormProps {
+  userId: string
   onClose: () => void
-  lessonId?: string
-  subjectId?: string
 }
 
-export function FeedbackForm({ onClose, lessonId, subjectId }: FeedbackFormProps) {
-  const [clarity, setClarity] = useState(3)
-  const [engagement, setEngagement] = useState(3)
-  const [learningOutcome, setLearningOutcome] = useState(3)
-  const [comments, setComments] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
+interface Feedback {
+  clarity: number
+  engagement: number
+  learningOutcome: number
+  comments: string
+}
 
+export function FeedbackForm({ userId, onClose }: FeedbackFormProps) {
   const analyticsService = AnalyticsService.getInstance()
+  const [feedback, setFeedback] = useState<Feedback>({
+    clarity: 3,
+    engagement: 3,
+    learningOutcome: 3,
+    comments: '',
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,11 +40,11 @@ export function FeedbackForm({ onClose, lessonId, subjectId }: FeedbackFormProps
     try {
       // Track feedback in analytics
       analyticsService.trackUserFeedback(
-        'current-user', // TODO: Get actual user ID
-        clarity,
-        engagement,
-        learningOutcome,
-        comments
+        userId,
+        feedback.clarity,
+        feedback.engagement,
+        feedback.learningOutcome,
+        feedback.comments
       )
 
       // Close the form
@@ -45,89 +56,88 @@ export function FeedbackForm({ onClose, lessonId, subjectId }: FeedbackFormProps
     }
   }
 
-  const renderRatingStars = (value: number, onChange: (value: number) => void) => {
-    return (
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            type="button"
-            onClick={() => onChange(star)}
-            className="focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-full p-1"
-            aria-label={`Rate ${star} out of 5`}
-          >
-            {star <= value ? (
-              <Star className="h-6 w-6 text-yellow-400 fill-yellow-400" />
-            ) : star - 0.5 <= value ? (
-              <StarHalf className="h-6 w-6 text-yellow-400 fill-yellow-400" />
-            ) : (
-              <Star className="h-6 w-6 text-gray-300" />
-            )}
-          </button>
-        ))}
-      </div>
-    )
-  }
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-    >
-      <Card className="w-full max-w-md mx-4">
-        <CardHeader>
-          <CardTitle className="text-xl font-semibold text-center">
-            How was your learning experience?
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Clarity of Explanation</label>
-              {renderRatingStars(clarity, setClarity)}
-            </div>
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <Card>
+          <CardHeader>
+            <CardTitle>Provide Feedback</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <Label>Clarity</Label>
+                  <RadioGroup
+                    value={feedback.clarity.toString()}
+                    onValueChange={(value: string) => setFeedback({ ...feedback, clarity: parseInt(value) })}
+                    className="flex gap-4 mt-2"
+                  >
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <div key={rating} className="flex items-center space-x-2">
+                        <RadioGroupItem value={rating.toString()} id={`clarity-${rating}`} />
+                        <Label htmlFor={`clarity-${rating}`}>{rating}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Engagement Level</label>
-              {renderRatingStars(engagement, setEngagement)}
-            </div>
+                <div>
+                  <Label>Engagement</Label>
+                  <RadioGroup
+                    value={feedback.engagement.toString()}
+                    onValueChange={(value: string) => setFeedback({ ...feedback, engagement: parseInt(value) })}
+                    className="flex gap-4 mt-2"
+                  >
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <div key={rating} className="flex items-center space-x-2">
+                        <RadioGroupItem value={rating.toString()} id={`engagement-${rating}`} />
+                        <Label htmlFor={`engagement-${rating}`}>{rating}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Learning Outcome</label>
-              {renderRatingStars(learningOutcome, setLearningOutcome)}
-            </div>
+                <div>
+                  <Label>Learning Outcome</Label>
+                  <RadioGroup
+                    value={feedback.learningOutcome.toString()}
+                    onValueChange={(value: string) => setFeedback({ ...feedback, learningOutcome: parseInt(value) })}
+                    className="flex gap-4 mt-2"
+                  >
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <div key={rating} className="flex items-center space-x-2">
+                        <RadioGroupItem value={rating.toString()} id={`outcome-${rating}`} />
+                        <Label htmlFor={`outcome-${rating}`}>{rating}</Label>
+                      </div>
+                    ))}
+                  </RadioGroup>
+                </div>
 
-            <div className="space-y-2">
-              <label htmlFor="comments" className="text-sm font-medium">
-                Additional Comments
-              </label>
-              <Textarea
-                id="comments"
-                value={comments}
-                onChange={(e) => setComments(e.target.value)}
-                placeholder="Share your thoughts about the lesson..."
-                className="min-h-[100px]"
-              />
-            </div>
+                <div>
+                  <Label htmlFor="comments">Additional Comments</Label>
+                  <Textarea
+                    id="comments"
+                    value={feedback.comments}
+                    onChange={(e) => setFeedback({ ...feedback, comments: e.target.value })}
+                    className="mt-2"
+                    placeholder="Share your thoughts about the lesson..."
+                  />
+                </div>
+              </div>
 
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onClose}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </motion.div>
+              <div className="flex justify-end gap-4">
+                <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Submitting...' : 'Submit Feedback'}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </DialogContent>
+    </Dialog>
   )
 } 

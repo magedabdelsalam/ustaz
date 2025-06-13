@@ -5,6 +5,8 @@ import { useAuth } from './useAuth'
 import { persistenceService } from '@/lib/persistenceService'
 import { logger } from '@/lib/logger'
 import { Subject } from '@/types'
+import { toast } from 'react-hot-toast'
+import { aiTutorService } from '@/lib/ai-tutor-service'
 
 // Simple color array for visual distinction
 const subjectColors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-purple-500', 
@@ -137,8 +139,15 @@ export function useSubjects() {
     try {
       logger.debug('🗑️ Deleting subject:', subjectId)
       
+      // First, clear AI tutor resources
+      if (aiTutorService) {
+        aiTutorService.clearSubjectResources(subjectId)
+      }
+      
+      // Delete from database
       await persistenceService.deleteSubject(user.id, subjectId)
       
+      // Update UI state
       startTransition(() => {
         setSubjects(prev => prev.filter(subject => subject.id !== subjectId))
         
@@ -148,12 +157,22 @@ export function useSubjects() {
       })
       
       logger.debug('✅ Subject deleted successfully')
+      toast.success('Subject deleted successfully')
       return true
     } catch (error) {
       console.error('❌ Failed to delete subject:', error)
+      toast.error('Failed to delete subject. Please try again.')
+      
+      // Revert UI state if needed
+      if (currentSubject?.id === subjectId) {
+        startTransition(() => {
+          setCurrentSubject(null)
+        })
+      }
+      
       return false
     }
-  }, [user, currentSubject?.id])
+  }, [user, currentSubject?.id, aiTutorService])
 
   // Auto-load subjects when user becomes available
   const hasLoadedRef = useRef(false)

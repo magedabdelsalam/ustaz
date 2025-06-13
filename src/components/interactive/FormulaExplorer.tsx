@@ -259,7 +259,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
             </Button>
           </div>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-1">{formulaContent.description}</p>
+        <p className="text-muted-foreground text-base leading-relaxed mt-1">{formulaContent.description}</p>
       </CardHeader>
 
       <CardContent className="space-y-6">
@@ -278,7 +278,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
                   <div className="text-left">
                     <div className="font-medium">{example.name}</div>
                     {example.description && (
-                      <div className="text-sm text-gray-600 mt-1">{example.description}</div>
+                      <div className="text-sm text-muted-foreground mt-1">{example.description}</div>
                     )}
                   </div>
                 </Button>
@@ -303,7 +303,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
                     </code>
                     <span className="text-sm font-medium">{variable.name}</span>
                     {variable.unit && (
-                      <span className="text-xs text-gray-500">({variable.unit})</span>
+                      <span className="text-xs text-muted-foreground">({variable.unit})</span>
                     )}
                   </div>
                   <span className="text-sm text-gray-600 font-mono">
@@ -319,7 +319,7 @@ export const FormulaExplorer = memo(function FormulaExplorer({
                   className="w-full"
                 />
                 {variable.description && (
-                  <p className="text-xs text-gray-600">{variable.description}</p>
+                  <p className="text-xs text-muted-foreground">{variable.description}</p>
                 )}
               </div>
             ))}
@@ -329,16 +329,18 @@ export const FormulaExplorer = memo(function FormulaExplorer({
         {/* Result */}
         <div className="space-y-4">
           <h4 className="font-medium text-gray-900">Result</h4>
-          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-            <div className="text-center">
-              <div className="text-3xl font-mono font-bold text-blue-800 mb-2">
-                {typeof result === 'number' ? result.toFixed(4) : result}
+          <Card className="bg-[--blue-50] border-[--blue-200]">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <div className="text-3xl font-mono font-bold text-blue-800 mb-2">
+                  {typeof result === 'number' ? result.toFixed(4) : result}
+                </div>
+                <p className="text-sm text-blue-600">
+                  Current calculation result
+                </p>
               </div>
-              <p className="text-sm text-blue-600">
-                Current calculation result
-              </p>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Step-by-step calculation */}
@@ -358,10 +360,10 @@ export const FormulaExplorer = memo(function FormulaExplorer({
                       {index + 1}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm text-gray-700 mb-2">{step.description}</p>
+                      <p className="text-sm text-muted-foreground mb-2">{step.description}</p>
                       <div className="flex items-center gap-3">
                         {renderFormula(step.expression)}
-                        <span className="text-gray-400">=</span>
+                        <span className="text-muted-foreground">=</span>
                         <span className="font-mono text-blue-600 font-medium">
                           {calculateStep(step.expression)}
                         </span>
@@ -376,10 +378,12 @@ export const FormulaExplorer = memo(function FormulaExplorer({
 
         {/* Explanation */}
         {formulaContent.explanation && (
-          <div className="bg-green-50 p-4 rounded-lg">
-            <p className="text-sm text-green-800 font-medium mb-2">Understanding the Formula:</p>
-            <p className="text-sm text-green-700">{formulaContent.explanation}</p>
-          </div>
+          <Card className="bg-[--green-50]">
+            <CardContent className="p-4">
+              <p className="text-sm text-green-800 font-medium mb-2">Understanding the Formula:</p>
+              <p className="text-sm text-green-700">{formulaContent.explanation}</p>
+            </CardContent>
+          </Card>
         )}
       </CardContent>
     </Card>

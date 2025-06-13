@@ -65,11 +65,11 @@ export const ContentHistorySidebar = memo(function ContentHistorySidebar({
                         <Badge variant="outline" className="text-xs">
                           Activity #{index + 1}
                         </Badge>
-                        <Badge className="bg-purple-100 text-purple-800 text-xs">
+                        <Badge variant="secondary">
                           {content.type.replace('-', ' ')}
                         </Badge>
                         {isSelected && (
-                          <Badge className="bg-blue-500 text-white text-xs">Current</Badge>
+                          <Badge variant="default">Current</Badge>
                         )}
                       </div>
                       <p className="text-sm text-gray-900 font-medium truncate">{content.title}</p>

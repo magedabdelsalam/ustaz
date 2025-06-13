@@ -157,12 +157,12 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
     }
   }
 
-  const getDifficultyColor = (difficulty: string) => {
+  const getDifficultyVariant = (difficulty: string): "default" | "secondary" | "destructive" | "outline" => {
     switch (difficulty) {
-      case 'beginner': return 'bg-green-100 text-green-800'
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
-      case 'advanced': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
+      case 'beginner': return 'secondary'
+      case 'intermediate': return 'outline'
+      case 'advanced': return 'destructive'
+      default: return 'default'
     }
   }
 
@@ -178,8 +178,8 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             {fillContent.title || fillContent.category}
           </CardTitle>
           {fillContent.difficulty && (
-            <Badge className={getDifficultyColor(fillContent.difficulty)}>
-              <span className="text-xs font-semibold capitalize tracking-wide">{fillContent.difficulty}</span>
+            <Badge variant={getDifficultyVariant(fillContent.difficulty)}>
+              <span className="capitalize tracking-wide">{fillContent.difficulty}</span>
             </Badge>
           )}
         </div>
@@ -234,12 +234,12 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
                         value={userAnswers[index] || ''}
                         onChange={(e) => handleAnswerChange(index, e.target.value)}
                         disabled={showResult}
-                        className={`w-40 h-12 text-center font-semibold border-2 transition-all text-base focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${
+                        className={`w-40 h-12 text-center font-semibold text-base ${
                           showResult
                             ? results[index]
                               ? 'bg-green-50 border-green-400 text-green-800'
                               : 'bg-red-50 border-red-400 text-red-800'
-                            : 'bg-white border-indigo-300 focus:border-indigo-500'
+                            : ''
                         }`}
                         placeholder={
                           fillContent.hints && fillContent.hints[index] 
@@ -358,7 +358,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             <Button 
               onClick={handleSubmit} 
               disabled={userAnswers.some(answer => !answer.trim()) || buttonLoadingStates.submit || isLoading}
-              className="flex-1 bg-indigo-700 hover:bg-indigo-800 text-base font-medium h-12 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              className="flex-1 text-base font-medium h-12"
               aria-label="Check answers"
             >
               {buttonLoadingStates.submit ? (
@@ -375,7 +375,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               <Button 
                 onClick={handleReset} 
                 variant="outline" 
-                className="flex items-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                className="flex items-center text-sm font-medium h-11"
                 disabled={buttonLoadingStates.reset || isLoading}
                 aria-label="Try again"
               >
@@ -389,7 +389,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               <Button 
                 onClick={handleExplainMore} 
                 variant="outline"
-                className="flex items-center text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+                className="flex items-center text-sm font-medium h-11"
                 disabled={buttonLoadingStates.explainMore || isLoading}
                 aria-label="Explain more"
               >
@@ -402,7 +402,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               </Button>
               <Button 
                 onClick={handleNextExercise}
-                className="flex items-center bg-green-700 hover:bg-green-800 text-sm font-medium h-11 focus:outline-none focus-visible:ring-2 focus-visible:ring-green-500 focus-visible:ring-offset-2"
+                className="flex items-center text-sm font-medium h-11"
                 disabled={buttonLoadingStates.nextExercise || isLoading}
                 aria-label="Next exercise"
               >

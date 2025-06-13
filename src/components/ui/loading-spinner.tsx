@@ -28,7 +28,7 @@ export function LoadingSpinner({
   const containerClasses = cn(
     "flex flex-col items-center justify-center",
     fullWidth && "w-full",
-    fullScreen && "fixed inset-0 bg-white/80 backdrop-blur-sm z-50",
+    fullScreen && "fixed inset-0 bg-background/80 backdrop-blur-sm z-50",
     padding,
     className
   )
@@ -37,10 +37,10 @@ export function LoadingSpinner({
     <div className={containerClasses}>
       <RefreshCw className={cn(
         sizeClasses[size],
-        "text-gray-400 mx-auto mb-2 animate-spin"
+        "text-muted-foreground mx-auto mb-2 animate-spin"
       )} />
       {(message || text) && (
-        <p className={cn("text-gray-600", textSizeClasses[size])}>
+        <p className={cn("text-muted-foreground", textSizeClasses[size])}>
           {message || text}
         </p>
       )}
@@ -51,7 +51,7 @@ export function LoadingSpinner({
 // Export sub-components for specific use cases
 export const LoadingText = ({ text = 'Loading...', size = 'sm' }: { text?: string, size?: 'sm' | 'md' | 'lg' }) => (
   <span className={cn(
-    "text-gray-500",
+    "text-muted-foreground",
     size === 'sm' && "text-xs",
     size === 'md' && "text-sm", 
     size === 'lg' && "text-base"
@@ -71,7 +71,7 @@ export const SpinnerIcon = ({ size = 'md', className = '' }: { size?: 'sm' | 'md
   return (
     <RefreshCw className={cn(
       sizeClasses[size],
-      "text-gray-400 animate-spin",
+      "text-muted-foreground animate-spin",
       className
     )} />
   )

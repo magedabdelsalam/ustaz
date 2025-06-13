@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { AppError, errorHandler } from '@/lib/errorHandler'
 import { ErrorToast, SuccessAlert } from '@/components/ui/error-alert'
+import { cn } from '@/lib/utils'
 
 interface ErrorContextType {
   currentError: AppError | null
@@ -186,12 +187,11 @@ export function ErrorProvider({ children }: ErrorProviderProps) {
       
       {/* Global success toast - Top Center */}
       {currentSuccess && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="w-96 max-w-[calc(100vw-2rem)] animate-in slide-in-from-top-2">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+          <div className="w-96 max-w-[calc(100vw-2rem)]">
             <SuccessAlert 
               message={currentSuccess}
               onDismiss={clearSuccess}
-              className="shadow-lg border-2 backdrop-blur-sm"
             />
           </div>
         </div>
@@ -199,7 +199,7 @@ export function ErrorProvider({ children }: ErrorProviderProps) {
       
       {/* Global error toast - Top Center */}
       {currentError && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
           <ErrorToast
             error={currentError}
             isVisible={true}

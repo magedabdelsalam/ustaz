@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'
 import { HistoryPane } from '@/components/HistoryPane'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { persistenceService } from '@/lib/persistenceService'
 import { 
   Message, 
@@ -346,7 +347,7 @@ export function Dashboard() {
           />
           {/* Lesson Plan Sidebar Section */}
           {lessonPlan && (
-            <div className="p-4 border-t border-gray-200 bg-white">
+            <Card className="p-4 border-t border-t-border">
               <h3 className="text-base font-semibold text-gray-900 mb-2">Lesson Plan</h3>
               <ol className="space-y-2">
                 {lessonPlan.lessons.map((lesson, idx) => (
@@ -371,7 +372,7 @@ export function Dashboard() {
                   </li>
                 ))}
               </ol>
-            </div>
+            </Card>
           )}
         </div>
         
@@ -434,15 +435,7 @@ export function Dashboard() {
         <div className="flex-1 flex flex-col lg:flex-row min-w-0 overflow-hidden">
           {/* Unified StreamPane replaces ContentPane and ChatPane */}
           <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            {error && (
-              <div className="p-4">
-                <ErrorAlert
-                  error={error}
-                  onRetry={handleRetry}
-                  onDismiss={() => setError(null)}
-                />
-              </div>
-            )}
+
             <StreamPane
               stream={stream}
               onInteraction={handleInteraction}

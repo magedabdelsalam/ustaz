@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { GraduationCap, Brain, BookOpen, Users, Mail, CheckCircle, ArrowLeft, Eye, EyeOff } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export function AuthPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -113,39 +114,39 @@ export function AuthPage() {
   }
 
   const getCardTitle = () => {
-    if (signUpSuccess) return 'Check your email'
+    if (signUpSuccess) return 'Check Your Email'
     if (resetEmailSent) return 'Password reset sent'
     if (passwordResetSuccess) return 'Password updated!'
     if (isResettingPassword) return 'Set new password'
     if (isForgotPassword) return 'Reset your password'
-    if (isSignUp) return 'Create your account'
-    return 'Welcome back'
+    if (isSignUp) return 'Create an Account'
+    return 'Welcome Back'
   }
 
   const getCardDescription = () => {
-    if (signUpSuccess) return 'We sent you a confirmation link to get started'
+    if (signUpSuccess) return 'We sent you a confirmation email'
     if (resetEmailSent) return 'Check your email for password reset instructions'
     if (passwordResetSuccess) return 'Your password has been successfully updated'
     if (isResettingPassword) return 'Please enter your new password below'
     if (isForgotPassword) return 'Enter your email to receive a password reset link'
-    if (isSignUp) return 'Start your AI-powered learning journey today'
-    return 'Sign in to continue your learning journey'
+    if (isSignUp) return 'Enter your details to create your account'
+    return 'Sign in to your account to continue'
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted flex items-center justify-center p-4">
       <div className="w-full max-w-6xl grid lg:grid-cols-2 gap-8 items-center">
         {/* Left side - Hero content */}
         <div className="space-y-8">
           <div className="space-y-4">
             <div className="flex items-center space-x-2">
-              <GraduationCap className="h-8 w-8 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">AI StudyMate</h1>
+              <GraduationCap className="h-8 w-8 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">AI StudyMate</h1>
             </div>
-            <h2 className="text-4xl font-bold text-gray-900 leading-tight">
+            <h2 className="text-4xl font-bold text-foreground leading-tight">
               Master Complex Subjects with AI-Powered Learning
             </h2>
-            <p className="text-lg text-gray-600">
+            <p className="text-lg text-muted-foreground">
               Get personalized content, interactive explanations, and a 24/7 AI tutor 
               to help you excel in mathematics, science, and technical subjects.
             </p>
@@ -153,24 +154,24 @@ export function AuthPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="flex items-start space-x-3">
-              <Brain className="h-6 w-6 text-blue-600 mt-1 flex-shrink-0" />
+              <Brain className="h-6 w-6 text-primary mt-1 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-gray-900">AI-Generated Content</h3>
-                <p className="text-sm text-gray-600">Dynamic lessons adapted to your learning pace</p>
+                <h3 className="font-semibold text-foreground">AI-Generated Content</h3>
+                <p className="text-sm text-muted-foreground">Dynamic lessons adapted to your learning pace</p>
               </div>
             </div>
             <div className="flex items-start space-x-3">
-              <BookOpen className="h-6 w-6 text-purple-600 mt-1 flex-shrink-0" />
+              <BookOpen className="h-6 w-6 text-primary mt-1 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-gray-900">Interactive Tutor</h3>
-                <p className="text-sm text-gray-600">Chat with AI to clarify concepts instantly</p>
+                <h3 className="font-semibold text-foreground">Interactive Tutor</h3>
+                <p className="text-sm text-muted-foreground">Chat with AI to clarify concepts instantly</p>
               </div>
             </div>
             <div className="flex items-start space-x-3">
-              <Users className="h-6 w-6 text-green-600 mt-1 flex-shrink-0" />
+              <Users className="h-6 w-6 text-primary mt-1 flex-shrink-0" />
               <div>
-                <h3 className="font-semibold text-gray-900">Progress Tracking</h3>
-                <p className="text-sm text-gray-600">Visual progress indicators and mastery stats</p>
+                <h3 className="font-semibold text-foreground">Progress Tracking</h3>
+                <p className="text-sm text-muted-foreground">Visual progress indicators and mastery stats</p>
               </div>
             </div>
           </div>
@@ -178,7 +179,7 @@ export function AuthPage() {
 
         {/* Right side - Auth form */}
         <div className="flex justify-center">
-          <Card className="w-full max-w-md shadow-xl border-0">
+          <Card className="w-full max-w-md shadow-lg">
             <CardHeader className="space-y-1">
               <CardTitle className="text-2xl font-bold text-center">
                 {getCardTitle()}
@@ -190,9 +191,9 @@ export function AuthPage() {
             <CardContent>
               {signUpSuccess ? (
                 <div className="space-y-6">
-                  <Alert className="bg-green-50 border-green-200">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>
                       <div className="space-y-2">
                         <p className="font-medium">Account created successfully!</p>
                         <p>Please check your email and click the confirmation link to activate your account.</p>
@@ -200,33 +201,27 @@ export function AuthPage() {
                     </AlertDescription>
                   </Alert>
                   
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <div className="flex items-start space-x-3">
-                      <Mail className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-blue-800">
-                        <p className="font-medium mb-1">What&apos;s next?</p>
-                        <ol className="list-decimal list-inside space-y-1 text-blue-700">
-                          <li>Check your email inbox (and spam folder)</li>
-                          <li>Click the confirmation link in the email</li>
-                          <li>Return here to sign in and start learning</li>
-                        </ol>
+                  <Card className="bg-muted/50">
+                    <CardContent className="p-4">
+                      <div className="flex items-start space-x-3">
+                        <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="font-medium mb-1">What&apos;s next?</p>
+                          <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                            <li>Check your email inbox (and spam folder)</li>
+                            <li>Click the confirmation link in the email</li>
+                            <li>Return here to sign in and start learning</li>
+                          </ol>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  
-                  <Button
-                    type="button"
-                    onClick={() => handleModeSwitch('signin')}
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700"
-                  >
-                    Back to sign in
-                  </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : resetEmailSent ? (
                 <div className="space-y-6">
-                  <Alert className="bg-green-50 border-green-200">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>
                       <div className="space-y-2">
                         <p className="font-medium">Password reset email sent!</p>
                         <p>Please check your email and follow the instructions to reset your password.</p>
@@ -234,34 +229,28 @@ export function AuthPage() {
                     </AlertDescription>
                   </Alert>
                   
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <div className="flex items-start space-x-3">
-                      <Mail className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                      <div className="text-sm text-blue-800">
-                        <p className="font-medium mb-1">What&apos;s next?</p>
-                        <ol className="list-decimal list-inside space-y-1 text-blue-700">
-                          <li>Check your email inbox (and spam folder)</li>
-                          <li>Click the password reset link in the email</li>
-                          <li>Create a new password when prompted</li>
-                          <li>Return here to sign in with your new password</li>
-                        </ol>
+                  <Card className="bg-muted/50">
+                    <CardContent className="p-4">
+                      <div className="flex items-start space-x-3">
+                        <Mail className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="font-medium mb-1">What&apos;s next?</p>
+                          <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                            <li>Check your email inbox (and spam folder)</li>
+                            <li>Click the password reset link in the email</li>
+                            <li>Create a new password when prompted</li>
+                            <li>Return here to sign in with your new password</li>
+                          </ol>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  
-                  <Button
-                    type="button"
-                    onClick={() => handleModeSwitch('signin')}
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700"
-                  >
-                    Back to sign in
-                  </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : passwordResetSuccess ? (
                 <div className="space-y-6">
-                  <Alert className="bg-green-50 border-green-200">
-                    <CheckCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
+                  <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertDescription>
                       <div className="space-y-2">
                         <p className="font-medium">Password updated successfully!</p>
                         <p>You can now sign in with your new password.</p>
@@ -272,7 +261,7 @@ export function AuthPage() {
                   <Button
                     type="button"
                     onClick={() => handleModeSwitch('signin')}
-                    className="w-full h-11 bg-blue-600 hover:bg-blue-700"
+                    className="w-full h-11"
                   >
                     Continue to sign in
                   </Button>
@@ -348,7 +337,7 @@ export function AuthPage() {
                     )}
                     <Button 
                       type="submit" 
-                      className="w-full h-11 bg-blue-600 hover:bg-blue-700" 
+                      className="w-full h-11" 
                       disabled={isLoading}
                     >
                       {isLoading ? 'Please wait...' : (

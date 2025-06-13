@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -30,23 +30,42 @@ export function DeleteConfirmationDialog({
   return (
     <Dialog open={open} onOpenChange={open ? onCancel : undefined}>
       <DialogContent>
-        <DialogHeader className="flex items-start space-x-3">
-          <AlertTriangle className="h-6 w-6 text-orange-500 flex-shrink-0" />
-          <div>
-            <DialogTitle>Delete Subject</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete &quot;{subjectName}&quot;?
-              <br />
-              <strong>This action cannot be undone.</strong> All chat messages, interactive content and progress will be permanently deleted.
-            </DialogDescription>
+        <DialogHeader>
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-6 w-6 text-destructive flex-shrink-0" />
+            <div>
+              <DialogTitle>Delete Subject</DialogTitle>
+              <DialogDescription className="space-y-2">
+                <p>Are you sure you want to delete &quot;{subjectName}&quot;?</p>
+                <p className="text-sm text-muted-foreground">
+                  This will permanently delete:
+                </p>
+                <ul className="list-disc pl-4 text-sm text-muted-foreground space-y-1">
+                  <li>All chat messages and conversation history</li>
+                  <li>Any interactive content and exercises</li>
+                  <li>Learning progress and achievements</li>
+                  <li>Custom settings and preferences</li>
+                </ul>
+                <p className="text-sm font-medium text-destructive mt-2">
+                  This action cannot be undone.
+                </p>
+              </DialogDescription>
+            </div>
           </div>
         </DialogHeader>
-        <DialogFooter className="flex space-x-3 justify-end pt-4">
+        <DialogFooter>
           <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
             Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isDeleting}>
-            {isDeleting ? 'Deleting...' : 'Delete Subject'}
+            {isDeleting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              'Delete Subject'
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
