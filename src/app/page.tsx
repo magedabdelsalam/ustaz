@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * page
+ * ----------------
+ * TODO: Add description and exports for page.
+ */
+
+
 import { useAuth } from '@/hooks/useAuth'
 import { AuthPage } from '@/components/AuthPage'
 import { Dashboard } from '@/components/Dashboard'

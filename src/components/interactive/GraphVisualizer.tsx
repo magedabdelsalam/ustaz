@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * GraphVisualizer
+ * ----------------
+ * TODO: Add description and exports for GraphVisualizer.
+ */
+
+
 import { useState, memo, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

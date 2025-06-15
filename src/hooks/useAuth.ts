@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * useAuth
+ * ----------------
+ * TODO: Add description and exports for useAuth.
+ */
+
+
 import { useSyncExternalStore, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'

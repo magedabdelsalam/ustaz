@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * slider
+ * ----------------
+ * TODO: Add description and exports for slider.
+ */
+
+
 import * as React from "react"
 import * as SliderPrimitive from "@radix-ui/react-slider"
 

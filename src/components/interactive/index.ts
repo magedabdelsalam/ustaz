@@ -1,3 +1,9 @@
+/**
+ * index
+ * ----------------
+ * TODO: Add description and exports for index.
+ */
+
 // Interactive Learning Components Library
 import dynamic from 'next/dynamic'
 import type { ComponentType, InteractiveComponentProps } from '@/types'

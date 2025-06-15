@@ -1,3 +1,9 @@
+/**
+ * userUtils
+ * ----------------
+ * TODO: Add description and exports for userUtils.
+ */
+
 export function getUserInitials(email: string): string {
   return email.split('@')[0].substring(0, 2).toUpperCase()
 }

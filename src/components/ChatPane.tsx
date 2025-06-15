@@ -1,5 +1,16 @@
 'use client'
 
+/**
+ * ChatPane
+ * --------
+ * Main chat interface used on the dashboard.  It wires the `useAITutor` hook
+ * with the UI, keeps message history and handles sending/receiving messages.
+ *
+ * Exports:
+ *   - `ChatPane` React component
+ *   - `ChatPaneRef` ref interface used for imperative interactions
+ */
+
 import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { Send, MessageCircle } from 'lucide-react'
 import { Message, Subject, InteractiveContent } from '@/types'

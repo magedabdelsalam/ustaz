@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * SubjectItem
+ * ----------------
+ * TODO: Add description and exports for SubjectItem.
+ */
+
+
 import { memo, useCallback } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

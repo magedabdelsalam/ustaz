@@ -1,3 +1,9 @@
+/**
+ * index
+ * ----------------
+ * TODO: Add description and exports for index.
+ */
+
 // Core Types for Ustaz AI Tutoring System
 // This file centralizes all type definitions for better maintainability
 

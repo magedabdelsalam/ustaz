@@ -1,3 +1,10 @@
+/**
+ * PersistenceService
+ * -------------------
+ * Wrapper around Supabase operations used by the app.  Provides CRUD helpers
+ * for chat messages, content items, subjects and AI assistant settings.
+ * Exported as a singleton `persistenceService`.
+ */
 import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { PersistedMessage, PersistedContentItem, PersistedSubject } from '@/types'
 import { errorHandler, RetryOptions } from '@/lib/errorHandler'

@@ -1,3 +1,9 @@
+/**
+ * loading-spinner
+ * ----------------
+ * TODO: Add description and exports for loading-spinner.
+ */
+
 import { RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LoadingSpinnerProps } from '@/types'

@@ -1,3 +1,9 @@
+/**
+ * logger
+ * ----------------
+ * TODO: Add description and exports for logger.
+ */
+
 export type LogLevel = 'debug' | 'info' | 'error'
 const level = (process.env.NEXT_PUBLIC_LOG_LEVEL as LogLevel) || 'info'
 

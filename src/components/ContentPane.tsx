@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * ContentPane
+ * ----------------
+ * TODO: Add description and exports for ContentPane.
+ */
+
+
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent } from '@/components/ui/card'

@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * HistoryPane
+ * ----------------
+ * TODO: Add description and exports for HistoryPane.
+ */
+
+
 import { useState, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
 import { useAuth } from '@/hooks/useAuth'

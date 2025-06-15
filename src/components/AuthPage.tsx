@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * AuthPage
+ * ----------------
+ * TODO: Add description and exports for AuthPage.
+ */
+
+
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'

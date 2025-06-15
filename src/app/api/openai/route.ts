@@ -1,3 +1,9 @@
+/**
+ * route
+ * ----------------
+ * TODO: Add description and exports for route.
+ */
+
 import { NextResponse } from 'next/server'
 import { AITutorService } from '@/lib/ai-tutor-service'
 import { OPENAI_API_KEY } from '@/lib/config'

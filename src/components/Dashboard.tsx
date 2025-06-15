@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * Dashboard
+ * ----------------
+ * TODO: Add description and exports for Dashboard.
+ */
+
+
 import { useRef, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'

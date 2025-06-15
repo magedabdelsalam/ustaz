@@ -1,3 +1,9 @@
+/**
+ * errorHandler
+ * ----------------
+ * TODO: Add description and exports for errorHandler.
+ */
+
 export type ErrorType = 
   | 'network'
   | 'database'
