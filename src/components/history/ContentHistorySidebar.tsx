@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * ContentHistorySidebar
+ * ----------------
+ * TODO: Add description and exports for ContentHistorySidebar.
+ */
+
+
 import { memo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Badge } from '@/components/ui/badge'

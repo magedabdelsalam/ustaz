@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * ErrorProvider
+ * ----------------
+ * TODO: Add description and exports for ErrorProvider.
+ */
+
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { AppError, errorHandler } from '@/lib/errorHandler'
 import { ErrorToast, SuccessAlert } from '@/components/ui/error-alert'

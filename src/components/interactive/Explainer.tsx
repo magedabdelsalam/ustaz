@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * Explainer Interactive Component
+ * -------------------------------
+ * Rich card for explaining a concept with collapsible sections and interaction
+ * buttons.  Exported via the `interactive` components index.
+ */
+
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -27,6 +34,23 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     moreDetail: false,
     nextTopic: false
   })
+
+  // Utility to run an interaction while toggling a loading flag
+  const runWithLoading = async (
+    key: keyof typeof buttonLoadingStates,
+    fn: () => Promise<void> | void
+  ) => {
+    setButtonLoadingStates(prev => ({ ...prev, [key]: true }))
+    try {
+      await fn()
+    } finally {
+      // Brief delay so users notice the state change
+      setTimeout(
+        () => setButtonLoadingStates(prev => ({ ...prev, [key]: false })),
+        1000
+      )
+    }
+  }
 
   // Validate and sanitize content
   const sanitizedContent = useMemo(() => {
@@ -92,51 +116,32 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     return defaultContent
   }, [explainerContent])
 
-  const handleAskQuestion = async () => {
-    setButtonLoadingStates(prev => ({ ...prev, askQuestion: true }))
-    try {
+  const handleAskQuestion = async () =>
+    runWithLoading('askQuestion', () =>
       onInteraction('question_requested', {
         componentId: id,
         topic: sanitizedContent.title,
         requestType: 'clarification'
       })
-    } finally {
-      // Reset loading state after a brief delay to show feedback
-      setTimeout(() => {
-        setButtonLoadingStates(prev => ({ ...prev, askQuestion: false }))
-      }, 1000)
-    }
-  }
+    )
 
-  const handleMoreDetail = async () => {
-    setButtonLoadingStates(prev => ({ ...prev, moreDetail: true }))
-    try {
+  const handleMoreDetail = async () =>
+    runWithLoading('moreDetail', () =>
       onInteraction('detail_expanded', {
         componentId: id,
         topic: sanitizedContent.title,
         needsMoreDetail: true
       })
-    } finally {
-      setTimeout(() => {
-        setButtonLoadingStates(prev => ({ ...prev, moreDetail: false }))
-      }, 1000)
-    }
-  }
+    )
 
-  const handleNextTopic = async () => {
-    setButtonLoadingStates(prev => ({ ...prev, nextTopic: true }))
-    try {
+  const handleNextTopic = async () =>
+    runWithLoading('nextTopic', () =>
       onInteraction('next_topic_requested', {
         componentId: id,
         currentTopic: sanitizedContent.title,
         difficulty: sanitizedContent.difficulty
       })
-    } finally {
-      setTimeout(() => {
-        setButtonLoadingStates(prev => ({ ...prev, nextTopic: false }))
-      }, 1000)
-    }
-  }
+    )
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {

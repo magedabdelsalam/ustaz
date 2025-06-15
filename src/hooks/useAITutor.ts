@@ -1,3 +1,10 @@
+/**
+ * useAITutor Hook
+ * ----------------
+ * React hook that wraps the `AITutorService` class to provide an easy API for
+ * components.  It exposes methods for sending messages and processes tool call
+ * results to update consumer components.
+ */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { TutorContext, TutorToolName } from '@/lib/ai-tutor-service';
 import { Subject, LessonPlan, LearningProgress, ComponentType, InteractiveContent } from '@/types';

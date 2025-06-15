@@ -1,3 +1,9 @@
+/**
+ * config
+ * ----------------
+ * TODO: Add description and exports for config.
+ */
+
 export function getEnv(name: string): string {
   const value = process.env[name];
   if (!value) {

@@ -1,3 +1,15 @@
+/**
+ * AI Tutor Service
+ * -----------------
+ * Central class responsible for orchestrating all OpenAI Assistant calls and
+ * handling tool-call responses.  The service maintains conversation context,
+ * creates per subject assistants and exposes a `generateResponse` method used
+ * throughout the application.
+ *
+ * Exports:
+ *   - `AITutorService` main class used via the `useAITutor` hook.
+ *   - Various TypeScript interfaces describing tool call parameters.
+ */
 import OpenAI from 'openai';
 import { OPENAI_API_KEY, OPENAI_MODEL } from '@/lib/config';
 import { ComponentType, LessonPlan, LearningProgress, Subject, Lesson } from '@/types';

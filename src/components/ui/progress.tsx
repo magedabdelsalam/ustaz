@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * progress
+ * ----------------
+ * TODO: Add description and exports for progress.
+ */
+
+
 import * as React from "react"
 import * as ProgressPrimitive from "@radix-ui/react-progress"
 

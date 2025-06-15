@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * accordion
+ * ----------------
+ * TODO: Add description and exports for accordion.
+ */
+
+
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 import { ChevronDownIcon } from "lucide-react"

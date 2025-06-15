@@ -1,3 +1,9 @@
+/**
+ * useSubjectSession
+ * ----------------
+ * TODO: Add description and exports for useSubjectSession.
+ */
+
 import { useState, useCallback } from 'react'
 import { Message, UseSubjectSessionProps } from '@/types'
 import { persistenceService } from '@/lib/persistenceService'

@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * StepByStepSolver
+ * ----------------
+ * TODO: Add description and exports for StepByStepSolver.
+ */
+
+
 import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * Placeholder
+ * ----------------
+ * TODO: Add description and exports for Placeholder.
+ */
+
+
 import { useState, memo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

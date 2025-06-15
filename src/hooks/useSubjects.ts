@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * useSubjects
+ * ----------------
+ * TODO: Add description and exports for useSubjects.
+ */
+
+
 import { useState, useCallback, useTransition, useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
 import { persistenceService } from '@/lib/persistenceService'

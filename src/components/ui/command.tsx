@@ -1,5 +1,12 @@
 "use client"
 
+/**
+ * command
+ * ----------------
+ * TODO: Add description and exports for command.
+ */
+
+
 import * as React from "react"
 import { Command as CommandPrimitive } from "cmdk"
 import { SearchIcon } from "lucide-react"

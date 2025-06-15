@@ -1,5 +1,12 @@
 'use client'
 
+/**
+ * DeleteConfirmationDialog
+ * ----------------
+ * TODO: Add description and exports for DeleteConfirmationDialog.
+ */
+
+
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {

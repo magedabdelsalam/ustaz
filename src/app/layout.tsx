@@ -1,3 +1,9 @@
+/**
+ * layout
+ * ----------------
+ * TODO: Add description and exports for layout.
+ */
+
 import type { Metadata } from "next";
 import "./globals.css";
 import { ErrorProvider, ErrorBoundary } from '@/components/ErrorProvider';
