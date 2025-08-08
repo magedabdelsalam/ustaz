@@ -8,7 +8,7 @@
 
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,6 +52,9 @@ export function AuthPage() {
     setPasswordResetSuccess(false)
 
     try {
+      if (!isSupabaseConfigured) {
+        throw new Error('Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local and restart the dev server.')
+      }
       if (isResettingPassword) {
         // Validate passwords match
         if (password !== confirmPassword) {

@@ -47,7 +47,8 @@ An AI-powered educational tool that helps users master complex subjects through 
    ```bash
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
-   SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+   # Optional (server-only, do NOT prefix with NEXT_PUBLIC)
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
    # OpenAI Configuration (optional)
@@ -56,6 +57,8 @@ An AI-powered educational tool that helps users master complex subjects through 
    # App Configuration
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    ```
+
+   After creating or changing `.env.local`, restart the dev server so Next.js picks up the new variables.
 
 4. **Set up Supabase Database**
    

@@ -9,7 +9,7 @@
 
 import { useSyncExternalStore, useCallback } from 'react'
 import { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase'
 
 // External store for auth state - eliminates useEffect
 class AuthStore {
@@ -25,6 +25,14 @@ class AuthStore {
 
   private async initialize() {
     try {
+      if (!isSupabaseConfigured) {
+        console.error('Supabase not configured. Skipping auth initialization until env vars are set.')
+        this.user = null
+        this.loading = false
+        this.invalidateCache()
+        this.notifyListeners()
+        return
+      }
       const { data: { session } } = await supabase.auth.getSession()
       this.user = session?.user ?? null
       this.loading = false
