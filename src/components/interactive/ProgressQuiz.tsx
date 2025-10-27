@@ -56,8 +56,34 @@ export const ProgressQuiz = memo(function ProgressQuiz({
   const [quizStarted, setQuizStarted] = useState(false)
   
   const quizContent = content as QuizContent
-  const currentQuestion = quizContent.questions[currentQuestionIndex]
-  const totalQuestions = quizContent.questions.length
+  
+  // Normalize questions to support both AI schema (text field) and component schema (question field)
+  const normalizedQuestions = quizContent.questions.map(q => {
+    // Convert options from AI format (objects with isCorrect) to simple format if needed
+    let normalizedOptions = q.options
+    let correctAnswer: string | number = q.correctAnswer
+    
+    // If options are objects with isCorrect, extract the correct answer
+    if (Array.isArray(q.options) && q.options.length > 0 && typeof q.options[0] === 'object') {
+      const optionObjects = q.options as unknown as Array<{ id: string; text: string; isCorrect: boolean }>
+      normalizedOptions = optionObjects.map(opt => opt.text)
+      const correctIndex = optionObjects.findIndex(opt => opt.isCorrect)
+      if (correctIndex >= 0) {
+        correctAnswer = optionObjects[correctIndex].text
+      }
+    }
+    
+    return {
+      ...q,
+      question: (q as unknown as { text?: string }).text || q.question,  // Support AI's "text" field
+      type: q.type || 'multiple-choice',
+      options: normalizedOptions,
+      correctAnswer: correctAnswer
+    }
+  })
+  
+  const currentQuestion = normalizedQuestions[currentQuestionIndex]
+  const totalQuestions = normalizedQuestions.length
   // const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100  // @typescript-eslint/no-unused-vars
 
   // Initialize timer
@@ -81,7 +107,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
             let totalPoints = 0
             let earnedPoints = 0
 
-            const questionResults = quizContent.questions.map(question => {
+            const questionResults = normalizedQuestions.map(question => {
               const userAnswer = answers[question.id]
               const isCorrect = String(userAnswer) === String(question.correctAnswer)
               const points = question.points || 1
@@ -101,7 +127,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
               }
             })
 
-            const percentage = quizContent.questions.length > 0 ? (correctAnswers / quizContent.questions.length) * 100 : 0
+            const percentage = normalizedQuestions.length > 0 ? (correctAnswers / normalizedQuestions.length) * 100 : 0
             const passingScore = quizContent.passingScore || 70
             const passed = percentage >= passingScore
 
@@ -191,7 +217,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
     let totalPoints = 0
     let earnedPoints = 0
 
-    const questionResults = quizContent.questions.map(question => {
+    const questionResults = normalizedQuestions.map(question => {
       const userAnswer = answers[question.id]
       const isCorrect = String(userAnswer) === String(question.correctAnswer)
       const points = question.points || 1
@@ -360,7 +386,7 @@ export const ProgressQuiz = memo(function ProgressQuiz({
         {quizContent.showExplanations && (
           <div className="space-y-5">
             <h4 className="text-xl font-bold text-gray-900">Review Your Answers:</h4>
-            {quizContent.questions.map((question, index) => {
+            {normalizedQuestions.map((question, index) => {
               const result = results.questionResults[index]
               return (
                 <Card key={question.id} className="p-5 border-2">

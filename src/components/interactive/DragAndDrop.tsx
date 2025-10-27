@@ -44,12 +44,26 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
   const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [showResult, setShowResult] = useState(false)
   const [results, setResults] = useState<Record<string, boolean>>({})
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null)
   
   const dragContent = content as DragAndDropContent
 
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggedItem(itemId)
     e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', itemId)
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+    setDraggedItem(null)
+    setDragOverTarget(null)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -57,15 +71,50 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
     e.dataTransfer.dropEffect = 'move'
   }
 
+  const handleDragEnter = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    setDragOverTarget(targetId)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving the target (not entering a child)
+    if (e.currentTarget === e.target) {
+      setDragOverTarget(null)
+    }
+  }
+
   const handleDrop = (e: React.DragEvent, targetId: string) => {
     e.preventDefault()
-    if (draggedItem) {
-      setAssignments(prev => ({
-        ...prev,
-        [draggedItem]: targetId
-      }))
+    setDragOverTarget(null)
+    
+    const itemId = e.dataTransfer.getData('text/plain') || draggedItem
+    if (itemId) {
+      // Remove any previous assignment of this item
+      const newAssignments = { ...assignments }
+      
+      // If there's already an item in the target, swap them
+      const existingItemInTarget = Object.keys(newAssignments).find(id => newAssignments[id] === targetId)
+      const previousTarget = newAssignments[itemId]
+      
+      if (existingItemInTarget && previousTarget) {
+        // Swap
+        newAssignments[existingItemInTarget] = previousTarget
+        newAssignments[itemId] = targetId
+      } else {
+        // Simple assignment
+        newAssignments[itemId] = targetId
+      }
+      
+      setAssignments(newAssignments)
       setDraggedItem(null)
     }
+  }
+
+  const handleRemoveAssignment = (itemId: string) => {
+    if (showResult) return
+    const newAssignments = { ...assignments }
+    delete newAssignments[itemId]
+    setAssignments(newAssignments)
   }
 
   const handleSubmit = () => {
@@ -130,41 +179,45 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
           </CardTitle>
         </div>
         <p className="text-gray-600 text-base leading-relaxed mt-1">{dragContent.question}</p>
+        <p className="text-sm text-gray-500">{dragContent.instructions}</p>
       </CardHeader>
       <CardContent className="space-y-8">
-        {/* Items to drag */}
-        <div className="space-y-4">
-          <h4 className="font-semibold text-lg text-gray-900">Items to match:</h4>
-          <div className="flex flex-wrap gap-3">
-            {getUnassignedItems().map(item => (
-              <div
-                key={item.id}
-                draggable={!showResult}
-                onDragStart={(e) => handleDragStart(e, item.id)}
-                className={`px-4 py-3 bg-blue-100 border border-blue-200 rounded-lg cursor-move select-none transition-colors ${
-                  draggedItem === item.id ? 'opacity-50' : ''
-                } ${
-                  showResult
-                    ? results[item.id]
-                      ? 'bg-green-100 border-green-300'
-                      : 'bg-red-100 border-red-300'
-                    : 'hover:bg-blue-200'
-                }`}
-              >
-                <span className="text-base font-semibold">{item.content}</span>
-                {showResult && (
-                  <span className="ml-3">
-                    {results[item.id] ? (
-                      <CheckCircle className="inline h-5 w-5 text-green-600" />
-                    ) : (
-                      <XCircle className="inline h-5 w-5 text-red-600" />
-                    )}
-                  </span>
-                )}
-              </div>
-            ))}
+        {/* Items to drag - Show unassigned items */}
+        {getUnassignedItems().length > 0 && (
+          <div className="space-y-4">
+            <h4 className="font-semibold text-lg text-gray-900">Drag these items to the correct targets:</h4>
+            <div className="flex flex-wrap gap-3">
+              {getUnassignedItems().map(item => (
+                <div
+                  key={item.id}
+                  draggable={!showResult}
+                  onDragStart={(e) => handleDragStart(e, item.id)}
+                  onDragEnd={handleDragEnd}
+                  className={`px-4 py-3 bg-blue-100 border-2 border-blue-200 rounded-lg select-none transition-all ${
+                    draggedItem === item.id ? 'opacity-50 scale-95' : ''
+                  } ${
+                    showResult
+                      ? results[item.id]
+                        ? 'bg-green-100 border-green-300'
+                        : 'bg-red-100 border-red-300'
+                      : 'hover:bg-blue-200 cursor-grab active:cursor-grabbing hover:shadow-md'
+                  }`}
+                >
+                  <span className="text-base font-semibold">{item.content}</span>
+                  {showResult && (
+                    <span className="ml-3">
+                      {results[item.id] ? (
+                        <CheckCircle className="inline h-5 w-5 text-green-600" />
+                      ) : (
+                        <XCircle className="inline h-5 w-5 text-red-600" />
+                      )}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Drop targets */}
         <div className="space-y-4">
@@ -172,23 +225,28 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
           <div className="grid gap-4">
             {dragContent.targets.map(target => {
               const assignedItem = getAssignedItem(target.id)
+              const isBeingDraggedOver = dragOverTarget === target.id
               
               return (
                 <div
                   key={target.id}
                   onDragOver={handleDragOver}
+                  onDragEnter={(e) => handleDragEnter(e, target.id)}
+                  onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, target.id)}
-                  className={`min-h-[80px] p-4 border-2 border-dashed rounded-lg transition-colors ${
-                    assignedItem
+                  className={`min-h-[100px] p-4 border-2 border-dashed rounded-lg transition-all ${
+                    isBeingDraggedOver
+                      ? 'bg-blue-100 border-blue-500 border-solid scale-[1.02] shadow-lg'
+                      : assignedItem
                       ? showResult
                         ? results[assignedItem.id]
                           ? 'bg-green-50 border-green-300'
                           : 'bg-red-50 border-red-300'
                         : 'bg-blue-50 border-blue-300'
-                      : 'bg-gray-50 border-gray-300 hover:border-gray-400'
+                      : 'bg-gray-50 border-gray-300 hover:border-gray-400 hover:bg-gray-100'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-base font-semibold text-gray-800">
                       {target.label}
                     </span>
@@ -204,12 +262,36 @@ export const DragAndDrop = memo(function DragAndDrop({ onInteraction, content, i
                   </div>
                   
                   {assignedItem ? (
-                    <div className="mt-3 px-3 py-2 bg-white rounded-md border shadow-sm">
+                    <div
+                      draggable={!showResult}
+                      onDragStart={(e) => handleDragStart(e, assignedItem.id)}
+                      onDragEnd={handleDragEnd}
+                      className={`mt-2 px-4 py-3 bg-white rounded-lg border-2 shadow-sm flex items-center justify-between ${
+                        !showResult ? 'cursor-grab active:cursor-grabbing hover:shadow-md hover:border-blue-300 transition-all' : ''
+                      } ${
+                        showResult
+                          ? results[assignedItem.id]
+                            ? 'border-green-300 bg-green-50'
+                            : 'border-red-300 bg-red-50'
+                          : 'border-gray-200'
+                      }`}
+                    >
                       <span className="text-base font-medium">{assignedItem.content}</span>
+                      {!showResult && (
+                        <button
+                          onClick={() => handleRemoveAssignment(assignedItem.id)}
+                          className="ml-2 p-1 hover:bg-gray-200 rounded transition-colors"
+                          title="Remove from target"
+                        >
+                          <XCircle className="h-4 w-4 text-gray-600" />
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <div className="mt-3 text-sm text-gray-600 italic">
-                      {target.placeholder}
+                    <div className={`mt-2 p-4 text-center text-sm italic transition-colors ${
+                      isBeingDraggedOver ? 'text-blue-600 font-medium' : 'text-gray-500'
+                    }`}>
+                      {isBeingDraggedOver ? '↓ Drop here' : target.placeholder}
                     </div>
                   )}
                 </div>

@@ -1,17 +1,11 @@
-/**
- * layout
- * ----------------
- * TODO: Add description and exports for layout.
- */
-
 import type { Metadata } from "next";
 import "./globals.css";
-import { ErrorProvider, ErrorBoundary } from '@/components/ErrorProvider';
+import { ErrorProvider } from "@/components/ErrorProvider";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
-  title: "Ustaz",
-  description: "AI-powered educational tool for mastering complex subjects through personalized content and interactive learning",
-  keywords: ["AI", "education", "learning", "tutoring", "mathematics", "study"],
+  title: "Ustaz - AI-Powered Learning Platform",
+  description: "An intelligent tutoring system powered by AI",
 };
 
 export default function RootLayout({
@@ -21,17 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className="font-sans antialiased bg-gray-50"
-        style={{
-          fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
-        }}
-      >
-        <ErrorBoundary>
-          <ErrorProvider>
-            {children}
-          </ErrorProvider>
-        </ErrorBoundary>
+      <body className="antialiased">
+        <ErrorProvider>
+          {children}
+          {/* Add Sonner toast notifications */}
+          <Toaster richColors position="top-right" />
+        </ErrorProvider>
       </body>
     </html>
   );

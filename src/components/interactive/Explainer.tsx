@@ -14,18 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { memo, useState, useMemo } from 'react'
 import { MessageCircle, BookOpen, ArrowRight, Loader2 } from 'lucide-react'
 import { InteractiveComponentProps } from './index'
-
-interface ExplainerContent {
-  title: string
-  overview: string
-  sections: Array<{
-    heading: string
-    paragraphs: string[]
-  }>
-  conclusion?: string
-  difficulty: 'beginner' | 'intermediate' | 'advanced'
-  estimatedReadTime?: number
-}
+import { ExplainerContent } from '@/types'
 
 export const Explainer = memo(function Explainer({ onInteraction, content, id, isLoading = false }: InteractiveComponentProps) {
   const explainerContent = content as ExplainerContent
@@ -54,66 +43,17 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
 
   // Validate and sanitize content
   const sanitizedContent = useMemo(() => {
-    const defaultContent: ExplainerContent = {
-      title: explainerContent?.title || 'Learning Topic',
-      overview: explainerContent?.overview || 'Exploring this important concept in detail.',
-      sections: [],
-      conclusion: explainerContent?.conclusion,
-      difficulty: explainerContent?.difficulty || 'beginner',
-      estimatedReadTime: explainerContent?.estimatedReadTime
+    const mapped: ExplainerContent = {
+      title: explainerContent?.title || 'Untitled',
+      description: explainerContent?.description 
+        || (explainerContent as unknown as { overview?: string })?.overview,
+      sections: Array.isArray(explainerContent?.sections) ? explainerContent.sections : [],
+      summary: explainerContent?.summary 
+        || (explainerContent as unknown as { conclusion?: string })?.conclusion,
+      keywords: explainerContent?.keywords,
+      references: explainerContent?.references
     }
-
-    // Handle sections - convert old format or ensure proper structure
-    if (explainerContent?.sections && Array.isArray(explainerContent.sections)) {
-      defaultContent.sections = explainerContent.sections.map((section, index) => {
-        // Handle old format where section has "title" and "content"
-        if (section && typeof section === 'object') {
-          const oldSection = section as { title?: string; content?: string; heading?: string; paragraphs?: string[] }
-          
-          if (oldSection.heading && oldSection.paragraphs && Array.isArray(oldSection.paragraphs)) {
-            // New format - use as is
-            return {
-              heading: oldSection.heading,
-              paragraphs: oldSection.paragraphs.filter(p => p && typeof p === 'string')
-            }
-          } else if (oldSection.title || oldSection.content) {
-            // Old format - convert
-            return {
-              heading: oldSection.title || `Section ${index + 1}`,
-              paragraphs: oldSection.content ? [oldSection.content] : [`Content for section ${index + 1}`]
-            }
-          }
-        }
-        
-        // Fallback for invalid sections
-        return {
-          heading: `Section ${index + 1}`,
-          paragraphs: [`This section covers important aspects of ${defaultContent.title}.`]
-        }
-      })
-    }
-
-    // If no valid sections, create default ones
-    if (defaultContent.sections.length === 0) {
-      defaultContent.sections = [
-        {
-          heading: `Understanding ${defaultContent.title}`,
-          paragraphs: [
-            `This topic is an important part of your learning journey.`,
-            `Let's explore the key concepts and their practical applications.`
-          ]
-        },
-        {
-          heading: 'Key Points',
-          paragraphs: [
-            `There are several important aspects to understand about this topic.`,
-            `Each point builds on the previous one to create a complete picture.`
-          ]
-        }
-      ]
-    }
-
-    return defaultContent
+    return mapped
   }, [explainerContent])
 
   const handleAskQuestion = async () =>
@@ -138,31 +78,23 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
     runWithLoading('nextTopic', () =>
       onInteraction('next_topic_requested', {
         componentId: id,
-        currentTopic: sanitizedContent.title,
-        difficulty: sanitizedContent.difficulty
+        currentTopic: sanitizedContent.title
       })
     )
 
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'beginner': return 'bg-green-100 text-green-800'
-      case 'intermediate': return 'bg-yellow-100 text-yellow-800'
-      case 'advanced': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
+
 
   const estimateReadTime = (): number => {
     // Calculate read time based on content length (200 words per minute average reading speed)
-    const overview = sanitizedContent.overview || ''
+    const description = sanitizedContent.description || ''
     const paragraphs = sanitizedContent.sections.flatMap(s => s.paragraphs || []).join(' ')
-    const conclusion = sanitizedContent.conclusion || ''
+    const summary = sanitizedContent.summary || ''
     
-    const totalContent = `${overview} ${paragraphs} ${conclusion}`
+    const totalContent = `${description} ${paragraphs} ${summary}`
     const wordCount = totalContent.split(/\s+/).length
     const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200))
     
-    return sanitizedContent.estimatedReadTime || readTimeMinutes
+    return readTimeMinutes
   }
 
   const readTime = estimateReadTime()
@@ -173,20 +105,21 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             <BookOpen className="h-6 w-6 text-blue-600 mr-2" />
-            <CardTitle className="text-xl font-bold text-gray-900">
-              {sanitizedContent.title}
-            </CardTitle>
+            {sanitizedContent.title && (
+              <CardTitle className="text-xl font-bold text-gray-900">
+                {sanitizedContent.title}
+              </CardTitle>
+            )}
           </div>
           <div className="flex items-center space-x-2">
-            <Badge className={getDifficultyColor(sanitizedContent.difficulty)}>
-              <span className="text-xs font-semibold capitalize tracking-wide">{sanitizedContent.difficulty}</span>
-            </Badge>
             <Badge variant="outline" className="text-xs font-medium">
               {readTime} min read
             </Badge>
           </div>
         </div>
-        <p className="text-gray-600 text-base leading-relaxed mt-2">{sanitizedContent.overview}</p>
+        {sanitizedContent.description && (
+          <p className="text-gray-600 text-base leading-relaxed mt-2">{sanitizedContent.description}</p>
+        )}
       </CardHeader>
       
       <CardContent className="space-y-4">
@@ -199,9 +132,13 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
                 value={`section-${sectionIndex}`}
                 className="bg-gray-50 rounded-lg border border-gray-200 px-5"
               >
-                <AccordionTrigger className="text-lg font-bold text-gray-900 hover:no-underline hover:text-indigo-600 transition-colors py-4">
-                  {section?.heading || 'Section'}
-                </AccordionTrigger>
+                {section?.heading ? (
+                  <AccordionTrigger className="text-lg font-bold text-gray-900 hover:no-underline hover:text-indigo-600 transition-colors py-4">
+                    {section.heading}
+                  </AccordionTrigger>
+                ) : (
+                  <div className="py-2" />
+                )}
                 <AccordionContent className="space-y-4 pb-5">
                   {section?.paragraphs && Array.isArray(section.paragraphs) ? section.paragraphs
                     .filter(paragraph => paragraph && typeof paragraph === 'string')
@@ -213,26 +150,44 @@ export const Explainer = memo(function Explainer({ onInteraction, content, id, i
                       {paragraph}
                     </p>
                   )) : (
-                    <p className="text-gray-600 italic">No content available for this section</p>
+                    null
                   )}
                 </AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
         ) : (
-          <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-            <p className="text-gray-600 italic">No sections available</p>
+          null
+        )}
+
+        {/* Summary */}
+        {sanitizedContent.summary && (
+          <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200">
+            <p className="text-indigo-800 text-base leading-relaxed">{sanitizedContent.summary}</p>
           </div>
         )}
 
-        {/* Conclusion */}
-        {sanitizedContent.conclusion && (
-          <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-200">
-            <h4 className="text-base font-bold text-indigo-900 mb-3 flex items-center">
-              <BookOpen className="h-5 w-5 mr-2" />
-              Summary:
-            </h4>
-            <p className="text-indigo-800 text-base leading-relaxed">{sanitizedContent.conclusion}</p>
+        {/* References */}
+        {sanitizedContent.references && sanitizedContent.references.length > 0 && (
+          <div className="bg-white p-5 rounded-lg border border-gray-200">
+            <ul className="list-disc list-inside space-y-1">
+              {sanitizedContent.references.map((ref, idx) => (
+                <li key={idx} className="text-sm text-gray-800">
+                  {ref.url ? (
+                    <a
+                      href={ref.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:underline"
+                    >
+                      {ref.title}
+                    </a>
+                  ) : (
+                    <span>{ref.title}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 

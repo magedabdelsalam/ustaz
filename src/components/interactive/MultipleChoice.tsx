@@ -15,10 +15,18 @@ import { CheckCircle, XCircle, Brain, RotateCcw, Target, Loader2 } from 'lucide-
 import { InteractiveComponentProps } from './index'
 
 interface MultipleChoiceContent {
+  title?: string
+  description?: string
   question: string
-  options: string[]
-  correctAnswer: number
-  explanation: string
+  choices?: Array<{  // AI schema format
+    id: string
+    text: string
+    isCorrect: boolean
+    explanation?: string
+  }>
+  options?: string[]  // Legacy format support
+  correctAnswer?: number  // Legacy format support
+  explanation?: string
   difficulty?: 'beginner' | 'intermediate' | 'advanced'
   hints?: string[]
   category?: string
@@ -36,6 +44,21 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
   })
   
   const mcContent = content as MultipleChoiceContent
+  
+  // Normalize content to support both AI schema (choices) and legacy format (options)
+  const normalizedOptions = mcContent.choices 
+    ? mcContent.choices.map(choice => choice.text)
+    : mcContent.options || []
+  
+  const normalizedCorrectAnswer = mcContent.choices
+    ? mcContent.choices.findIndex(choice => choice.isCorrect)
+    : mcContent.correctAnswer ?? 0
+  
+  const normalizedExplanation = mcContent.explanation || 
+    (mcContent.choices && mcContent.choices.find(c => c.isCorrect)?.explanation) || ''
+  
+  const displayCategory = mcContent.title || mcContent.category || 'Question'
+  const displayDescription = mcContent.description
 
   const handleSubmit = async () => {
     if (selectedOption === null) return
@@ -43,7 +66,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     setButtonLoadingStates(prev => ({ ...prev, submit: true }))
     try {
       setShowResult(true)
-      const isCorrect = selectedOption === mcContent.correctAnswer
+      const isCorrect = selectedOption === normalizedCorrectAnswer
       
       onInteraction('answer_submitted', {
         componentId: id,
@@ -78,7 +101,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     try {
       onInteraction('explain_more', {
         componentId: id,
-        topic: mcContent.category,
+        topic: displayCategory,
         question: mcContent.question
       })
     } finally {
@@ -97,7 +120,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
       console.log('🔵 CALLING onInteraction NOW...')
       onInteraction('next_question', {
         componentId: id,
-        category: mcContent.category,
+        category: displayCategory,
         difficulty: mcContent.difficulty
       })
       console.log('🔵 onInteraction call completed successfully!')
@@ -121,14 +144,14 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
     }
   }
 
-  const isCorrect = showResult && selectedOption === mcContent.correctAnswer
+  const isCorrect = showResult && selectedOption === normalizedCorrectAnswer
 
   return (
     <Card className="w-full mb-6">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-between">
           <CardTitle className="text-xl font-bold text-gray-900">
-            {mcContent.category}
+            {displayCategory}
           </CardTitle>
           {mcContent.difficulty && (
             <Badge className={getDifficultyColor(mcContent.difficulty)}>
@@ -136,6 +159,9 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
             </Badge>
           )}
         </div>
+        {displayDescription && (
+          <p className="text-gray-500 text-sm leading-relaxed">{displayDescription}</p>
+        )}
         <p className="text-gray-600 text-base leading-relaxed mt-1">{mcContent.question}</p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -174,8 +200,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
 
         {/* Options */}
         <div className="space-y-3">
-          <h4 className="text-base font-semibold text-gray-800 mb-3">Choose your answer:</h4>
-          {mcContent.options.map((option, index) => (
+          {normalizedOptions.map((option, index) => (
             <button
               key={index}
               onClick={() => !showResult && setSelectedOption(index)}
@@ -183,11 +208,11 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
               className={`w-full p-5 text-left rounded-lg border-2 transition-all duration-200 ${
                 selectedOption === index
                   ? showResult
-                    ? index === mcContent.correctAnswer
+                    ? index === normalizedCorrectAnswer
                       ? 'bg-green-50 border-green-400 shadow-lg transform scale-[1.01]'
                       : 'bg-red-50 border-red-400 shadow-lg'
                     : 'bg-purple-50 border-purple-400 shadow-md'
-                  : showResult && index === mcContent.correctAnswer
+                  : showResult && index === normalizedCorrectAnswer
                   ? 'bg-green-50 border-green-400 shadow-lg'
                   : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-sm'
               }`}
@@ -196,11 +221,11 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 <span className={`flex-shrink-0 w-10 h-10 rounded-full text-base flex items-center justify-center font-bold transition-colors ${
                   selectedOption === index
                     ? showResult
-                      ? index === mcContent.correctAnswer
+                      ? index === normalizedCorrectAnswer
                         ? 'bg-green-500 text-white'
                         : 'bg-red-500 text-white'
                       : 'bg-purple-500 text-white'
-                    : showResult && index === mcContent.correctAnswer
+                    : showResult && index === normalizedCorrectAnswer
                     ? 'bg-green-500 text-white'
                     : 'bg-gray-200 text-gray-600'
                 }`}>
@@ -209,7 +234,7 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 <span className="flex-1 font-medium text-base leading-relaxed">{option}</span>
                 {showResult && (
                   <span className="flex-shrink-0">
-                    {index === mcContent.correctAnswer ? (
+                    {index === normalizedCorrectAnswer ? (
                       <CheckCircle className="h-6 w-6 text-green-600" />
                     ) : selectedOption === index ? (
                       <XCircle className="h-6 w-6 text-red-600" />
@@ -236,10 +261,11 @@ export const MultipleChoice = memo(function MultipleChoice({ onInteraction, cont
                 {isCorrect ? '🎉 Correct!' : '❌ Not quite right'}
               </h4>
             </div>
-            <div className="bg-white p-4 rounded-md border shadow-sm">
-              <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
-              <p className="text-gray-700 text-base leading-relaxed">{mcContent.explanation}</p>
-            </div>
+            {normalizedExplanation && (
+              <div className="bg-white p-4 rounded-md border shadow-sm">
+                <p className="text-gray-700 text-base leading-relaxed">{normalizedExplanation}</p>
+              </div>
+            )}
           </div>
         )}
 

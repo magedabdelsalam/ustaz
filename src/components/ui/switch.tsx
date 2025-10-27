@@ -1,12 +1,5 @@
 "use client"
 
-/**
- * switch
- * ----------------
- * TODO: Add description and exports for switch.
- */
-
-
 import * as React from "react"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 

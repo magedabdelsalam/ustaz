@@ -164,6 +164,31 @@ export interface PersistedContentItem {
   created_at?: string
 }
 
+// ============================================================
+// UNIFIED STREAM TYPES
+// ============================================================
+
+export type StreamItemKind = 'message' | 'interactive'
+
+export interface StreamMessageItem {
+  id: string
+  kind: 'message'
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
+export interface StreamInteractiveItem {
+  id: string
+  kind: 'interactive'
+  type: ComponentType
+  data: unknown
+  title?: string
+  timestamp: Date
+}
+
+export type StreamItem = StreamMessageItem | StreamInteractiveItem
+
 export interface PersistedSubject {
   id: string
   user_id: string

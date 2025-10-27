@@ -155,13 +155,13 @@ export const InteractiveExample = memo(function InteractiveExample({
     return `rgb(${r}, ${g}, ${b})`
   }
 
-  const renderControl = (control: Control) => {
+  const renderControl = (control: Control, index: number) => {
     const value = controlValues[control.id]
     
     switch (control.type) {
       case 'slider':
         return (
-          <div key={control.id} className="space-y-2">
+          <div key={control.id || `control-${index}`} className="space-y-2">
             <div className="flex justify-between items-center">
               <label className="text-sm font-medium">{control.label}</label>
               <span className="text-sm text-gray-600 font-mono">{typeof value === 'number' ? value.toFixed(1) : value}</span>
@@ -179,7 +179,7 @@ export const InteractiveExample = memo(function InteractiveExample({
       
       case 'toggle':
         return (
-          <div key={control.id} className="flex items-center justify-between">
+          <div key={control.id || `control-${index}`} className="flex items-center justify-between">
             <label className="text-sm font-medium">{control.label}</label>
             <Switch
               checked={value as boolean}
@@ -191,7 +191,7 @@ export const InteractiveExample = memo(function InteractiveExample({
       case 'button':
         return (
           <Button
-            key={control.id}
+            key={control.id || `control-${index}`}
             variant="outline"
             size="sm"
             onClick={() => handleControlChange(control.id, !(value as boolean))}
@@ -206,14 +206,14 @@ export const InteractiveExample = memo(function InteractiveExample({
     }
   }
 
-  const renderDisplayElement = (element: DisplayElement) => {
+  const renderDisplayElement = (element: DisplayElement, index: number) => {
     const evaluatedContent = evaluateExpression(element.content)
     
     switch (element.type) {
       case 'text':
         return (
           <div 
-            key={element.id}
+            key={element.id || `display-${index}`}
             className="p-4 bg-gray-50 rounded-lg border"
             style={element.style}
           >
@@ -224,7 +224,7 @@ export const InteractiveExample = memo(function InteractiveExample({
       case 'formula':
         return (
           <div 
-            key={element.id}
+            key={element.id || `display-${index}`}
             className="p-4 bg-blue-50 rounded-lg border border-blue-200"
             style={element.style}
           >
@@ -268,7 +268,7 @@ export const InteractiveExample = memo(function InteractiveExample({
         
         return (
           <div 
-            key={element.id}
+            key={element.id || `display-${index}`}
             className="flex justify-center items-center p-8"
             style={element.style}
           >
@@ -316,7 +316,7 @@ export const InteractiveExample = memo(function InteractiveExample({
         // General purpose visualization based on content
         return (
           <div 
-            key={element.id}
+            key={element.id || `display-${index}`}
             className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg border"
           >
             <div className="text-center space-y-2">
@@ -361,26 +361,27 @@ export const InteractiveExample = memo(function InteractiveExample({
         <div className="space-y-4">
           <h4 className="font-medium text-gray-900 flex items-center">
             <Activity className="h-4 w-4 mr-2" />
-            Controls
+            {exampleContent.title || 'Controls'}
           </h4>
           <div className="grid gap-4 p-4 bg-gray-50 rounded-lg border">
-            {exampleContent.controls.map(renderControl)}
+            {exampleContent.controls.map((control, index) => renderControl(control, index))}
           </div>
         </div>
 
         {/* Display Area */}
         <div className="space-y-4">
-          <h4 className="font-medium text-gray-900">Interactive Display</h4>
+          <h4 className="font-medium text-gray-900">{exampleContent.description}</h4>
           <div className="min-h-[200px] p-4 bg-white border rounded-lg space-y-4">
-            {exampleContent.display.map(renderDisplayElement)}
+            {exampleContent.display.map((element, index) => renderDisplayElement(element, index))}
           </div>
         </div>
 
         {/* Explanation */}
-        <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-          <p className="text-sm text-blue-800 font-medium mb-2">How it works:</p>
-          <p className="text-sm text-blue-700 leading-relaxed">{exampleContent.explanation}</p>
-        </div>
+        {exampleContent.explanation && (
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <p className="text-sm text-blue-700 leading-relaxed">{exampleContent.explanation}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

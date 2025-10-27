@@ -1,9 +1,3 @@
-/**
- * skeleton
- * ----------------
- * TODO: Add description and exports for skeleton.
- */
-
 import { cn } from "@/lib/utils"
 
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {

@@ -1,12 +1,5 @@
 "use client"
 
-/**
- * accordion
- * ----------------
- * TODO: Add description and exports for accordion.
- */
-
-
 import * as React from "react"
 import * as AccordionPrimitive from "@radix-ui/react-accordion"
 import { ChevronDownIcon } from "lucide-react"
@@ -26,7 +19,7 @@ function AccordionItem({
   return (
     <AccordionPrimitive.Item
       data-slot="accordion-item"
-      className={cn("border-b", className)}
+      className={cn("border-b last:border-b-0", className)}
       {...props}
     />
   )

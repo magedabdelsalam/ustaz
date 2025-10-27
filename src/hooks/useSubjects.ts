@@ -44,7 +44,11 @@ export function useSubjects() {
         startedAt: new Date(ps.created_at || ps.last_active),
         topicKeywords: ps.keywords || [],
         messageCount: 1,
-        lastActive: new Date(ps.last_active)
+        lastActive: new Date(ps.last_active),
+        lessonPlan: ps.lesson_plan ? {
+          lessons: (ps.lesson_plan as { lessons?: Array<{ id: string; title: string; description: string }> }).lessons || [],
+          currentLessonIndex: (ps.lesson_plan as { currentLessonIndex?: number }).currentLessonIndex || 0
+        } : undefined
       }))
       
       startTransition(() => {
@@ -113,6 +117,41 @@ export function useSubjects() {
     return newSubject
   }, [user])
 
+  // Create subject from AI-provided subject object (ensures immediate UI update with correct id)
+  const upsertSubjectFromAI = useCallback(async (aiSubject: Subject): Promise<Subject> => {
+    if (!user) throw new Error('No user available')
+
+    const normalized: Subject = {
+      ...aiSubject,
+      startedAt: aiSubject.startedAt ? new Date(aiSubject.startedAt) : new Date(),
+      lastActive: aiSubject.lastActive ? new Date(aiSubject.lastActive) : new Date(),
+    }
+
+    startTransition(() => {
+      setSubjects(prev => {
+        const exists = prev.some(s => s.id === normalized.id)
+        return exists ? prev.map(s => (s.id === normalized.id ? normalized : s)) : [...prev, normalized]
+      })
+      setCurrentSubject(normalized)
+    })
+
+    try {
+      await persistenceService.saveSubject({
+        id: normalized.id,
+        user_id: user.id,
+        name: normalized.name,
+        keywords: normalized.topicKeywords,
+        lesson_plan: normalized.lessonPlan || null,
+        learning_progress: null,
+        last_active: (normalized.lastActive || new Date()).toISOString(),
+      })
+    } catch (error) {
+      logger.error('Failed to upsert AI subject:', error)
+    }
+
+    return normalized
+  }, [user])
+
   // Select subject (updates last active)
   const selectSubject = useCallback((subject: Subject) => {
     startTransition(() => {
@@ -130,7 +169,7 @@ export function useSubjects() {
         user_id: user.id,
         name: subject.name,
         keywords: subject.topicKeywords,
-        lesson_plan: null,
+        lesson_plan: subject.lessonPlan || null,
         learning_progress: null,
         last_active: new Date().toISOString()
       }).catch(console.error)
@@ -184,6 +223,7 @@ export function useSubjects() {
     isLoading: isLoading || isPending,
     loadSubjects,
     createSubject,
+    upsertSubjectFromAI,
     selectSubject,
     deleteSubject,
     setCurrentSubject: useCallback((subject: Subject | null) => {

@@ -6,16 +6,16 @@
  * TODO: Add description and exports for Dashboard.
  */
 
-
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useSubjects } from '@/hooks/useSubjects'
-import { HistoryPane } from '@/components/HistoryPane'
-import { ContentPane } from '@/components/ContentPane'
-import { ChatPane, ChatPaneRef } from '@/components/ChatPane'
-import { Button } from '@/components/ui/button'
+import StreamPane from '@/components/StreamPane'
+import { TopBar } from '@/components/TopBar'
+import { LessonOutlineSidebar } from '@/components/LessonOutlineSidebar'
+import { TopicsIndexSidebar } from '@/components/TopicsIndexSidebar'
+import { NewSubjectDialog } from '@/components/NewSubjectDialog'
 import { persistenceService } from '@/lib/persistenceService'
-import { InteractiveContent } from '@/types'
+import { supabase } from '@/lib/supabase'
 
 export function Dashboard() {
   const { user } = useAuth()
@@ -24,10 +24,11 @@ export function Dashboard() {
     currentSubject, 
     selectSubject,
     createSubject,
-    deleteSubject
+    upsertSubjectFromAI
   } = useSubjects()
-  const chatRef = useRef<ChatPaneRef>(null)
   const lastUserMessageRef = useRef<{ id: string; content: string; previousSubjectId: string | null } | null>(null)
+  const [isNewSubjectDialogOpen, setIsNewSubjectDialogOpen] = useState(false)
+  const [isCreatingSubject, setIsCreatingSubject] = useState(false)
 
   // Test connection on mount
   useEffect(() => {
@@ -55,39 +56,35 @@ export function Dashboard() {
     }
 
     const handleNewSubjectCreated = (event: CustomEvent) => {
-      const { subject, initialMessage, initialResponse } = event.detail
+      const { subject, initialMessage, initialResponse, fromDialog } = event.detail
 
-      console.log('🎯 Dashboard received new subject created event:', subject.name)
+      console.log('🎯 Dashboard received new subject created event:', subject.name, fromDialog ? '(from dialog)' : '(from chat)')
 
       // Check if subject already exists by ID
       const subjectExists = subjects.some(s => s.id === subject.id)
       
       if (!subjectExists) {
-        // If not, create it
-        createSubject(subject.name)
+        // If not, upsert the AI-provided subject (preserves id for session/thread)
+        upsertSubjectFromAI(subject)
           .then(newSubject => {
             console.log('✅ Created new subject:', newSubject.name)
-            // Automatically select this new subject
-            selectSubject(newSubject)
-            
-            // Log the initial messages for context
-            if (initialMessage) {
-              // Check if initialMessage is an object with content property or a string
+
+            // Only save messages if NOT from dialog (dialog flow doesn't have initial messages to save)
+            if (!fromDialog && initialMessage && typeof initialMessage === 'object' && initialMessage.content) {
+              // Log the initial messages for context
               const messageContent = typeof initialMessage === 'string' 
                 ? initialMessage 
                 : (initialMessage.content || initialMessage.toString());
               console.log('📝 Initial message carried over:', messageContent.substring(0, 30) + '...')
-            }
-            if (initialResponse) {
-              console.log('🤖 Initial response carried over:', initialResponse.content.substring(0, 30) + '...')
-            }
-            
-            // Wait for the subject to be fully saved to the database before saving messages
-            // This prevents foreign key constraint errors
-            setTimeout(async () => {
-              try {
-                // Now that subject should be in the database, save the messages
-                if (initialMessage && typeof initialMessage === 'object' && initialMessage.content) {
+              
+              if (initialResponse) {
+                console.log('🤖 Initial response carried over:', initialResponse.content.substring(0, 30) + '...')
+              }
+              
+              // Wait for the subject to be fully saved to the database before saving messages
+              // This prevents foreign key constraint errors
+              setTimeout(async () => {
+                try {
                   // Save the actual messages
                   const userMessageSaved = await persistenceService.saveMessage({
                     id: initialMessage.id || `user-${Date.now()}`,
@@ -118,11 +115,14 @@ export function Dashboard() {
                       console.log('✅ Saved initial AI response for new subject');
                     }
                   }
+                } catch (error) {
+                  console.error('❌ Failed to save initial messages:', error);
                 }
-              } catch (error) {
-                console.error('❌ Failed to save initial messages:', error);
-              }
-            }, 1000); // Wait 1 second for the subject to be saved to the database
+              }, 300); // small delay for DB upsert
+            }
+
+            // Select the subject so UI loads it immediately
+            selectSubject(newSubject)
           })
           .catch(err => {
             console.error('❌ Failed to create subject:', err)
@@ -133,15 +133,14 @@ export function Dashboard() {
         if (existingSubject) {
           selectSubject(existingSubject)
           
-          // Log the initial messages for context
-          if (initialMessage) {
-            // Check if initialMessage is an object with content property or a string
+          // Log the initial messages for context (only for chat flow)
+          if (!fromDialog && initialMessage) {
             const messageContent = typeof initialMessage === 'string' 
               ? initialMessage 
               : (initialMessage.content || initialMessage.toString());
             console.log('📝 Initial message carried over to existing subject:', messageContent.substring(0, 30) + '...')
           }
-          if (initialResponse) {
+          if (!fromDialog && initialResponse) {
             console.log('🤖 Initial response carried over to existing subject:', initialResponse.content.substring(0, 30) + '...')
           }
         }
@@ -155,198 +154,133 @@ export function Dashboard() {
       window.removeEventListener('userMessageSent', handleUserMessage as EventListener)
       window.removeEventListener('newSubjectCreated', handleNewSubjectCreated as EventListener)
     }
-  }, [currentSubject, subjects, createSubject, selectSubject, user])
+  }, [currentSubject, subjects, createSubject, selectSubject, user, upsertSubjectFromAI])
 
-  // AI-first message handler - let AI decide everything
-  const handleNewMessage = useCallback(async (message: string, isUserMessage = false) => {
-    console.log('📩 Message received:', { 
-      message: message.substring(0, 50) + '...', 
-      isUserMessage
-    })
+  const handleNewSubject = () => {
+    setIsNewSubjectDialogOpen(true)
+  }
 
-    // Just pass through to AI - no hardcoded logic
-    // AI will decide whether to create subjects, switch contexts, etc.
-  }, [])
-
-  const handleContentInteraction = async (action: string, data: unknown) => {
-    console.log('🎯 Content interaction:', action, data)
-    
-    if (!chatRef.current) {
-      console.error('❌ Chat reference not available')
+  const handleCreateSubject = async (data: {
+    name: string
+    description: string
+    difficulty: 'beginner' | 'intermediate' | 'advanced'
+    learningGoals: string[]
+    estimatedDuration: string
+  }) => {
+    if (!user) {
+      console.log('❌ No user found, cannot create subject')
       return
     }
-
+    
+    console.log('🎯 Starting subject creation for:', data.name)
+    setIsCreatingSubject(true)
+    
     try {
-      // Handle all the different interaction types from interactive components
-      switch (action) {
-        // ConceptCard actions
-        case 'ready_for_next':
-          const interactionData = data as { concept?: string; action?: string; componentId?: string }
-          if (interactionData.action === 'practice' && interactionData.concept) {
-            console.log('🎯 Practice request for concept:', interactionData.concept)
-            await chatRef.current.handleContentInteraction('ready_for_next', {
-              concept: interactionData.concept,
-              action: 'practice',
-              componentId: interactionData.componentId
-            })
-          } else {
-            console.log('🔄 General ready_for_next request')
-            await chatRef.current.handleContentInteraction(action, data)
+      // Call the AI API to create subject and lesson plan
+      const { data: { session } } = await supabase.auth.getSession()
+      const response = await fetch('/api/openai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          message: `I want to learn ${data.name}. ${data.description}`,
+          context: {
+            userId: user.id,
+            instructionOverrides: {
+              preferInteractiveContent: false,
+              interactiveContentGuidelines: 'Focus on creating a comprehensive lesson plan first.'
+            }
+          },
+          userId: user.id,
+          createSubjectRequest: {
+            name: data.name,
+            description: data.description,
+            difficulty: data.difficulty,
+            learningGoals: data.learningGoals,
+            estimatedDuration: data.estimatedDuration
           }
-          break
+        })
+      })
 
-        case 'concept_expanded':
-        case 'examples_requested':
-          console.log('🧠 Concept expansion/examples request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Answer submission actions from all components
-        case 'answer_submitted':
-        case 'fill_blank_submitted':
-        case 'drag_drop_submitted':
-          console.log('✅ Answer submitted from interactive component')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Next content requests
-        case 'next_question':
-        case 'next_exercise':
-        case 'next_problem':
-          console.log('➡️ Next content request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Reset actions
-        case 'reset_question':
-        case 'fill_blank_reset':
-        case 'drag_drop_reset':
-        case 'solver_reset':
-          console.log('🔄 Component reset request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Explanation requests
-        case 'explain_more':
-          console.log('📚 Explanation request')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Special interactive actions
-        case 'item_dropped':
-        case 'auto_play_started':
-          console.log('🎮 Interactive action')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
-
-        // Fallback for any unhandled actions
-        default:
-          console.log('🤔 Unhandled interaction type:', action, 'forwarding to ChatPane')
-          await chatRef.current.handleContentInteraction(action, data)
-          break
+      if (!response.ok) {
+        throw new Error('Failed to create subject')
       }
+
+      const result = await response.json()
+      console.log('📦 Received API response:', { newSubjectCreated: result.newSubjectCreated, hasSubjectData: !!result.newSubjectData })
+      
+      // The API should return the created subject and lesson plan
+      if (result.newSubjectCreated && result.newSubjectData) {
+        console.log('✅ Subject created via dialog with lesson plan:', result.newSubjectData.name)
+        
+        // Since subject was created via dialog (not chat), we don't have initial messages to save
+        // Just upsert the subject and select it directly without the event system
+        const newSubject = await upsertSubjectFromAI(result.newSubjectData)
+        selectSubject(newSubject)
+        
+        console.log('✅ Subject loaded and selected:', newSubject.name)
+      }
+
+      // Close the dialog - do this regardless of whether subject was created
+      console.log('🚪 Closing dialog')
+      setIsNewSubjectDialogOpen(false)
+      
     } catch (error) {
-      console.error('❌ Failed to handle content interaction:', error)
+      console.error('❌ Failed to create subject:', error)
+      // Keep dialog open on error so user can retry
+      // TODO: Show error toast to user
+    } finally {
+      setIsCreatingSubject(false)
+      console.log('✨ Subject creation process complete')
     }
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
-      {/* Main Dashboard Content */}
-      <div className="flex-1 flex flex-col lg:flex-row bg-gray-50 overflow-hidden">
-        {/* History Pane - Responsive width */}
-        <div className="w-full md:w-80 lg:w-72 xl:w-80 2xl:w-96 bg-white border-r border-gray-200 flex-shrink-0 
-                        md:block hidden overflow-y-auto">
-          <HistoryPane 
-            subjects={subjects}
-            selectedSubject={currentSubject}
-            user={user}
-            onSubjectSelect={selectSubject}
-            onSubjectDelete={deleteSubject}
-          />
-        </div>
-        
-        {/* Mobile History Toggle - Show on mobile */}
-        <div className="md:hidden fixed top-4 left-4 z-50">
-          <Button
-            variant="outline"
-            size="sm"
-            className="bg-white shadow-lg"
-            onClick={() => {
-              const historyPane = document.getElementById('mobile-history-pane')
-              if (historyPane) {
-                historyPane.classList.toggle('hidden')
-              }
-            }}
-          >
-            📚 <span className="ml-1">Subjects</span>
-          </Button>
-        </div>
-
-        {/* Mobile History Pane - Overlay */}
-        <div 
-          id="mobile-history-pane"
-          className="md:hidden fixed inset-0 z-40 bg-black bg-opacity-50 hidden"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              e.currentTarget.classList.add('hidden')
-            }
+    <div className="h-screen flex flex-col bg-white overflow-hidden">
+      {/* Main Dashboard Content - 3 Column Layout */}
+      <div className="flex-1 flex overflow-hidden min-h-0">
+        {/* Left Sidebar - Lesson Outline */}
+        <LessonOutlineSidebar 
+          currentSubject={currentSubject}
+          lessonPlan={null}
+          onUpdatePlan={() => {
+            console.log('Update lesson plan clicked')
+            // TODO: Implement lesson plan update
           }}
-        >
-          <div className="absolute left-0 top-0 h-full w-80 bg-white shadow-xl">
-            <div className="h-full overflow-hidden">
-              <HistoryPane 
-                subjects={subjects}
-                selectedSubject={currentSubject}
-                user={user}
-                showCloseButton={true}
-                onClose={() => {
-                  const historyPane = document.getElementById('mobile-history-pane')
-                  if (historyPane) {
-                    historyPane.classList.add('hidden')
-                  }
-                }}
-                onSubjectSelect={(subject) => {
-                  selectSubject(subject)
-                  // Close mobile menu after selection
-                  const historyPane = document.getElementById('mobile-history-pane')
-                  if (historyPane) {
-                    historyPane.classList.add('hidden')
-                  }
-                }}
-                onSubjectDelete={deleteSubject}
-              />
-            </div>
-          </div>
-        </div>
+        />
         
-        {/* Main Content Area - Responsive layout */}
-        <div className="flex-1 flex flex-col lg:flex-row min-w-0 overflow-hidden">
-          {/* Content Pane - Responsive sizing with proper flex basis */}
-          <div className="flex-1 lg:flex-[3] xl:flex-[3] 2xl:flex-[4] flex flex-col min-w-0 overflow-hidden">
-            <ContentPane 
-              selectedSubject={currentSubject}
-              onContentInteraction={handleContentInteraction}
+        {/* Center Content Area */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          {/* Top Bar */}
+          <div className="p-4 flex-shrink-0">
+            <TopBar 
+              user={user}
+              subjects={subjects}
+              currentSubject={currentSubject}
+              onSubjectSelect={selectSubject}
+              onNewSubject={handleNewSubject}
             />
           </div>
           
-          {/* Chat Pane - Fixed width on larger screens, flexible on mobile */}
-          <div className="flex-none h-[50vh] lg:h-auto lg:w-80 xl:w-96 2xl:w-[400px] 
-                          bg-white border-l border-gray-200 lg:border-t-0 border-t 
-                          flex flex-col overflow-hidden">
-            <ChatPane 
-              ref={chatRef}
-              selectedSubject={currentSubject}
-              onNewMessage={handleNewMessage}
-              onGeneratedContent={(content: InteractiveContent) => {
-                console.log('🎯 AI generated interactive content:', content.type);
-                // The content will be automatically displayed in ContentPane
-                // via the existing event system from the AI tutor callbacks
-              }}
-            />
+          {/* Main Stream Area */}
+          <div className="flex-1 min-w-0 min-h-0 overflow-hidden">
+            <StreamPane selectedSubject={currentSubject} />
           </div>
         </div>
+
+        {/* Right Sidebar - Topics Index */}
+        <TopicsIndexSidebar currentSubjectId={currentSubject?.id} />
       </div>
+
+      {/* New Subject Dialog */}
+      <NewSubjectDialog
+        isOpen={isNewSubjectDialogOpen}
+        onClose={() => setIsNewSubjectDialogOpen(false)}
+        onSubmit={handleCreateSubject}
+        isLoading={isCreatingSubject}
+      />
     </div>
   )
 } 

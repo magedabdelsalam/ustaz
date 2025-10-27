@@ -205,7 +205,9 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
 
         {/* Template with input fields */}
         <div className="bg-gray-50 p-6 rounded-lg border-2 border-dashed border-gray-300">
-          <h4 className="text-base font-semibold text-gray-800 mb-4">Fill in the blanks:</h4>
+          {fillContent.title && (
+            <h4 className="text-base font-semibold text-gray-800 mb-4">{fillContent.title}</h4>
+          )}
           <div className="flex flex-wrap items-center gap-3 text-lg leading-relaxed">
             {parts.map((part, index) => (
               <span key={index} className="flex items-center gap-3">
@@ -267,7 +269,7 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
             
             {showAnswers && (
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">✅ Correct Answers:</h4>
+                 <h4 className="text-base font-semibold text-gray-900 mb-4 flex items-center">{fillContent.category}</h4>
                 <div className="grid gap-3">
                   {fillContent.answers.map((answer, index) => (
                     <div key={index} className={`flex items-center justify-between p-4 rounded-lg ${results[index] ? 'bg-green-100' : 'bg-red-100'}`}>
@@ -317,7 +319,6 @@ export const FillInTheBlank = memo(function FillInTheBlank({ onInteraction, cont
               </h4>
             </div>
             <div className="bg-white p-4 rounded-md border shadow-sm">
-              <h5 className="text-base font-semibold text-gray-900 mb-2">Explanation:</h5>
               <p className="text-gray-700 text-base leading-relaxed">
                 {accuracy >= 80 
                   ? `Outstanding work${fillContent.category ? ` on ${fillContent.category.toLowerCase()}` : ''}! ${fillContent.explanation || ''}` 

@@ -1,33 +1,139 @@
-# AI StudyMate
+# Ustaz - AI-Powered Education Platform
 
-An AI-powered educational tool that helps users master complex subjects through personalized content generation and interactive chat-based learning.
+Ustaz is a multi-tenant education software platform designed for schools, teachers, students, and parents. It combines AI tutoring with course management to create personalized, interactive learning experiences.
 
-## Features
+## 🎓 Core Roles
 
-- 🤖 **AI-Powered Content Generation**: Dynamic lessons, explanations, and practice problems
-- 💬 **Interactive AI Tutor**: Chat with AI to clarify concepts and get help
-- 📊 **Progress Tracking**: Visual progress indicators and mastery stats
-- 🎯 **Subject-Based Learning**: Organized learning by mathematical and technical subjects
-- 🔐 **User Authentication**: Secure login and personalized experience
-- 📱 **Responsive Design**: Works on desktop and mobile devices
+- **School Admin**: Create and manage schools, approve students
+- **Teacher**: Create courses, lessons, assignments; manage sections and enrollments
+- **Student**: Join courses via code, view lessons, submit assignments, get AI hints
+- **Parent** *(future)*: View student progress and course information
 
-## Tech Stack
+## 🚀 Key Features
 
-- **Frontend**: Next.js 15, React 19, TypeScript
+### Multi-Tenant Architecture
+- Schools operate independently with isolated data
+- Role-based access control via Row-Level Security (RLS)
+- One user can belong to multiple schools
+
+### For Teachers
+- Create courses with subject, grade level, and join codes
+- Organize courses into sections (classes/periods)
+- Build lessons with slide-based content using interactive blocks
+- Create assignments (worksheets, quizzes, tests)
+- Track student submissions and provide grades/feedback
+
+### For Students
+- Join courses using teacher-provided codes
+- View course lessons and slides
+- Get AI hints at 3 levels (subtle, moderate, detailed)
+- Submit assignments in JSON format
+- View grades and feedback from teachers
+
+### AI Tutor Integration
+- Course-aware hints contextualized by course, lesson, and slide
+- Leverages existing interactive components (explainers, multiple choice, fill-in-the-blank, etc.)
+- System prompts enriched with learning objectives and current content
+
+## 🛠 Tech Stack
+
+- **Frontend**: Next.js 15 (App Router), React 19, TypeScript
 - **Styling**: Tailwind CSS, shadcn/ui components
-- **Database**: Supabase (PostgreSQL)
+- **Database**: Supabase (PostgreSQL) with Row-Level Security
 - **Authentication**: Supabase Auth
-- **AI Integration**: OpenAI API - Ready for integration
+- **AI Integration**: OpenAI API (GPT-4o-mini for hints, GPT-4 for content generation)
 - **Deployment**: Vercel (recommended)
 
-## Getting Started
+## 📁 Project Structure
+
+```
+src/
+├── app/
+│   ├── (teacher)/
+│   │   └── teacher/
+│   │       ├── page.tsx                               # Teacher dashboard
+│   │       └── courses/
+│   │           ├── new/page.tsx                       # Create course
+│   │           └── [courseId]/
+│   │               ├── page.tsx                       # Course overview (tabs)
+│   │               ├── lessons/[lessonId]/editor/page.tsx  # Slide editor
+│   │               └── assignments/new/page.tsx       # Create assignment
+│   ├── (student)/
+│   │   └── student/
+│   │       ├── page.tsx                               # Student dashboard
+│   │       ├── courses/[courseId]/
+│   │       │   ├── page.tsx                           # Course overview
+│   │       │   └── lessons/[lessonId]/page.tsx        # Lesson viewer + AI hints
+│   │       └── assignments/[assignmentId]/page.tsx    # Submit assignment
+│   ├── api/
+│   │   └── openai/route.ts                            # AI API with course context
+│   ├── layout.tsx
+│   ├── page.tsx                                       # Home (legacy tutor UI)
+│   └── globals.css
+├── components/
+│   ├── ui/                                            # shadcn/ui components
+│   ├── interactive/                                   # Interactive learning blocks
+│   │   ├── Explainer.tsx
+│   │   ├── MultipleChoice.tsx
+│   │   ├── FillInTheBlank.tsx
+│   │   └── ...
+│   ├── history/                                       # Subject history sidebar
+│   ├── AuthPage.tsx
+│   ├── Dashboard.tsx                                  # Legacy main dashboard
+│   └── StreamPane.tsx
+├── hooks/
+│   ├── useAuth.ts
+│   ├── useSubjects.ts
+│   └── useAITutor.ts
+├── lib/
+│   ├── supabase.ts                                    # Supabase client + types
+│   ├── persistenceService.ts                          # CRUD helpers
+│   ├── ai-tutor-service.ts                            # AI service with tool calling
+│   └── utils.ts
+└── types/
+    ├── index.ts                                       # App types
+    └── supabase.ts                                    # Generated Supabase types
+```
+
+## 🗄 Database Schema
+
+### Multi-Tenant Tables
+- **schools**: Tenant boundary (id, name, slug, created_by)
+- **school_members**: User membership (school_id, user_id, role: teacher|student)
+- **courses**: Courses within a school (school_id, title, subject, grade_level, join_code, state: draft|live)
+- **sections**: Class periods under a course (course_id, name, schedule_json)
+- **enrollments**: Student enrollment in sections (section_id, student_user_id, status: active|removed)
+- **lessons**: Lessons under a course (course_id, title, position)
+- **slides**: Slide content in a lesson (lesson_id, position, blocks_json)
+- **assignments**: Assignments for a course (course_id, lesson_id, title, due_at, type: worksheet|quiz|test)
+- **submissions**: Student assignment submissions (assignment_id, student_user_id, answers_json, grade, feedback, submitted_at)
+- **attendance** *(optional)*: Attendance records (section_id, date, student_user_id, status)
+
+### Legacy Tables (Single-User Tutor)
+- **profiles**: User profile information
+- **subjects**: Personal learning subjects (user_id, name, lesson_plan, progress)
+- **chat_messages**: AI tutor chat history
+- **content_feed**: Interactive learning components
+- **ai_assistant_settings**: Per-subject AI assistant configuration
+
+## 🔒 Row-Level Security (RLS)
+
+All tables enforce RLS policies:
+
+- **Schools**: Members can read; creator can manage
+- **School members**: Users see their own membership; teachers see all members in their schools
+- **Courses/Lessons/Slides/Assignments**: School members can read; teachers can write
+- **Enrollments**: Students and teachers can read; students can self-enroll if they're school members
+- **Submissions**: Owner student and teachers can read; owner can insert/update; teachers can grade
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
 - Node.js 18+ 
 - npm or yarn
 - Supabase account
-- OpenAI API key (optional for full AI features)
+- OpenAI API key
 
 ### Installation
 
@@ -43,121 +149,27 @@ An AI-powered educational tool that helps users master complex subjects through 
    ```
 
 3. **Set up environment variables**
-   Create a `.env.local` file in the root directory:
+   Create a `.env.local` file:
    ```bash
    # Supabase Configuration
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
-   # Optional (server-only, do NOT prefix with NEXT_PUBLIC)
    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 
-   # OpenAI Configuration (optional)
+   # OpenAI Configuration
    OPENAI_API_KEY=your_openai_api_key_here
 
    # App Configuration
    NEXT_PUBLIC_APP_URL=http://localhost:3000
    ```
 
-   After creating or changing `.env.local`, restart the dev server so Next.js picks up the new variables.
-
 4. **Set up Supabase Database**
    
-   Run the following SQL in your Supabase SQL editor to create the required tables:
-
-   ```sql
-   -- Enable RLS
-   ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
-
-   -- Create profiles table
-   CREATE TABLE profiles (
-     id UUID REFERENCES auth.users(id) PRIMARY KEY,
-     email TEXT NOT NULL,
-     full_name TEXT,
-     avatar_url TEXT,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );
-
-   -- Create subjects table
-   CREATE TABLE subjects (
-     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-     user_id UUID REFERENCES auth.users(id) NOT NULL,
-     name TEXT NOT NULL,
-     progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
-     color TEXT DEFAULT 'bg-blue-500',
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );
-
-   -- Create chat_sessions table
-   CREATE TABLE chat_sessions (
-     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-     user_id UUID REFERENCES auth.users(id) NOT NULL,
-     subject_id UUID REFERENCES subjects(id),
-     title TEXT NOT NULL,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );
-
-   -- Create chat_messages table
-   CREATE TABLE chat_messages (
-     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-     session_id UUID REFERENCES chat_sessions(id) NOT NULL,
-     role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-     content TEXT NOT NULL,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );
-
-   -- Create learning_content table
-   CREATE TABLE learning_content (
-     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-     user_id UUID REFERENCES auth.users(id) NOT NULL,
-     subject_id UUID REFERENCES subjects(id) NOT NULL,
-     title TEXT NOT NULL,
-     content TEXT NOT NULL,
-     content_type TEXT DEFAULT 'lesson' CHECK (content_type IN ('lesson', 'explanation', 'practice')),
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );
-
-   -- Row Level Security Policies
-   
-   -- Profiles policies
-   CREATE POLICY "Users can view own profile" ON profiles FOR SELECT USING (auth.uid() = id);
-   CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
-   CREATE POLICY "Users can insert own profile" ON profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
-   -- Subjects policies
-   CREATE POLICY "Users can view own subjects" ON subjects FOR SELECT USING (auth.uid() = user_id);
-   CREATE POLICY "Users can insert own subjects" ON subjects FOR INSERT WITH CHECK (auth.uid() = user_id);
-   CREATE POLICY "Users can update own subjects" ON subjects FOR UPDATE USING (auth.uid() = user_id);
-   CREATE POLICY "Users can delete own subjects" ON subjects FOR DELETE USING (auth.uid() = user_id);
-
-   -- Chat sessions policies
-   CREATE POLICY "Users can view own chat sessions" ON chat_sessions FOR SELECT USING (auth.uid() = user_id);
-   CREATE POLICY "Users can insert own chat sessions" ON chat_sessions FOR INSERT WITH CHECK (auth.uid() = user_id);
-   CREATE POLICY "Users can update own chat sessions" ON chat_sessions FOR UPDATE USING (auth.uid() = user_id);
-   CREATE POLICY "Users can delete own chat sessions" ON chat_sessions FOR DELETE USING (auth.uid() = user_id);
-
-   -- Chat messages policies
-   CREATE POLICY "Users can view messages from own sessions" ON chat_messages FOR SELECT 
-     USING (session_id IN (SELECT id FROM chat_sessions WHERE user_id = auth.uid()));
-   CREATE POLICY "Users can insert messages to own sessions" ON chat_messages FOR INSERT 
-     WITH CHECK (session_id IN (SELECT id FROM chat_sessions WHERE user_id = auth.uid()));
-
-   -- Learning content policies
-   CREATE POLICY "Users can view own learning content" ON learning_content FOR SELECT USING (auth.uid() = user_id);
-   CREATE POLICY "Users can insert own learning content" ON learning_content FOR INSERT WITH CHECK (auth.uid() = user_id);
-   CREATE POLICY "Users can update own learning content" ON learning_content FOR UPDATE USING (auth.uid() = user_id);
-   CREATE POLICY "Users can delete own learning content" ON learning_content FOR DELETE USING (auth.uid() = user_id);
-
-   -- Enable RLS on all tables
-   ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE subjects ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
-   ALTER TABLE learning_content ENABLE ROW LEVEL SECURITY;
-   ```
+   Run `ustaz-database-schema.sql` in your Supabase SQL editor. This will:
+   - Create all multi-tenant and legacy tables
+   - Enable Row-Level Security
+   - Create all necessary policies and indexes
+   - Set up triggers for profile creation and updated_at
 
 5. **Run the development server**
    ```bash
@@ -165,150 +177,139 @@ An AI-powered educational tool that helps users master complex subjects through 
    ```
 
 6. **Open the application**
-   Navigate to [http://localhost:3000](http://localhost:3000) in your browser.
+   Navigate to [http://localhost:3000](http://localhost:3000)
 
-## How It Works - Intelligent Subject Generation
+## 📖 User Flows
 
-### 🤖 **Smart Topic Detection**
-The AI automatically detects what you're learning about and creates subjects dynamically:
+### Teacher Flow
 
+1. **Sign up / Sign in** at `/` (Supabase Auth)
+2. **Create or join a school** (first-time setup; manual SQL for MVP)
+3. **Access teacher dashboard** at `/teacher`
+4. **Create a course**:
+   - Click "Create course"
+   - Select school, enter title, subject, grade
+   - System generates join code
+5. **Add lessons**:
+   - Open course → "Lessons" tab → "New lesson"
+   - Open lesson editor
+   - Add slides with interactive blocks (explainer, multiple choice, etc.)
+6. **Add sections** (class periods):
+   - "Sections" tab → "New section"
+7. **Create assignments**:
+   - "Assignments" tab → "New assignment"
+   - Set title, type (worksheet/quiz/test), due date
+8. **Manage enrollments**: View enrolled students (future: manually add/remove)
+
+### Student Flow
+
+1. **Sign up / Sign in** at `/`
+2. **Join a school** (manual SQL for MVP; future: admin approval flow)
+3. **Access student dashboard** at `/student`
+4. **Join a course**:
+   - Enter join code provided by teacher
+   - System enrolls student in default section
+5. **View lessons**:
+   - Click course → "Lessons"
+   - Navigate slides with Previous/Next
+   - View interactive blocks (read-only for students)
+6. **Get AI hints**:
+   - Click "Show AI hints"
+   - Choose Hint 1 (subtle), 2 (moderate), or 3 (detailed)
+   - AI provides context-aware help based on current slide
+7. **Submit assignments**:
+   - Click assignment
+   - Enter answers in JSON format
+   - Click "Submit"
+   - View grade and feedback once graded by teacher
+
+## 🧪 Testing
+
+### Manual Testing
+
+1. **Set up test data**:
+   ```sql
+   -- Create a test school
+   INSERT INTO schools (name, slug, created_by) VALUES ('Test School', 'test-school', '<teacher-user-id>');
+   
+   -- Add teacher membership
+   INSERT INTO school_members (school_id, user_id, role) VALUES ('<school-id>', '<teacher-user-id>', 'teacher');
+   
+   -- Add student membership
+   INSERT INTO school_members (school_id, user_id, role) VALUES ('<school-id>', '<student-user-id>', 'student');
+   ```
+
+2. **Test teacher flow**: Create course, add lesson, add section, create assignment
+3. **Test student flow**: Join via code, view lesson, get AI hints, submit assignment
+
+### E2E Testing
+
+Playwright tests are available in `tests/e2e/teacher-student-flow.spec.ts` (currently skipped; requires seeded test database).
+
+To run:
+```bash
+npm run test:e2e
 ```
-User: "Can you help me solve quadratic equations?"
-→ Creates: "Quadratic Equations" subject
 
-User: "Now I want to learn about derivatives"  
-→ Creates: "Derivatives" subject (calculus detected)
+## 🎨 Interactive Learning Components
 
-User: "Let's move on to geometry basics"
-→ Creates: "Geometry Concepts" subject
-```
+Ustaz includes 11 types of interactive components that can be added to slides:
 
-### 📊 **Progress Tracking**
-- **5%** - Started learning (first message)
-- **25%** - Active engagement (5+ messages)
-- **50%** - Good understanding (10+ messages)
-- **85%** - Strong comprehension (15+ messages)  
-- **100%** - Subject mastery (20+ messages or completion markers)
+1. **explainer** – Detailed multi-section explanations
+2. **multiple-choice** – Knowledge assessment quizzes
+3. **fill-blank** – Practice exercises with hints
+4. **concept-card** – Quick concept summaries
+5. **step-solver** – Guided problem-solving
+6. **interactive-example** – Hands-on demos with controls
+7. **drag-drop** – Matching and categorization
+8. **text-highlighter** – Reading comprehension
+9. **graph-visualizer** – Data exploration
+10. **formula-explorer** – Mathematical formulas
+11. **progress-quiz** – Comprehensive assessments
 
-### 🎯 **Auto-Completion**
-Subjects automatically complete when:
-- High engagement threshold reached (20+ messages)
-- User explicitly says "I understand this now"
-- User requests to move to next topic
-- Progress indicators show mastery
+Each component accepts a JSON `data` object defining its content. Teachers can add blocks via the slide editor; students view them in lesson viewer.
 
-### 🔄 **Topic Transitions**
-Smart cutoffs happen when:
-- **Topic keywords change**: "algebra" → "calculus" → "geometry"
-- **Explicit transitions**: "Let's start a new topic", "Move on to..."
-- **Subject completion**: Previous topic reaches 100%
+## 🤖 AI Tutor Integration
 
-## Project Structure
+The OpenAI API route (`/api/openai`) supports two modes:
 
-```
-src/
-├── app/                    # Next.js App Router
-│   ├── layout.tsx         # Root layout
-│   ├── page.tsx           # Home page
-│   └── globals.css        # Global styles
-├── components/            # React components
-│   ├── ui/               # shadcn/ui components
-│   │   └── loading-spinner.tsx  # Loading components
-│   ├── AuthPage.tsx      # Authentication page
-│   ├── Dashboard.tsx     # Main dashboard
-│   ├── DashboardHeader.tsx
-│   ├── HistoryPane.tsx   # Subject history sidebar
-│   ├── ContentPane.tsx   # AI content display
-│   └── ChatPane.tsx      # AI chat interface
-├── hooks/                # Custom React hooks
-│   └── useAuth.ts        # Authentication hook
-└── lib/                  # Utility libraries
-    ├── supabase.ts       # Supabase client
-    └── utils.ts          # Utility functions
-```
+1. **Legacy tutor mode** (single-user subjects):
+   - POST with `{ message, context, sessionId, userId }`
+   - Uses `ai-tutor-service.ts` for tool calling and interactive component generation
 
-## Current Features
+2. **Course-aware hints** (multi-tenant):
+   - POST with `{ messages, courseContext: { courseId, lessonId, slideId } }`
+   - Enriches system prompt with course/lesson metadata
+   - Returns contextual hints at 3 levels
 
-### Authentication
-- ✅ Email/password signup and login
-- ✅ Secure session management with Supabase
-- ✅ User profile display
-- ✅ Logout functionality
-
-### Dashboard Layout
-- ✅ Three-pane layout (History, Content, Chat)
-- ✅ Responsive design
-- ✅ Modern UI with shadcn/ui components
-
-### Subject Management
-- ✅ Subject list with progress indicators
-- ✅ Subject selection and highlighting
-- ✅ Mock data for 15 mathematical subjects
-
-### Content Generation
-- ✅ AI content generation buttons (Lesson, Explanation, Practice)
-- ✅ Simulated content generation with loading states
-- ✅ Content display in formatted cards
-
-### AI Chat
-- ✅ Interactive chat interface
-- ✅ Simulated AI responses based on keywords
-- ✅ Message history and timestamps
-- ✅ Typing indicators
-- ✅ Auto-scroll functionality
-
-### Intelligent Subject Generation
-- ✅ **Auto-detect topics** from chat messages and content requests
-- ✅ **Smart subject creation** when topics change (algebra → calculus → geometry)
-- ✅ **Progress tracking** based on engagement and message count
-- ✅ **Subject completion** detection when mastery is achieved
-- ✅ **Topic keywords** for better context understanding
-- ✅ **Visual indicators** for active subjects and completion status
-
-## Upcoming Features
-
-### Database Integration
-- [ ] Real subject data from Supabase
-- [ ] User progress tracking
-- [ ] Chat history persistence
-- [ ] Learning content storage
-
-### AI Integration
-- [ ] OpenAI API integration for content generation
-- [ ] Real-time AI chat responses
-- [ ] Personalized content based on user progress
-- [ ] Advanced AI tutoring capabilities
-
-### Enhanced Features
-- [ ] Progress analytics dashboard
-- [ ] Subject recommendations
-- [ ] Learning streaks and achievements
-- [ ] Export/share learning content
-- [ ] Dark mode support
-- [ ] Mobile app optimization
-
-## Deployment
+## 🚢 Deployment
 
 ### Vercel (Recommended)
 
-1. **Push to GitHub**
-   ```bash
-   git add .
-   git commit -m "Initial commit"
-   git push origin main
-   ```
+1. Push to GitHub
+2. Connect repository to Vercel
+3. Add environment variables in Vercel dashboard
+4. Deploy (automatic on push)
 
-2. **Deploy to Vercel**
-   - Connect your GitHub repository to Vercel
-   - Add environment variables in Vercel dashboard
-   - Deploy automatically on push
+### Database Migration
 
-### Other Platforms
-- **Netlify**: Works with Next.js
-- **Railway**: Good for full-stack apps
-- **Digital Ocean**: App Platform supports Next.js
+Run `ustaz-database-schema.sql` in Supabase SQL editor. For updates, run `fix-database-schema.sql` if needed.
 
-## Contributing
+## 📝 Future Enhancements
+
+- **Admin approval flow**: Students request to join school; admin approves
+- **Parent portal**: View student progress and grades
+- **Teacher adds students**: Manually enroll students in sections
+- **Rich slide editor**: Visual block editor instead of JSON prompts
+- **Grading UI**: Inline grading interface for teachers
+- **Analytics**: Course-level and student-level progress dashboards
+- **Notifications**: Assignment due dates, new grades, etc.
+
+## 📄 License
+
+MIT License
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature-name`
@@ -316,178 +317,6 @@ src/
 4. Push to branch: `git push origin feature-name`
 5. Open a Pull Request
 
-## License
+## 📧 Support
 
-This project is licensed under the MIT License.
-
-## Support
-
-For support, email support@aistudymate.com or open an issue in the repository.
-
-## Components
-
-### Loading Components
-
-The application uses standardized loading components for consistent UX:
-
-#### LoadingSpinner
-Main loading component with multiple variants and sizes:
-
-```jsx
-import { LoadingSpinner } from '@/components/ui/loading-spinner'
-
-// Basic spinner
-<LoadingSpinner />
-
-// Large spinner with custom text
-<LoadingSpinner size="lg" text="Loading content..." />
-
-// Skeleton loading for content areas
-<LoadingSpinner variant="skeleton" skeletonRows={5} />
-
-// Full screen loading
-<LoadingSpinner fullScreen size="xl" text="Loading Ustaz..." />
-```
-
-#### SpinnerIcon
-Standalone spinner icon for buttons and inline use:
-
-```jsx
-import { SpinnerIcon } from '@/components/ui/loading-spinner'
-
-// Small spinner for buttons
-<SpinnerIcon size="sm" />
-
-// Custom styled spinner
-<SpinnerIcon size="md" className="text-blue-500" />
-```
-
-#### LoadingText
-Simple loading text component:
-
-```jsx
-import { LoadingText } from '@/components/ui/loading-spinner'
-
-<LoadingText text="Saving..." size="sm" />
-```
-
-## Development
-
-To run the development server:
-
-```
-
-# Ustaz - AI-Powered Learning Platform
-
-Ustaz is an intelligent tutoring system that creates personalized, interactive learning experiences. It uses AI to generate contextually appropriate educational content and interactive components.
-
-## Key Features
-
-### 🎯 Context-Aware Learning
-Ustaz now intelligently distinguishes between:
-- **Context questions**: Questions about the current lesson that should generate interactive components
-- **New subject requests**: Requests to start learning something completely different
-
-**Example scenarios:**
-- During a **Photosynthesis** lesson, asking "explain to me why it's green" will generate an **Explainer** component about chlorophyll and plant coloration within the photosynthesis context
-- Asking "help me learn social media marketing" will create a new **Social Media Marketing** subject
-
-### 🧩 Smart Component Selection
-The AI automatically selects the most appropriate interactive component based on your question:
-
-| Question Intent | Generated Component |
-|---|---|
-| "explain why...", "tell me about..." | **Explainer** - Detailed explanations |
-| "quiz me", "test my knowledge" | **Multiple Choice** - Knowledge assessment |
-| "show me examples", "demonstrate" | **Interactive Example** - Hands-on demos |
-| "practice", "exercise" | **Fill-in-the-Blank** - Practice exercises |
-| "step by step", "solve this" | **Step Solver** - Problem-solving guide |
-| "match", "categorize" | **Drag & Drop** - Matching exercises |
-| "highlight", "identify in text" | **Text Highlighter** - Text analysis |
-| "graph", "visualize data" | **Graph Visualizer** - Data visualization |
-| "formula", "equation" | **Formula Explorer** - Mathematical exploration |
-
-### 📚 Interactive Learning Components
-
-Ustaz provides 11 different types of interactive components:
-- **Explainer**: Comprehensive explanations with multiple sections
-- **Concept Card**: Quick concept summaries with examples
-- **Multiple Choice**: Knowledge assessment quizzes
-- **Fill-in-the-Blank**: Practice exercises with hints
-- **Step-by-Step Solver**: Guided problem solving
-- **Interactive Example**: Hands-on demonstrations with controls
-- **Drag & Drop**: Matching and categorization exercises
-- **Text Highlighter**: Reading comprehension and analysis
-- **Graph Visualizer**: Data exploration and chart analysis
-- **Formula Explorer**: Mathematical formula manipulation
-- **Progress Quiz**: Comprehensive assessment with detailed feedback
-
-### 🔍 Context Analysis Engine
-
-The system uses advanced AI analysis to understand:
-1. **Subject relevance**: Is the question about the current topic?
-2. **Question intent**: What type of learning activity is most appropriate?
-3. **Learning progression**: Where is the student in their learning journey?
-
-**Context indicators the system recognizes:**
-- Subject-specific keywords and terminology
-- Question patterns ("why", "how", "explain", "show me")
-- Contextual phrases ("about this", "more details", "clarify")
-- Learning intent signals ("quiz", "practice", "examples")
-
-## Getting Started
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Set up environment variables (see `.env.example`)
-4. Run the development server: `npm run dev`
-
-## How It Works
-
-1. **Message Analysis**: When you send a message, the AI analyzes it for context and intent
-2. **Component Selection**: Based on your current subject and question type, it selects the best interactive component
-3. **Content Generation**: AI generates educational content specifically for that component type
-4. **Interactive Learning**: You engage with the component to learn and practice
-
-## Example Learning Flow
-
-```
-Student: "I want to learn about photosynthesis"
-→ Creates new "Photosynthesis" subject
-→ Generates lesson plan
-→ Shows Concept Card introducing photosynthesis
-
-Student: "explain to me why it's green"
-→ Stays in Photosynthesis subject (context-aware!)
-→ Generates Explainer component about chlorophyll and green coloration
-→ Interactive content with detailed sections about plant pigments
-
-Student: "quiz me on this"
-→ Still in Photosynthesis context
-→ Generates Multiple Choice quiz about chlorophyll and plant coloration
-
-Student: "help me learn Spanish"
-→ Recognizes new subject request
-→ Creates new "Spanish" subject
-→ Switches context and generates Spanish lesson plan
-```
-
-## Technology Stack
-
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
-- **UI Components**: Radix UI, ShadCN/UI
-- **Backend**: Supabase (PostgreSQL, Edge Functions)
-- **AI**: OpenAI GPT-4 for content generation and analysis
-- **Authentication**: Supabase Auth
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details.
+For support, open an issue in the repository or contact the maintainers.
