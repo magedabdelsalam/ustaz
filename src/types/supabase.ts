@@ -154,41 +154,6 @@ export type Database = {
         }
         Relationships: []
       }
-      component_interactions: {
-        Row: {
-          action_type: string
-          content_id: string
-          created_at: string | null
-          id: string
-          interaction_data: Json | null
-          user_id: string
-        }
-        Insert: {
-          action_type: string
-          content_id: string
-          created_at?: string | null
-          id?: string
-          interaction_data?: Json | null
-          user_id: string
-        }
-        Update: {
-          action_type?: string
-          content_id?: string
-          created_at?: string | null
-          id?: string
-          interaction_data?: Json | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "component_interactions_content_id_fkey"
-            columns: ["content_id"]
-            isOneToOne: false
-            referencedRelation: "interactive_content"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       content_feed: {
         Row: {
           created_at: string | null
@@ -585,80 +550,6 @@ export type Database = {
           },
         ]
       }
-      interactive_content: {
-        Row: {
-          component_data: Json
-          component_type: string
-          created_at: string | null
-          id: string
-          session_id: string | null
-          subject_id: string | null
-          title: string
-          user_id: string
-        }
-        Insert: {
-          component_data: Json
-          component_type: string
-          created_at?: string | null
-          id?: string
-          session_id?: string | null
-          subject_id?: string | null
-          title: string
-          user_id: string
-        }
-        Update: {
-          component_data?: Json
-          component_type?: string
-          created_at?: string | null
-          id?: string
-          session_id?: string | null
-          subject_id?: string | null
-          title?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "interactive_content_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "chat_sessions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      learning_content: {
-        Row: {
-          content: string
-          content_type: string | null
-          created_at: string | null
-          id: string
-          subject_id: string
-          title: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          content: string
-          content_type?: string | null
-          created_at?: string | null
-          id?: string
-          subject_id: string
-          title: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          content?: string
-          content_type?: string | null
-          created_at?: string | null
-          id?: string
-          subject_id?: string
-          title?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -715,30 +606,6 @@ export type Database = {
           learning_progress?: Json | null
           lesson_plan?: Json | null
           name?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      tutor_contexts: {
-        Row: {
-          context_json: Json
-          id: number
-          subject_id: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          context_json: Json
-          id?: never
-          subject_id: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          context_json?: Json
-          id?: never
-          subject_id?: string
-          updated_at?: string | null
           user_id?: string
         }
         Relationships: []
